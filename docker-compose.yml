@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: unified-llm-gateway-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm-local-db
+      POSTGRES_DB: litellm
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - litellm-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  gateway:
+    image: ghcr.io/berriai/litellm-database:main-latest
+    container_name: unified-llm-gateway
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./config:/app/config
+      - ./src:/app/src:ro
+      - ~/.codex/auth.json:/root/.codex/auth.json:ro
+    environment:
+      - PYTHONPATH=/app/src
+      - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres:5432/litellm
+      # No GATEWAY_MASTER_KEY is passed by default, so loopback clients can use
+      # the gateway without an Authorization header. Add one explicitly only
+      # when client bearer-token auth is wanted.
+      - CODEX_AUTH_FILE=/root/.codex/auth.json
+      - ALLOW_PRIVATE_CONTROL=1
+      - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-terra-advisor}
+      - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
+      - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
+      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+      - UI_USERNAME=${UI_USERNAME:-admin}
+      - UI_PASSWORD=${UI_PASSWORD:-sk-gateway-local-dev}
+      - OPENAI_API_KEY
+      - GEMINI_API_KEY
+      - MINIMAX_API_KEY
+      - OPENROUTER_API_KEY
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["--config", "/app/config/litellm.yaml", "--port", "4000", "--host", "0.0.0.0", "--telemetry", "False"]
+
+volumes:
+  litellm-postgres-data:

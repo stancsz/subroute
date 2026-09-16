@@ -63,11 +63,18 @@ class AdvisorPlugin(CustomLogger):
             raise ValueError("tools must be a list of objects")
 
         if not any(tool.get("type") == ADVISOR_TOOL_TYPE for tool in tools):
+            advisor_model = self.advisor_model
+            if self is advisor_plugin_instance:
+                try:
+                    from unified_llm_gateway.plugins.dynamic_router import control_plane
+                    advisor_model = control_plane.snapshot().advisor_model
+                except (ImportError, AttributeError):
+                    pass
             tools.append(
                 {
                     "type": ADVISOR_TOOL_TYPE,
                     "name": "advisor",
-                    "model": self.advisor_model,
+                    "model": advisor_model,
                     "max_uses": self.max_uses,
                     "caching": {"type": "ephemeral", "ttl": "5m"},
                 }

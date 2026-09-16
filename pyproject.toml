@@ -7,9 +7,9 @@ name = "unified-llm-gateway"
 version = "0.1.0"
 description = "A minimal, native LiteLLM Proxy gateway configuration"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
-    "litellm[proxy]>=1.80,<2",
+    "litellm[extra-proxy,proxy]>=1.80,<2",
 ]
 
 [project.optional-dependencies]

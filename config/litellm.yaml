@@ -1,23 +1,52 @@
 model_list:
   # Native provider adapters. Change model_name to the stable public aliases
   # that coding tools should select. Add deployments rather than Python code.
+  - model_name: current
+    model_info:
+      display_name: Current model
+      selectable: false
+    litellm_params:
+      # The dynamic router resolves this virtual entry before deployment selection.
+      model: openai/current
+
   - model_name: openai
+    model_info:
+      display_name: OpenAI Codex API
+      capabilities: [tools, streaming]
     litellm_params:
       model: openai/gpt-5.2-codex
       api_key: os.environ/OPENAI_API_KEY
 
   - model_name: openai-guided
+    model_info:
+      display_name: OpenAI Codex + Advisor
+      capabilities: [tools, streaming, advisor]
     litellm_params:
       model: openai/gpt-5.2-codex
       api_key: os.environ/OPENAI_API_KEY
 
   - model_name: gemini-api
+    model_info:
+      display_name: Gemini API
+      capabilities: [tools, vision, streaming]
     litellm_params:
       model: gemini/gemini-3-flash-preview
       api_key: os.environ/GEMINI_API_KEY
 
+  - model_name: openrouter
+    model_info:
+      display_name: OpenRouter MiniMax M3
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: openrouter/minimax/minimax-m3
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # Antigravity runs as an in-process LiteLLM CustomLLM provider.
   - model_name: gemini-subscription
+    model_info:
+      display_name: Gemini Subscription
+      capabilities: [text]
+      advisor_selectable: true
     litellm_params:
       model: antigravity/gemini-3.8-flash
 
@@ -25,8 +54,11 @@ model_list:
   # backend. A deployment hook reloads the existing Codex auth file before
   # every dispatch, so refreshed credentials do not require a proxy restart.
   - model_name: codex-subscription
+    model_info:
+      display_name: Codex Subscription (Sol)
+      capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-5.3-codex
+      model: openai/responses/gpt-5.6-sol
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
@@ -34,12 +66,99 @@ model_list:
         User-Agent: OpenAI-Codex/0.151.0 (Windows)
       store: false
 
+  - model_name: codex-astra
+    model_info:
+      display_name: Codex Subscription (Astra)
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: openai/responses/gpt-6-astra
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      store: false
+
+  - model_name: codex-terra
+    model_info:
+      display_name: Codex Subscription (Terra)
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: openai/responses/gpt-5.6-terra
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      store: false
+
+  - model_name: codex-luna
+    model_info:
+      display_name: Codex Subscription (Luna)
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: openai/responses/gpt-5.6-luna
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      store: false
+
+  - model_name: codex-reserve
+    model_info:
+      display_name: Codex Subscription (Reserve)
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: openai/responses/gpt-reserve
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      store: false
+
+  - model_name: codex-terra-advisor
+    model_info:
+      display_name: Codex Terra Advisor
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-terra
+
+  - model_name: codex-sol-advisor
+    model_info:
+      display_name: Codex Sol Advisor
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-sol
+
+  - model_name: codex-astra-advisor
+    model_info:
+      display_name: Codex Astra Advisor
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-6-astra
+
+
+
   - model_name: minimax
+    model_info:
+      display_name: MiniMax M3
+      capabilities: [tools, streaming]
     litellm_params:
       model: minimax/MiniMax-M3
       api_key: os.environ/MINIMAX_API_KEY
 
   - model_name: minimax-guided
+    model_info:
+      display_name: MiniMax M3 + Advisor
+      capabilities: [tools, streaming, advisor]
     litellm_params:
       model: minimax/MiniMax-M3
       api_key: os.environ/MINIMAX_API_KEY
@@ -47,6 +166,9 @@ model_list:
   # Native OpenAI-compatible transports. These are configuration, not custom
   # adapters. Override the base URLs when starting the gateway if necessary.
   - model_name: freetoken
+    model_info:
+      display_name: FreeToken
+      capabilities: [text, streaming]
     litellm_params:
       model: openai/local-model
       api_base: os.environ/FREETOKEN_BASE_URL
@@ -56,6 +178,9 @@ model_list:
           enable_thinking: false
 
   - model_name: desktop
+    model_info:
+      display_name: Desktop Ollama
+      capabilities: [local, text]
     litellm_params:
       model: ollama/qwen2.5-coder
       api_base: os.environ/OLLAMA_API_BASE
@@ -68,16 +193,22 @@ router_settings:
 
 litellm_settings:
   callbacks:
+    - unified_llm_gateway.plugins.dynamic_router.dynamic_routing_plugin
     - unified_llm_gateway.plugins.advisor_plugin.advisor_plugin_instance
     - unified_llm_gateway.plugins.codex_credentials.codex_credential_refresher
   custom_provider_map:
     - provider: antigravity
       custom_handler: unified_llm_gateway.handlers.antigravity.antigravity_handler
-  drop_params: false
+    - provider: codex-advisor
+      custom_handler: unified_llm_gateway.handlers.codex_advisor.codex_advisor_handler
+  # This removes known unsupported top-level parameters. It does not guarantee
+  # cross-provider tool, vision, context, reasoning, or streaming compatibility.
+  drop_params: true
   set_verbose: false
 
 general_settings:
   master_key: os.environ/GATEWAY_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
   disable_spend_logs: true
   disable_error_tracking: true
   allow_requests_on_db_unavailable: false
