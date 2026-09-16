@@ -1,31 +1,47 @@
-# unified-llm-gateway architecture
+# Architecture
 
 ```mermaid
 flowchart LR
-    Wire[OpenAI Chat / Responses / Anthropic Messages] --> Protocol[Thin protocol]
-    Protocol --> Request[Pydantic CompletionRequest]
-    Request --> Kernel[complete]
-    Kernel --> Adapter[Thin adapter]
-    Adapter --> LiteLLM
-    LiteLLM --> Providers[Provider or OpenAI-compatible endpoint]
-    LiteLLM --> Protocol
+    Clients[Codex / Claude Code / coding tools] --> Proxy[LiteLLM Proxy staging :4005]
+    Proxy --> Native[Native LiteLLM providers]
+    Proxy --> Compatible[OpenAI-compatible endpoints]
+    Proxy --> Ollama[Native Ollama provider]
+    Proxy --> Antigravity[In-process Antigravity CustomLLM]
+    Proxy --> Advisor[Advisor injection callback]
+    Advisor --> BuiltIn[LiteLLM AdvisorOrchestrationHandler]
 ```
 
-The version 0.1 kernel does only three things:
+LiteLLM Proxy is the only public protocol engine. This repository does not
+translate Chat Completions, Responses, Anthropic Messages, SSE events, tool
+calls, or provider errors.
 
-1. Validate a small subset of LiteLLM completion inputs.
-2. Let an explicit adapter map endpoint, authentication, and model identity.
-3. Return LiteLLM's standard `ModelResponse` unchanged.
+## Ownership
 
-LiteLLM handles provider calls. OpenAI-compatible local or subscription bridges
-use LiteLLM's OpenAI-compatible provider. OpenAI subscription uses LiteLLM's
-Responses-to-Chat bridge. The Gemini adapter invokes the authenticated local
-Antigravity CLI and constructs the same LiteLLM `ModelResponse`, without an
-HTTP sidecar. MiniMax multi-key balancing uses LiteLLM
-Router deployments. The kernel does not select providers, retry, fall back,
-normalize responses, expose an HTTP API, or implement streaming. New channels
-belong in thin adapters or external sidecars.
+LiteLLM owns:
 
-The three protocol modules support non-streaming text only. Unsupported tools,
-media, provider state, and streaming inputs fail closed rather than adding a
-second full API implementation to the kernel.
+- HTTP endpoints used by coding tools
+- streaming and tool-event protocol behavior
+- standard provider authentication and transport
+- model deployments and key selection
+
+This repository owns:
+
+- a small, reviewable LiteLLM configuration
+- explicit public model aliases
+- fail-closed retry and fallback settings
+- acceptance tests that prevent protocol and provider abstractions from
+  growing back into the project
+- an opt-in callback that injects LiteLLM's built-in Advisor tool for exact
+  guided aliases on the Anthropic Messages path
+
+Provider-specific Python belongs here only when LiteLLM has no native provider
+or OpenAI-compatible seam. Antigravity is the one current exception and runs
+inside the proxy process. ChatGPT subscription uses LiteLLM's own Responses
+bridge; a deployment hook refreshes local credentials immediately before each
+request.
+
+## Evidence boundary
+
+Config tests prove only the intended ownership boundary. LiteLLM startup proves
+only that the proxy can load. Coding-tool compatibility requires the real
+LeanRouter protocol fixtures and live Codex and Claude Code tool/stream tests.

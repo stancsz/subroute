@@ -1,34 +1,7 @@
-from .adapters import (
-    LiteLLMAdapter,
-    GeminiSubscriptionAdapter,
-    MiniMaxAdapter,
-    OpenAISubscriptionAdapter,
-    desktop_adapter,
-    freetoken_adapter,
-    gemini_subscription_adapter,
-    minimax_adapter,
-    openai_subscription_adapter,
-)
-from .kernel import CompletionRequest, complete
-from .protocols import (
-    AnthropicMessagesProtocol,
-    OpenAIChatProtocol,
-    OpenAIResponsesProtocol,
-)
+"""Project marker for the LiteLLM Proxy configuration.
 
-__all__ = [
-    "CompletionRequest",
-    "AnthropicMessagesProtocol",
-    "LiteLLMAdapter",
-    "GeminiSubscriptionAdapter",
-    "MiniMaxAdapter",
-    "OpenAISubscriptionAdapter",
-    "OpenAIChatProtocol",
-    "OpenAIResponsesProtocol",
-    "complete",
-    "desktop_adapter",
-    "freetoken_adapter",
-    "gemini_subscription_adapter",
-    "minimax_adapter",
-    "openai_subscription_adapter",
-]
+The gateway deliberately exports no protocol or provider abstraction. LiteLLM
+Proxy is the runtime API and provider layer.
+"""
+
+__all__: list[str] = []

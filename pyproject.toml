@@ -5,16 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "unified-llm-gateway"
 version = "0.1.0"
-description = "A minimal LiteLLM kernel with thin provider adapters"
+description = "A minimal, native LiteLLM Proxy gateway configuration"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
-    "litellm>=1.80",
-    "pydantic>=2.10",
+    "litellm[proxy]>=1.80,<2",
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+test = ["pytest>=8", "pyyaml>=6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,47 @@
+import json
+import asyncio
+
+from unified_llm_gateway.plugins.codex_credentials import (
+    CODEX_API_BASE,
+    codex_credential_refresher,
+)
+
+
+def test_codex_credentials_are_reloaded_for_each_dispatch(tmp_path, monkeypatch):
+    auth_file = tmp_path / "auth.json"
+    monkeypatch.setenv("CODEX_AUTH_FILE", str(auth_file))
+    request = {
+        "api_base": CODEX_API_BASE,
+        "api_key": "stale",
+        "extra_headers": {"User-Agent": "test", "ChatGPT-Account-ID": "stale"},
+    }
+
+    auth_file.write_text(
+        json.dumps({"tokens": {"access_token": "first", "account_id": "account-1"}}),
+        encoding="utf-8",
+    )
+    first = asyncio.run(
+        codex_credential_refresher.async_pre_call_deployment_hook(request, None)
+    )
+    auth_file.write_text(
+        json.dumps({"tokens": {"access_token": "second", "account_id": "account-2"}}),
+        encoding="utf-8",
+    )
+    second = asyncio.run(
+        codex_credential_refresher.async_pre_call_deployment_hook(request, None)
+    )
+
+    assert first["api_key"] == "first"
+    assert first["extra_headers"]["ChatGPT-Account-ID"] == "account-1"
+    assert second["api_key"] == "second"
+    assert second["extra_headers"]["ChatGPT-Account-ID"] == "account-2"
+    assert request["api_key"] == "stale"
+
+
+def test_non_codex_deployments_are_unchanged():
+    result = asyncio.run(
+        codex_credential_refresher.async_pre_call_deployment_hook(
+            {"api_base": "https://api.openai.com/v1"}, None
+        )
+    )
+    assert result is None

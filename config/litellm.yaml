@@ -1,0 +1,83 @@
+model_list:
+  # Native provider adapters. Change model_name to the stable public aliases
+  # that coding tools should select. Add deployments rather than Python code.
+  - model_name: openai
+    litellm_params:
+      model: openai/gpt-5.2-codex
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: openai-guided
+    litellm_params:
+      model: openai/gpt-5.2-codex
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gemini-api
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY
+
+  # Antigravity runs as an in-process LiteLLM CustomLLM provider.
+  - model_name: gemini-subscription
+    litellm_params:
+      model: antigravity/gemini-3.8-flash
+
+  # LiteLLM's native Responses-to-Chat bridge talks to the Codex subscription
+  # backend. A deployment hook reloads the existing Codex auth file before
+  # every dispatch, so refreshed credentials do not require a proxy restart.
+  - model_name: codex-subscription
+    litellm_params:
+      model: openai/responses/gpt-5.3-codex
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      store: false
+
+  - model_name: minimax
+    litellm_params:
+      model: minimax/MiniMax-M3
+      api_key: os.environ/MINIMAX_API_KEY
+
+  - model_name: minimax-guided
+    litellm_params:
+      model: minimax/MiniMax-M3
+      api_key: os.environ/MINIMAX_API_KEY
+
+  # Native OpenAI-compatible transports. These are configuration, not custom
+  # adapters. Override the base URLs when starting the gateway if necessary.
+  - model_name: freetoken
+    litellm_params:
+      model: openai/local-model
+      api_base: os.environ/FREETOKEN_BASE_URL
+      api_key: os.environ/FREETOKEN_API_KEY
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  - model_name: desktop
+    litellm_params:
+      model: ollama/qwen2.5-coder
+      api_base: os.environ/OLLAMA_API_BASE
+
+router_settings:
+  # A selected deployment either succeeds or fails. The gateway does not hide
+  # provider failures by retrying or falling back to another model.
+  num_retries: 0
+  fallbacks: []
+
+litellm_settings:
+  callbacks:
+    - unified_llm_gateway.plugins.advisor_plugin.advisor_plugin_instance
+    - unified_llm_gateway.plugins.codex_credentials.codex_credential_refresher
+  custom_provider_map:
+    - provider: antigravity
+      custom_handler: unified_llm_gateway.handlers.antigravity.antigravity_handler
+  drop_params: false
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/GATEWAY_MASTER_KEY
+  disable_spend_logs: true
+  disable_error_tracking: true
+  allow_requests_on_db_unavailable: false
