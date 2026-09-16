@@ -14,6 +14,8 @@ messages request through LiteLLM and returning LiteLLM's `ModelResponse`.
   LiteLLM `ModelResponse` contract without requiring a web sidecar.
 - Direct MiniMax API support with multiple keys through LiteLLM Router's native
   deployments and `simple-shuffle` strategy.
+- Minimal non-streaming text protocols for OpenAI Chat Completions, OpenAI
+  Responses, and Anthropic Messages. Each translates only at the kernel edge.
 
 The bridge defaults mirror the locally verified LeanRouter topology, but this
 project does not import or modify LeanRouter:
@@ -49,6 +51,8 @@ adapter or an external sidecar, not more kernel policy.
 Public streaming is intentionally not supported in version 0.1. The OpenAI
 subscription backend requires a stream, so that adapter lets LiteLLM aggregate
 it into the same non-streaming `ModelResponse`; the kernel owns no stream parser.
+Protocol adapters intentionally reject tools, provider state, media, and
+streaming shapes instead of partially translating them.
 
 ## Development
 
