@@ -54,6 +54,56 @@ def test_does_not_duplicate_existing_advisor_tool():
     assert data["tools"] == [existing]
 
 
+def test_codex_advisor_is_injected_for_supported_tool_history():
+    plugin = AdvisorPlugin(
+        advisor_model="codex-terra-advisor",
+        target_model_aliases=frozenset({"minimax-guided"}),
+    )
+    existing_tools = [{"name": "read_file", "input_schema": {"type": "object"}}]
+    data = {
+        "model": "minimax-guided",
+        "messages": [
+            {"role": "assistant", "content": [{
+                "type": "tool_use", "id": "toolu_1", "name": "read_file", "input": {"path": "README.md"}
+            }]},
+            {"role": "user", "content": [{
+                "type": "tool_result", "tool_use_id": "toolu_1", "content": "contents"
+            }]},
+        ],
+        "tools": existing_tools.copy(),
+    }
+
+    run(plugin, data)
+
+    assert data["tools"][0] == existing_tools[0]
+    assert data["tools"][1]["type"] == ADVISOR_TOOL_TYPE
+    assert "gateway_advisor" not in data.get("metadata", {})
+
+
+@pytest.mark.parametrize("advisor_model", ["gemini-subscription", "codex-terra-advisor"])
+def test_unsupported_tool_history_skips_only_advisor(advisor_model):
+    plugin = AdvisorPlugin(
+        advisor_model=advisor_model,
+        target_model_aliases=frozenset({"minimax-guided"}),
+    )
+    original_tool = {"name": "read_file", "input_schema": {"type": "object"}}
+    data = {
+        "model": "minimax-guided",
+        "messages": [{"role": "tool", "tool_call_id": "unmatched", "content": "contents"}],
+        "tools": [original_tool.copy()],
+    }
+
+    run(plugin, data)
+
+    assert data["messages"][0]["content"] == "contents"
+    assert data["tools"] == [original_tool]
+    assert data["metadata"]["gateway_advisor"] == {
+        "status": "skipped",
+        "reason": "unsupported_tool_history",
+        "model": advisor_model,
+    }
+
+
 @pytest.mark.parametrize(
     "model,call_type",
     [

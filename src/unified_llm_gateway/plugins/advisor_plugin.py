@@ -7,9 +7,16 @@ from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
 
+from unified_llm_gateway.handlers.codex_advisor import has_tool_history, supports_tool_history
+
 
 ADVISOR_TOOL_TYPE = "advisor_20260301"
 SUPPORTED_CALL_TYPES = frozenset({"anthropic_messages", "aanthropic_messages"})
+TOOL_HISTORY_ADVISORS = frozenset({
+    "codex-terra-advisor",
+    "codex-sol-advisor",
+    "codex-astra-advisor",
+})
 
 
 def _csv(name: str, default: str) -> frozenset[str]:
@@ -69,6 +76,20 @@ class AdvisorPlugin(CustomLogger):
                 advisor_model = policy["advisor_model"]
             elif self is advisor_plugin_instance:
                 raise ValueError("Gateway routing policy must be resolved before advisor injection")
+            if advisor_model is None:
+                return data
+            messages = data.get("messages") or []
+            if has_tool_history(messages) and (
+                advisor_model not in TOOL_HISTORY_ADVISORS
+                or not supports_tool_history(messages)
+            ):
+                metadata = data.setdefault("metadata", {})
+                metadata["gateway_advisor"] = {
+                    "status": "skipped",
+                    "reason": "unsupported_tool_history",
+                    "model": advisor_model,
+                }
+                return data
             tools.append(
                 {
                     "type": ADVISOR_TOOL_TYPE,

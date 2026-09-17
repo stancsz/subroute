@@ -18,6 +18,9 @@ test = ["pytest>=8", "pyyaml>=6"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+unified_llm_gateway = ["control/*.html", "control/*.css", "control/*.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

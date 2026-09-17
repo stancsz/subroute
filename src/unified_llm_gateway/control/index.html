@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Subroute Control Desk</title>
+  <link rel="stylesheet" href="/control/styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">SUBROUTE · CONTROL DESK</p><h1>Subroute</h1><p class="sub">Sources, routing, and local coding-agent sessions.</p></div>
+      <button id="refresh" type="button">Refresh usage</button>
+    </header>
+    <section class="gateway"><span class="pulse"></span><div><strong id="gateway">Local gateway</strong><small>One policy and one interface shared by browser and Desktop.</small></div><span id="surface" class="read-only">WEB CONTROL</span></section>
+    <section class="routing-desk">
+      <div class="route-head"><div><strong>Routing desk</strong><small>Choose exactly where new requests go</small></div><span>LOCAL POLICY</span></div>
+      <div class="route-grid">
+        <label>Target model<select id="route-model"></select></label>
+        <label>Request policy<select id="route-mode"><option value="alias">Current aliases only</option><option value="force">Force every new request</option><option value="off">LiteLLM pass through</option></select></label>
+        <label>Advisor model<select id="route-advisor"></select></label>
+      </div>
+      <div class="route-status"><span id="route-status">Loading routing policy…</span><span id="route-key">LOCAL CLIENT KEY BYPASS</span></div>
+    </section>
+    <section class="launcher">
+      <div class="section-title"><div><p class="eyebrow">Launch agent</p><h2>Local coding agents</h2></div><span id="launcher-capability">Detecting Desktop bridge…</span></div>
+      <div class="working-directory"><div><p class="field-label">WORKING DIRECTORY</p><code id="working-directory">Choose the project folder that the agent should open.</code></div><button id="choose-directory" class="secondary" type="button">Browse folder</button></div>
+      <div id="agents" class="agents"></div><p id="launch-status" class="launch-status">Agent launch is available in the Desktop app.</p>
+    </section>
+    <div class="section-title"><div><p class="eyebrow">API sources</p><h2>Configuration and usage</h2></div><span id="updated">Loading sources…</span></div>
+    <section id="cards" class="cards"></section>
+    <aside><strong>Provider-reported usage only</strong><p>Quota is refreshed explicitly and kept separate from routing. Missing provider quota APIs remain unavailable rather than being estimated.</p></aside>
+  </main>
+  <template id="card"><article class="card"><div class="card-head"><span class="mark"></span><span class="kind"></span></div><h3></h3><p class="models"></p><p class="usage"></p><div class="bar"><i></i></div><footer></footer></article></template>
+  <template id="agent"><article class="agent"><span class="agent-state"></span><div><b></b><small></small></div><button type="button"></button></article></template>
+  <script src="/control/app.js"></script>
+</body>
+</html>

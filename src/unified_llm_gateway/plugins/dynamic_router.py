@@ -33,7 +33,7 @@ class RoutingState:
     active_model: str
     mode: RoutingMode = "alias"
     policy_version: int = 1
-    advisor_model: str = "gemini-subscription"
+    advisor_model: str | None = "gemini-subscription"
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ class RoutingUpdate(BaseModel):
 
 
 class AdvisorUpdate(BaseModel):
-    advisor_model: str
+    advisor_model: str | None
 
 
 def _load_choices(config_path: Path) -> tuple[ModelChoice, ...]:
@@ -126,7 +126,7 @@ class RoutingControlPlane:
             raise ValueError(f"invalid routing mode: {state.mode!r}")
         if state.policy_version < 1:
             raise ValueError("policy_version must be positive")
-        if self.advisor_models and state.advisor_model not in self.advisor_models:
+        if state.advisor_model is not None and state.advisor_model not in self.advisor_models:
             raise ValueError(f"advisor model is not selectable: {state.advisor_model!r}")
 
     def _write_atomic(self, state: RoutingState) -> None:
@@ -165,7 +165,7 @@ class RoutingControlPlane:
             self._state = candidate
             return candidate
 
-    def update_advisor(self, advisor_model: str) -> RoutingState:
+    def update_advisor(self, advisor_model: str | None) -> RoutingState:
         with self._lock:
             candidate = RoutingState(self._state.active_model, self._state.mode, self._state.policy_version + 1, advisor_model)
             self._validate(candidate)
@@ -279,6 +279,10 @@ def _render_page(control_plane: RoutingControlPlane) -> str:
         f'{html.escape(choice.display_name)}</option>'
         for choice in control_plane.choices if choice.advisor_selectable
     )
+    advisor_options = (
+        f'<option value="" {"selected" if state.advisor_model is None else ""}>No advisor</option>'
+        + advisor_options
+    )
     modes = "".join(
         f'<option value="{mode}" {"selected" if mode == state.mode else ""}>{label}</option>'
         for mode, label in (
@@ -312,7 +316,7 @@ small{{display:block;margin-top:1.5rem;color:#74808c}}</style></head>
 </main><script>
 const model=document.querySelector('#model'),mode=document.querySelector('#mode'),advisor=document.querySelector('#advisor'),status=document.querySelector('#status');
 async function save(){{status.textContent='Saving…';const response=await fetch('/api/active-model',{{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify({{model:model.value,mode:mode.value}})}});const body=await response.json();if(!response.ok)throw new Error(body.detail||'Update failed');status.textContent=`Active: ${{body.active_model}} · ${{body.mode}} · policy v${{body.policy_version}}`;}}
-async function saveAdvisor(){{status.textContent='Saving…';const response=await fetch('/api/advisor-model',{{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify({{advisor_model:advisor.value}})}});const body=await response.json();if(!response.ok)throw new Error(body.detail||'Update failed');status.textContent=`Advisor: ${{body.advisor_model}} · policy v${{body.policy_version}}`;}}
+async function saveAdvisor(){{status.textContent='Saving…';const response=await fetch('/api/advisor-model',{{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify({{advisor_model:advisor.value||null}})}});const body=await response.json();if(!response.ok)throw new Error(body.detail||'Update failed');status.textContent=`Advisor: ${{body.advisor_model||'none'}} · policy v${{body.policy_version}}`;}}
 for(const input of [model,mode])input.addEventListener('change',()=>save().catch(error=>status.textContent=error.message));
 advisor.addEventListener('change',()=>saveAdvisor().catch(error=>status.textContent=error.message));
 </script></body></html>"""

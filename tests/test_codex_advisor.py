@@ -69,6 +69,63 @@ def test_instruction_and_assistant_roles_are_preserved():
     assert result[2]["content"] == [{"type": "output_text", "text": "answer"}]
 
 
+def test_anthropic_tool_history_is_translated_to_responses_items():
+    result = advisor.build_responses_input([
+        {"role": "user", "content": "inspect the file"},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "I will inspect it."},
+            {"type": "tool_use", "id": "toolu_1", "name": "read_file", "input": {"path": "README.md"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_1", "content": "contents"},
+            {"type": "text", "text": "What should change?"},
+        ]},
+    ])
+
+    assert result[2] == {
+        "type": "function_call",
+        "call_id": "toolu_1",
+        "name": "read_file",
+        "arguments": '{"path":"README.md"}',
+    }
+    assert result[3] == {
+        "type": "function_call_output",
+        "call_id": "toolu_1",
+        "output": "contents",
+    }
+    assert result[4]["content"] == [{"type": "input_text", "text": "What should change?"}]
+
+
+def test_openai_chat_tool_history_is_translated_to_responses_items():
+    result = advisor.build_responses_input([
+        {"role": "assistant", "content": "checking", "tool_calls": [{
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "read_file", "arguments": '{"path":"README.md"}'},
+        }]},
+        {"role": "tool", "tool_call_id": "call_1", "content": "contents"},
+    ])
+
+    assert [item["type"] for item in result] == [
+        "message", "function_call", "function_call_output"
+    ]
+    assert result[1]["call_id"] == result[2]["call_id"] == "call_1"
+
+
+@pytest.mark.parametrize("messages,match", [
+    ([{"role": "assistant", "content": [{"type": "tool_use", "name": "read", "input": {}}]}], "call id"),
+    ([{"role": "tool", "tool_call_id": "missing", "content": "result"}], "no matching call"),
+    ([{"role": "assistant", "tool_calls": [{"id": "call_1", "function": {"name": "read", "arguments": "{"}}]}], "valid JSON"),
+    ([
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "read", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "image", "source": {}}]}]},
+    ], "text only"),
+])
+def test_malformed_or_unsupported_tool_history_fails_closed(messages, match):
+    with pytest.raises(ValueError, match=match):
+        advisor.build_responses_input(messages)
+
+
 @pytest.mark.parametrize("status", [401, 429, 500])
 def test_http_failures_are_not_success(monkeypatch, status):
     with pytest.raises(RuntimeError, match="API error"):

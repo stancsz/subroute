@@ -139,6 +139,23 @@ def test_persisted_advisor_wins_over_startup_environment(tmp_path, monkeypatch):
     assert restarted.snapshot().advisor_model == "codex-sol-advisor"
 
 
+def test_advisor_is_optional_and_guided_requests_skip_injection(tmp_path: Path):
+    control = make_control_plane(tmp_path)
+    disabled = control.update_advisor(None)
+
+    assert disabled.advisor_model is None
+    assert json.loads(control.state_path.read_text(encoding="utf-8"))["advisor_model"] is None
+
+    router = DynamicRoutingPlugin(control)
+    advisor = AdvisorPlugin(target_model_aliases=frozenset({"minimax-guided"}))
+    data = {"model": "minimax-guided", "messages": [{"role": "user", "content": "help"}]}
+    asyncio.run(router.async_pre_call_hook({}, None, data, "anthropic_messages"))
+    asyncio.run(advisor.async_pre_call_hook({}, None, data, "anthropic_messages"))
+
+    assert data["metadata"]["gateway_policy"]["advisor_model"] is None
+    assert "tools" not in data
+
+
 def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
     import litellm
     from litellm.caching.caching import DualCache
@@ -188,8 +205,8 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     response = client.get("/control")
     assert response.status_code == 200
     assert "API sources" in response.text
-    assert "NO ROUTING WRITES" in response.text
-    assert "OpenAI Subscription" in response.text
+    assert "Routing desk" in response.text
+    assert "/control/app.js" in response.text
 
     assert client.get("/m").status_code == 404
     assert client.get("/s").status_code == 404
@@ -218,6 +235,13 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     )
     assert advisor.status_code == 200
     assert advisor.json()["advisor_model"] == "codex-terra-advisor"
+    no_advisor = client.post(
+        "/api/advisor-model",
+        json={"advisor_model": None},
+        headers={"origin": "http://testserver"},
+    )
+    assert no_advisor.status_code == 200
+    assert no_advisor.json()["advisor_model"] is None
 
 
 def test_control_api_rejects_cross_origin_non_json_and_unknown_models(

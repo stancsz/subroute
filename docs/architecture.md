@@ -46,6 +46,12 @@ injection. Rewrites carry requested and resolved model names, routing mode, and
 policy version as audit metadata. Existing in-flight requests are never
 retargeted.
 
+The Codex advisor boundary preserves valid tool history by translating
+Anthropic and OpenAI Chat tool exchanges into Responses input items. Advisor
+injection is skipped before orchestration when the selected advisor cannot
+represent that history. This keeps the executor request intact and leaves the
+provider handler as the final fail-closed validation boundary.
+
 Provider-specific Python belongs here only when LiteLLM has no native provider
 or OpenAI-compatible seam. Antigravity's registered handler launches a bounded
 external CLI process. Ordinary Codex subscription requests use LiteLLM's

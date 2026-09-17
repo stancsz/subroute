@@ -1,6 +1,6 @@
 # Subroute Desktop
 
-This is a separate Electron companion. It never imports the gateway router and has no route-changing IPC command. Docker Compose does not mount, start, or depend on this directory.
+This is the native shell for the shared Subroute Control Desk. Both Electron and `/control` load the same HTML, CSS, JavaScript, provider inventory, routing state, and usage data from the gateway. Electron adds only the host capabilities that a browser cannot provide: folder selection, agent installation, and terminal launch. Docker Compose does not start or depend on Electron.
 
 ```powershell
 cd desktop
@@ -8,10 +8,8 @@ npm install
 npm start
 ```
 
-On first launch it creates `%APPDATA%/subroute-desktop/sources.json` from `sources.example.json`. A usage adapter is optional and read-only:
+On first launch it creates `%APPDATA%/subroute-desktop/sources.json` from `sources.example.json`. That file contains only the loopback gateway URL. Provider inventory and usage adapters are owned by the gateway, so they cannot drift between the browser and Desktop interfaces. Do not place API keys in the Desktop file.
 
-```json
-"usage": { "url": "http://127.0.0.1:9000/quota", "usedField": "used", "limitField": "limit" }
-```
+## Launch agents
 
-Only provider-reported fields are displayed. Do not place API keys in this file. If a provider requires authentication, expose a loopback-only local adapter that owns its credential handling.
+The launcher starts each installed CLI in a visible PowerShell window rooted at the selected working directory. It checks the CLI's local `--version` command before enabling its Launch button. Claude Code, Codex, OpenCode, Hermes, and DeepSeek Harness receive a session-only Subroute configuration; their generated profile files live under `%APPDATA%/subroute-desktop/launch/`, not in the agent's existing home directory. The terminal stays open so a gateway or provider error remains visible instead of being reported as a false successful launch.

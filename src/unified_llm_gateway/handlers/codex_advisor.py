@@ -30,6 +30,31 @@ MODELS = {
 }
 
 
+def has_tool_history(messages: list[dict[str, Any]]) -> bool:
+    """Return whether a chat history contains an OpenAI or Anthropic tool turn."""
+    for message in messages:
+        if message.get("role") == "tool" or message.get("tool_calls"):
+            return True
+        content = message.get("content")
+        if isinstance(content, list) and any(
+            isinstance(item, dict) and item.get("type") in {"tool_use", "tool_result"}
+            for item in content
+        ):
+            return True
+    return False
+
+
+def supports_tool_history(messages: list[dict[str, Any]]) -> bool:
+    """Check the exact conversion used by the Codex advisor without mutating input."""
+    if not has_tool_history(messages):
+        return True
+    try:
+        build_responses_input(messages)
+    except ValueError:
+        return False
+    return True
+
+
 async def stream_events(response: httpx.Response):
     """Decode SSE data fields at event boundaries, including multiline JSON."""
     fields = []
@@ -54,34 +79,114 @@ async def stream_events(response: httpx.Response):
 
 def build_responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    for message in normalize_messages(messages):
-        role = str(message.get("role", "user"))
-        if role not in {"user", "assistant", "developer"} or message.get("tool_calls"):
-            raise ValueError("Codex advisor accepts text messages without tool calls only")
-        content = message.get("content", "")
-        if isinstance(content, list):
-            if any(not isinstance(item, dict) or item.get("type") not in {"text", "input_text", "output_text"}
-                   or not isinstance(item.get("text"), str) for item in content):
-                raise ValueError("Codex advisor does not support non-text content")
-            text_parts = [
-                item.get("text", "")
-                for item in content
-                if isinstance(item, dict)
-            ]
-            content = "\n".join(text_parts)
-        elif not isinstance(content, str):
-            raise ValueError("Codex advisor content must be text")
+    seen_tool_calls: set[str] = set()
 
+    def add_message(role: str, content: str) -> None:
         if not content.strip():
-            continue
-
-        valid_role = role
-        content_type = "output_text" if valid_role == "assistant" else "input_text"
+            return
+        content_type = "output_text" if role == "assistant" else "input_text"
         items.append({
             "type": "message",
-            "role": valid_role,
+            "role": role,
             "content": [{"type": content_type, "text": content}],
         })
+
+    def add_function_call(call_id: Any, name: Any, arguments: Any) -> None:
+        if not isinstance(call_id, str) or not call_id:
+            raise ValueError("Advisor tool call is missing a call id")
+        if call_id in seen_tool_calls:
+            raise ValueError(f"Duplicate advisor tool call id: {call_id}")
+        if not isinstance(name, str) or not name:
+            raise ValueError("Advisor tool call is missing a function name")
+        if isinstance(arguments, dict):
+            arguments = json.dumps(arguments, ensure_ascii=False, separators=(",", ":"))
+        if not isinstance(arguments, str):
+            raise ValueError("Advisor tool call arguments must be JSON text or an object")
+        try:
+            json.loads(arguments)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Advisor tool call arguments must be valid JSON") from exc
+        items.append({
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": arguments,
+        })
+        seen_tool_calls.add(call_id)
+
+    def tool_output(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list) and all(
+            isinstance(part, dict)
+            and part.get("type") in {"text", "input_text", "output_text"}
+            and isinstance(part.get("text"), str)
+            for part in content
+        ):
+            return "\n".join(part["text"] for part in content)
+        raise ValueError("Advisor tool result must contain text only")
+
+    def add_function_output(call_id: Any, output: Any) -> None:
+        if not isinstance(call_id, str) or not call_id:
+            raise ValueError("Advisor tool result is missing a call id")
+        if call_id not in seen_tool_calls:
+            raise ValueError(f"Advisor tool result has no matching call: {call_id}")
+        items.append({
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": tool_output(output),
+        })
+
+    for message in normalize_messages(messages):
+        role = str(message.get("role", "user"))
+        if role == "tool":
+            add_function_output(message.get("tool_call_id"), message.get("content", ""))
+            continue
+        if role not in {"user", "assistant", "developer"}:
+            raise ValueError(f"Codex advisor does not support message role: {role}")
+
+        content = message.get("content", "")
+        if isinstance(content, list):
+            text_parts: list[str] = []
+
+            def flush_text() -> None:
+                if text_parts:
+                    add_message(role, "\n".join(text_parts))
+                    text_parts.clear()
+
+            for part in content:
+                if not isinstance(part, dict):
+                    raise ValueError("Codex advisor content blocks must be objects")
+                part_type = part.get("type")
+                if part_type in {"text", "input_text", "output_text"} and isinstance(part.get("text"), str):
+                    text_parts.append(part["text"])
+                elif part_type == "tool_use" and role == "assistant":
+                    flush_text()
+                    add_function_call(part.get("id"), part.get("name"), part.get("input", {}))
+                elif part_type == "tool_result" and role == "user":
+                    flush_text()
+                    add_function_output(part.get("tool_use_id"), part.get("content", ""))
+                else:
+                    raise ValueError("Codex advisor does not support this content block")
+            flush_text()
+        elif not isinstance(content, str):
+            raise ValueError("Codex advisor content must be text")
+        else:
+            add_message(role, content)
+
+        tool_calls = message.get("tool_calls")
+        if tool_calls is not None:
+            if role != "assistant" or not isinstance(tool_calls, list):
+                raise ValueError("Advisor tool_calls must be an assistant list")
+            for tool_call in tool_calls:
+                if not isinstance(tool_call, dict) or not isinstance(tool_call.get("function"), dict):
+                    raise ValueError("Advisor tool call must contain a function object")
+                function = tool_call["function"]
+                add_function_call(
+                    tool_call.get("id"),
+                    function.get("name"),
+                    function.get("arguments", "{}"),
+                )
     if not items:
         raise ValueError("No input messages provided to Codex advisor")
     return items

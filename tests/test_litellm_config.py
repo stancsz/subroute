@@ -50,6 +50,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     assert by_name["openrouter"]["litellm_params"] == {
         "model": "openrouter/minimax/minimax-m3",
         "api_key": "os.environ/OPENROUTER_API_KEY",
+        "reasoning": {"exclude": True},
     }
     assert by_name["openrouter-guided"]["litellm_params"] == by_name["openrouter"][
         "litellm_params"

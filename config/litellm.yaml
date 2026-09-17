@@ -40,6 +40,8 @@ model_list:
     litellm_params:
       model: openrouter/minimax/minimax-m3
       api_key: os.environ/OPENROUTER_API_KEY
+      reasoning:
+        exclude: true
 
   - model_name: openrouter-guided
     model_info:
@@ -48,6 +50,8 @@ model_list:
     litellm_params:
       model: openrouter/minimax/minimax-m3
       api_key: os.environ/OPENROUTER_API_KEY
+      reasoning:
+        exclude: true
 
   # Antigravity runs as an in-process LiteLLM CustomLLM provider.
   - model_name: gemini-subscription
@@ -187,7 +191,7 @@ model_list:
 
   - model_name: desktop
     model_info:
-      display_name: Desktop Ollama
+      display_name: Local Ollama
       capabilities: [local, text]
     litellm_params:
       model: ollama/qwen2.5-coder

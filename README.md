@@ -189,6 +189,13 @@ automatically. LiteLLM's built-in `AdvisorOrchestrationHandler` owns the loop:
 it lets the executor request advice, calls the selected advisor, injects the
 result, and continues the executor. Existing client tools are preserved.
 
+Codex advisors translate prior Anthropic `tool_use`/`tool_result` blocks and
+OpenAI Chat `tool_calls`/`tool` messages into Responses `function_call` and
+`function_call_output` items. Malformed, unmatched, or non-text tool history
+does not fail the executor request: advisor injection is skipped and the reason
+is recorded in request metadata. The original messages and client tools are
+never rewritten by this compatibility check.
+
 Configure the opt-in behavior before launch with:
 
 ```powershell
