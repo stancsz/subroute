@@ -34,7 +34,7 @@ class AdvisorPlugin(CustomLogger):
             raise ValueError("max_uses must be between 1 and LiteLLM's hard cap of 5")
         self.advisor_model = advisor_model
         self.target_model_aliases = target_model_aliases or frozenset(
-            {"minimax-guided", "openai-guided"}
+            {"minimax-guided", "openai-guided", "openrouter-guided"}
         )
         self.max_uses = max_uses
 
@@ -64,12 +64,11 @@ class AdvisorPlugin(CustomLogger):
 
         if not any(tool.get("type") == ADVISOR_TOOL_TYPE for tool in tools):
             advisor_model = self.advisor_model
-            if self is advisor_plugin_instance:
-                try:
-                    from unified_llm_gateway.plugins.dynamic_router import control_plane
-                    advisor_model = control_plane.snapshot().advisor_model
-                except (ImportError, AttributeError):
-                    pass
+            policy = (data.get("metadata") or {}).get("gateway_policy")
+            if isinstance(policy, dict):
+                advisor_model = policy["advisor_model"]
+            elif self is advisor_plugin_instance:
+                raise ValueError("Gateway routing policy must be resolved before advisor injection")
             tools.append(
                 {
                     "type": ADVISOR_TOOL_TYPE,
@@ -86,7 +85,8 @@ class AdvisorPlugin(CustomLogger):
 advisor_plugin_instance = AdvisorPlugin(
     advisor_model=os.getenv("ADVISOR_MODEL", "gemini-subscription"),
     target_model_aliases=_csv(
-        "ADVISOR_TARGET_MODELS", "minimax-guided,openai-guided"
+        "ADVISOR_TARGET_MODELS",
+        "minimax-guided,openai-guided,openrouter-guided",
     ),
     max_uses=int(os.getenv("ADVISOR_MAX_USES", "3")),
 )

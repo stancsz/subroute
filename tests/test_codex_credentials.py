@@ -45,3 +45,16 @@ def test_non_codex_deployments_are_unchanged():
         )
     )
     assert result is None
+
+
+def test_translation_only_applies_at_codex_deployment(monkeypatch):
+    from unified_llm_gateway.plugins import codex_credentials
+    monkeypatch.setattr(codex_credentials, "read_codex_credentials", lambda: ("fixture", "account"))
+    request = {"api_base": CODEX_API_BASE, "max_output_tokens": 50,
+               "messages": [{"role": "system", "content": "constraints"}]}
+    updated = asyncio.run(codex_credential_refresher.async_pre_call_deployment_hook(request, None))
+    assert updated["messages"] == [{"role": "developer", "content": "constraints"}]
+    assert request["messages"][0]["role"] == "system"
+    assert updated["max_output_tokens"] == 50
+    request.update(api_base="https://api.openai.com/v1", model="openai/responses/test")
+    assert asyncio.run(codex_credential_refresher.async_pre_call_deployment_hook(request, None)) is None

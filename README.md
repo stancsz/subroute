@@ -1,9 +1,25 @@
-# unified-llm-gateway
+# Subroute
 
-A deliberately small LiteLLM Proxy deployment for coding tools. The project
-does not implement OpenAI Chat Completions, OpenAI Responses, or Anthropic
-Messages itself. LiteLLM Proxy owns the public HTTP protocols, streaming, tool
-events, request translation, and standard provider adapters.
+> Route the AI subscriptions you already have to the coding tools you already use.
+
+Subroute is a local subscription router for coding tools. Configure Cursor,
+Claude Code, Aider, Windsurf, or another compatible client once with a local
+endpoint, then select the model and routing policy locally instead of
+reconfiguring every client.
+
+Subroute is deliberately built on LiteLLM Proxy, not as a replacement for it.
+LiteLLM owns the public OpenAI and Anthropic protocols, streaming, tool events,
+request translation, and standard provider adapters. Subroute adds the local
+control plane around subscription-backed and other personal AI channels:
+
+- refresh local Codex subscription credentials immediately before dispatch;
+- expose a stable `current` model alias to every coding client;
+- persist and audit explicit model-routing policy; and
+- keep production and staging policy state isolated.
+
+It does not promise that all providers or subscriptions have identical tool,
+vision, context, reasoning, or streaming behavior. Unsupported inputs fail
+visibly rather than being silently rewritten into a different request.
 
 ## Runtime shape
 
@@ -11,14 +27,22 @@ events, request translation, and standard provider adapters.
 Codex / Claude Code / other coding tools
                   |
                   v
-       LiteLLM Proxy on 127.0.0.1:4000
+              Subroute on 127.0.0.1:4000
                   |
-        explicit model_name selection
+     LiteLLM protocol and provider layer
                   |
  OpenAI / Gemini / MiniMax / OpenRouter / Ollama / in-process Antigravity
 ```
 
-The checked-in configuration exposes one virtual alias and ten physical model
+## What problem it solves
+
+An AI subscription normally lives inside its own desktop app or CLI, while
+coding tools expect a stable API endpoint and model identifier. Subroute is
+the small local layer that bridges that mismatch. A client can always request
+`current`; you choose which configured channel receives new requests from the
+local switcher at `/m`.
+
+The checked-in configuration exposes one virtual alias and eighteen physical model
 aliases:
 
 | Alias | LiteLLM transport |
@@ -28,6 +52,7 @@ aliases:
 | `openai-guided` | OpenAI executor with automatic Advisor injection |
 | `gemini-api` | Native `gemini/` provider |
 | `openrouter` | Native `openrouter/` provider, defaulting to `minimax/minimax-m3` |
+| `openrouter-guided` | OpenRouter MiniMax M3 with automatic Advisor injection |
 | `minimax` | Native `minimax/` provider |
 | `minimax-guided` | MiniMax executor with automatic Advisor injection |
 | `freetoken` | Native OpenAI-compatible transport |
@@ -108,7 +133,9 @@ The desktop alias uses LiteLLM's native `ollama/qwen2.5-coder` provider and
 defaults to `http://127.0.0.1:11434`. Override `OLLAMA_API_BASE` when needed.
 
 Point production OpenAI-compatible tools at `http://127.0.0.1:4000/v1`.
-Use `./scripts/start-gateway.ps1 -Port 4005` for an isolated staging process.
+Use `docker compose up -d gateway-staging` for isolated staging on port 4005.
+Changing only the host launcher's port does not isolate its state or database;
+host staging also requires separate `ACTIVE_MODEL_STATE_PATH` and `DATABASE_URL`.
 LiteLLM Proxy also owns its Anthropic Messages and Responses endpoints. The client chooses
 one of the aliases above as its model. No client API key is required by default;
 set `GATEWAY_MASTER_KEY` before launch to require one.
@@ -157,23 +184,40 @@ streaming semantics interchangeable across providers.
 ## Advisor mode
 
 Requests sent to the Anthropic Messages endpoint with model
-`minimax-guided` or `openai-guided` receive LiteLLM's `advisor_20260301` tool
+`minimax-guided`, `openrouter-guided`, or `openai-guided` receive LiteLLM's `advisor_20260301` tool
 automatically. LiteLLM's built-in `AdvisorOrchestrationHandler` owns the loop:
-it lets the executor request advice, calls `gemini-subscription`, injects the
+it lets the executor request advice, calls the selected advisor, injects the
 result, and continues the executor. Existing client tools are preserved.
 
 Configure the opt-in behavior before launch with:
 
 ```powershell
 $env:ADVISOR_MODEL = "gemini-subscription"
-$env:ADVISOR_TARGET_MODELS = "minimax-guided,openai-guided"
+$env:ADVISOR_TARGET_MODELS = "minimax-guided,openrouter-guided,openai-guided"
 $env:ADVISOR_MAX_USES = "3"  # accepted range: 1..5
 ```
 
 This automatic orchestration is currently enabled only on LiteLLM's
 `/v1/messages` path. Chat Completions and Responses requests are deliberately
-left unchanged because LiteLLM 1.100.1 does not run its built-in Advisor
-interceptor on those paths.
+left unchanged; this deployment enables the built-in Advisor interceptor only
+on the Messages path.
+
+The persisted advisor selection is authoritative. `ADVISOR_MODEL` supplies the
+initial value only when no selection has been saved. Each request captures one
+policy snapshot for both executor resolution and advisor injection.
+
+Docker uses the pinned image digest in Compose (LiteLLM 1.103.0, Python 3.13).
+The optional Windows environment uses Python 3.11 and pinned LiteLLM 1.101.0,
+because the Docker build's 1.103.0 package is unavailable from the configured
+package index. Both Python versions are within the supported 3.11 through 3.13
+range. Run integration tests against the pinned Docker image before release;
+local tests alone do not establish deployed behavior.
+
+Staging has a separate PostgreSQL service, database volume, and policy volume.
+Its policy is stored at `/app/state/active_model.json`; production retains
+`/app/config/active_model.json` to preserve the existing selection. Staging mounts
+the shared configuration read-only. Source and static configuration are still
+shared, so changes to them must be reviewed before restarting production.
 
 ## Subscription boundary
 
@@ -181,18 +225,29 @@ ChatGPT/Codex subscription authentication and the local Antigravity `agy`
 session are not standard hosted providers. A deployment hook reloads
 `.codex/auth.json` immediately before each Codex dispatch, while LiteLLM's
 Responses bridge owns the protocol conversion. Antigravity is registered as
-an in-process `CustomLLM`, so the gateway runs as one process and exposes only
-port 4005.
+an in-process `CustomLLM` handler that launches an external `agy` subprocess for
+each request. Requests have a 120-second subprocess timeout and cancellation cleanup.
 
 The Antigravity provider deliberately rejects streaming, tools, and multimodal
 content until those paths are supported and certified. It can serve simple text
 requests through LiteLLM, but that alias is not yet a Codex or Claude Code
-compatible channel. Only LiteLLM exposes the public protocol on port 4005.
+compatible channel. The CLI and authenticated session must be available inside
+the selected runtime; the stock Compose image does not provision them.
+
+The Codex advisor retains a narrow text collector because the standard
+`openai/responses/` bridge preserves the advisor's `stream=False` request,
+whereas this subscription transport requires `stream=True`. The collector
+returns only after a validated completed event and provider usage; failed,
+incomplete, truncated, or malformed streams fail visibly. Unsupported non-text
+and tool inputs are rejected. Retire this collector when the standard bridge
+can force upstream streaming while returning a validated completed advisor
+response. Credential reload is scoped to the Codex deployment URL, and system
+instructions map to developer messages at that boundary, never to user text.
 
 ## Verification
 
 ```powershell
-py -3.14 -m pytest -q
+.venv/Scripts/python.exe -m pytest -q
 ```
 
 These tests verify the ownership boundary and fail-closed routing config. They

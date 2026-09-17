@@ -11,6 +11,22 @@ def config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 
 
+def test_compose_isolates_mutable_state_and_pins_gateway_image():
+    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
+    prod, staging = services["gateway"], services["gateway-staging"]
+    prod_env = dict(item.split("=", 1) for item in prod["environment"] if "=" in item)
+    stage_env = dict(item.split("=", 1) for item in staging["environment"] if "=" in item)
+    assert prod_env["ACTIVE_MODEL_STATE_PATH"] != stage_env["ACTIVE_MODEL_STATE_PATH"]
+    assert "./config:/app/config:ro" in staging["volumes"]
+    assert "gateway-staging-state:/app/state" in staging["volumes"]
+    assert "@postgres-staging:5432/litellm_staging" in stage_env["DATABASE_URL"]
+    assert "@postgres:5432/litellm" in prod_env["DATABASE_URL"]
+    assert set(staging["depends_on"]) == {"postgres-staging"}
+    assert set(services["postgres"]["volumes"]).isdisjoint(services["postgres-staging"]["volumes"])
+    assert prod["image"] == staging["image"]
+    assert "@sha256:" in prod["image"]
+
+
 def test_all_public_protocols_are_owned_by_litellm_proxy():
     package = ROOT / "src" / "unified_llm_gateway"
 
@@ -35,6 +51,10 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         "model": "openrouter/minimax/minimax-m3",
         "api_key": "os.environ/OPENROUTER_API_KEY",
     }
+    assert by_name["openrouter-guided"]["litellm_params"] == by_name["openrouter"][
+        "litellm_params"
+    ]
+    assert "advisor" in by_name["openrouter-guided"]["model_info"]["capabilities"]
     assert by_name["minimax"]["litellm_params"]["model"].startswith("minimax/")
     assert by_name["minimax-guided"]["litellm_params"] == by_name["minimax"][
         "litellm_params"

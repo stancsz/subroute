@@ -41,6 +41,14 @@ model_list:
       model: openrouter/minimax/minimax-m3
       api_key: os.environ/OPENROUTER_API_KEY
 
+  - model_name: openrouter-guided
+    model_info:
+      display_name: OpenRouter MiniMax M3 + Advisor
+      capabilities: [tools, streaming, advisor]
+    litellm_params:
+      model: openrouter/minimax/minimax-m3
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # Antigravity runs as an in-process LiteLLM CustomLLM provider.
   - model_name: gemini-subscription
     model_info:

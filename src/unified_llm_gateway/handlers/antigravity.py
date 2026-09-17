@@ -40,7 +40,7 @@ def prompt_from_messages(messages: list[dict[str, Any]]) -> str:
     return prompt
 
 
-async def invoke_agy(model: str, prompt: str) -> str:
+async def invoke_agy(model: str, prompt: str, timeout: float = 120.0) -> str:
     executable = os.getenv("AGY_PATH") or shutil.which("agy")
     if not executable:
         raise RuntimeError("Antigravity CLI is unavailable")
@@ -60,7 +60,19 @@ async def invoke_agy(model: str, prompt: str) -> str:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await process.communicate(prompt.encode("utf-8"))
+    communication = asyncio.create_task(process.communicate(prompt.encode("utf-8")))
+    try:
+        stdout, stderr = await asyncio.wait_for(asyncio.shield(communication), timeout)
+    except BaseException:
+        # Kill and reap the CLI, then drain its pipes before propagating failure.
+        if process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+        await asyncio.shield(process.wait())
+        await asyncio.shield(communication)
+        raise
     if process.returncode != 0:
         detail = stderr.decode("utf-8", errors="replace")[:300]
         raise RuntimeError(f"Antigravity exited with code {process.returncode}: {detail}")
@@ -100,7 +112,7 @@ class AntigravityLLM(CustomLLM):
             content = await invoke_agy(model, prompt)
         except ValueError as exc:
             raise CustomLLMError(status_code=400, message=str(exc)) from exc
-        except RuntimeError as exc:
+        except (RuntimeError, TimeoutError, OSError) as exc:
             raise CustomLLMError(status_code=502, message=str(exc)) from exc
 
         return ModelResponse(

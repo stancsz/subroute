@@ -104,7 +104,7 @@ class RoutingControlPlane:
     def _load_or_create_state(self) -> RoutingState:
         if not self.state_path.exists():
             initial_model = os.getenv("ACTIVE_MODEL", self.choices[0].model_id)
-            state = RoutingState(active_model=initial_model)
+            state = RoutingState(active_model=initial_model, advisor_model=os.getenv("ADVISOR_MODEL", "gemini-subscription"))
             self._validate(state)
             self._write_atomic(state)
             return state
@@ -113,7 +113,7 @@ class RoutingControlPlane:
             active_model=raw["active_model"],
             mode=raw.get("mode", "alias"),
             policy_version=int(raw.get("policy_version", 1)),
-            advisor_model=raw.get("advisor_model", "gemini-subscription"),
+            advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "gemini-subscription")),
         )
         self._validate(state)
         return state
@@ -215,8 +215,15 @@ class DynamicRoutingPlugin(CustomLogger):
             return None
 
         resolved_model, state = self.control_plane.resolve(requested_model)
+        # The advisor hook consumes this exact request snapshot, never a second
+        # read of mutable global policy. Overwrite any client-supplied value.
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            data["metadata"] = metadata
+        metadata["gateway_policy"] = asdict(state)
         if resolved_model == requested_model:
-            return None
+            return data
 
         metadata = data.get("metadata")
         if not isinstance(metadata, dict):

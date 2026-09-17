@@ -15,9 +15,9 @@ flowchart LR
     Advisor --> BuiltIn[LiteLLM AdvisorOrchestrationHandler]
 ```
 
-LiteLLM Proxy is the only public protocol engine. This repository does not
-translate Chat Completions, Responses, Anthropic Messages, SSE events, tool
-calls, or provider errors.
+LiteLLM Proxy is the only public protocol engine. Standard provider translation
+stays in LiteLLM. The narrow Codex advisor adapter collects upstream Responses
+SSE into a completed text response and validates terminal status and usage.
 
 ## Ownership
 
@@ -47,10 +47,19 @@ policy version as audit metadata. Existing in-flight requests are never
 retargeted.
 
 Provider-specific Python belongs here only when LiteLLM has no native provider
-or OpenAI-compatible seam. Antigravity is the one current exception and runs
-inside the proxy process. ChatGPT subscription uses LiteLLM's own Responses
-bridge; a deployment hook refreshes local credentials immediately before each
-request.
+or OpenAI-compatible seam. Antigravity's registered handler launches a bounded
+external CLI process. Ordinary Codex subscription requests use LiteLLM's
+Responses bridge; a deployment hook reloads local credentials and applies
+instruction-role compatibility only for the exact Codex backend URL. The
+advisor needs upstream streaming despite a non-streaming orchestration call,
+so it retains a narrow collector until the standard bridge supports that
+combination. See tests/test_codex_bridge.py for the dispatch regression.
+
+Each request resolves one executor/advisor policy snapshot. Persisted advisor
+selection takes precedence over the ADVISOR_MODEL startup default. Production
+and staging use distinct mutable policy storage and PostgreSQL clusters within
+Docker Compose. Static source/configuration remain shared and require review
+before a production restart.
 
 ## Evidence boundary
 
