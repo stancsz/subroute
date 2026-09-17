@@ -33,6 +33,15 @@ class CodexCredentialRefresher(CustomLogger):
         access_token, account_id = read_codex_credentials()
         updated = kwargs.copy()
         updated["api_key"] = access_token
+        # LiteLLM maps the Anthropic Messages API's required max_tokens field
+        # to the Responses API's max_output_tokens field. The ChatGPT Codex
+        # subscription endpoint rejects that otherwise standard Responses
+        # parameter, so remove it only at this exact provider boundary.
+        updated.pop("max_output_tokens", None)
+        # Claude-compatible clients may attach an end-user identifier. The
+        # subscription backend rejects its Responses `user` parameter, and it
+        # is not part of the model prompt or tool protocol.
+        updated.pop("user", None)
         headers = dict(updated.get("extra_headers") or {})
         headers["ChatGPT-Account-ID"] = account_id
         updated["extra_headers"] = headers
