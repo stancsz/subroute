@@ -1,0 +1,18 @@
+{
+  "gatewayUrl": "http://127.0.0.1:4000",
+  "sources": [
+    { "id": "openai-subscription", "name": "OpenAI subscription", "kind": "Subscription", "accent": "coral" },
+    { "id": "gemini-subscription", "name": "Gemini subscription", "kind": "Subscription", "accent": "blue" },
+    { "id": "openai", "name": "OpenAI API", "kind": "API key", "accent": "coral" },
+    { "id": "gemini", "name": "Gemini API", "kind": "API key", "accent": "blue" },
+    { "id": "minimax", "name": "MiniMax", "kind": "API key", "accent": "gold" },
+    { "id": "openrouter", "name": "OpenRouter", "kind": "API key", "accent": "violet" },
+    { "id": "freetoken", "name": "FreeToken", "kind": "Local endpoint", "accent": "blue" },
+    { "id": "ollama", "name": "Desktop Ollama", "kind": "Local endpoint", "accent": "gold" },
+    { "id": "anthropic-subscription", "name": "Anthropic subscription", "kind": "Subscription", "accent": "violet" },
+    { "id": "anthropic", "name": "Anthropic API", "kind": "API key", "accent": "violet" },
+    { "id": "deepseek", "name": "DeepSeek API", "kind": "API key", "accent": "blue" },
+    { "id": "glm", "name": "Zhipu GLM API", "kind": "API key", "accent": "blue" },
+    { "id": "qwen", "name": "Alibaba Qwen API", "kind": "API key", "accent": "gold" }
+  ]
+}

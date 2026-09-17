@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy.proxy_server import app
 from pydantic import BaseModel, ValidationError
+from unified_llm_gateway.ui_control import register_ui_routes
 
 
 RoutingMode = Literal["alias", "force", "off"]
@@ -331,6 +332,17 @@ async def active_model_state(request: Request) -> dict[str, Any]:
     return asdict(control_plane.snapshot())
 
 
+async def routing_options(request: Request) -> dict[str, Any]:
+    """Presentation data for local control clients, never the request data path."""
+    _require_local_control_request(request)
+    return {
+        "state": asdict(control_plane.snapshot()),
+        "models": [asdict(choice) for choice in control_plane.choices if choice.selectable],
+        "advisor_models": [asdict(choice) for choice in control_plane.choices if choice.advisor_selectable],
+        "client_api_key_required": bool(os.getenv("GATEWAY_MASTER_KEY")),
+    }
+
+
 async def update_active_model(request: Request) -> dict[str, Any]:
     _require_local_control_request(request)
     content_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
@@ -369,10 +381,9 @@ def _register_routes() -> None:
         for route in app.routes
     }
     routes = (
-        ("/m", model_routing_page, ["GET"], HTMLResponse),
-        ("/s", model_routing_page, ["GET"], HTMLResponse),
         ("/api/active-model", active_model_state, ["GET"], None),
         ("/api/active-model", update_active_model, ["POST"], None),
+        ("/api/routing-options", routing_options, ["GET"], None),
         ("/api/advisor-model", advisor_model_state, ["GET"], None),
         ("/api/advisor-model", update_advisor_model, ["POST"], None),
     )
@@ -389,3 +400,4 @@ def _register_routes() -> None:
 
 
 _register_routes()
+register_ui_routes(app)

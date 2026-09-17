@@ -185,12 +185,14 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     monkeypatch.setattr(dynamic_routing, "control_plane", control)
     client = TestClient(app, client=("127.0.0.1", 50000))
 
-    for path in ("/m", "/s"):
-        response = client.get(path)
-        assert response.status_code == 200
-        assert "Changes apply to new requests only." in response.text
-        assert 'href="/ui"' in response.text
-        assert "MiniMax M3 [tools, 204k]" in response.text
+    response = client.get("/control")
+    assert response.status_code == 200
+    assert "API sources" in response.text
+    assert "NO ROUTING WRITES" in response.text
+    assert "OpenAI Subscription" in response.text
+
+    assert client.get("/m").status_code == 404
+    assert client.get("/s").status_code == 404
 
     response = client.post(
         "/api/active-model",
@@ -205,6 +207,10 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         "advisor_model": "gemini-subscription",
     }
     assert client.get("/api/active-model").json() == response.json()
+    options = client.get("/api/routing-options")
+    assert options.status_code == 200
+    assert options.json()["client_api_key_required"] is False
+    assert {item["model_id"] for item in options.json()["models"]} == {"minimax", "desktop"}
     advisor = client.post(
         "/api/advisor-model",
         json={"advisor_model": "codex-terra-advisor"},

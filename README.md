@@ -40,7 +40,7 @@ An AI subscription normally lives inside its own desktop app or CLI, while
 coding tools expect a stable API endpoint and model identifier. Subroute is
 the small local layer that bridges that mismatch. A client can always request
 `current`; you choose which configured channel receives new requests from the
-local switcher at `/m`.
+local switcher at `/control`.
 
 The checked-in configuration exposes one virtual alias and eighteen physical model
 aliases:
@@ -146,7 +146,7 @@ fails visibly.
 ## Local model switcher
 
 The official LiteLLM dashboard remains unchanged at `/ui`. Open
-`http://127.0.0.1:4000/m` or its equivalent `/s` alias for the small local
+`http://127.0.0.1:4000/control` for the small local
 routing control plane. It reads selectable physical models from
 `config/litellm.yaml`, displays their declared capability tags, and applies a
 change only to requests that begin after the policy update.

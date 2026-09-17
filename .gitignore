@@ -2,5 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+desktop/node_modules/
+.tmp-*.png
 *.egg-info/
 config/active_model.json

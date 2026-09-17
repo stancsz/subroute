@@ -1,0 +1,17 @@
+{
+  "sources": [
+    {"name": "OpenAI Subscription", "kind": "subscription", "models": "ChatGPT / Codex · Sol, Astra, Terra, Luna, Reserve", "credentials": ["CODEX_AUTH_FILE"]},
+    {"name": "Gemini Subscription", "kind": "subscription", "models": "gemini-subscription · advisor available"},
+    {"name": "OpenAI API", "kind": "api key", "models": "openai · openai-guided", "credentials": ["OPENAI_API_KEY"]},
+    {"name": "Gemini API", "kind": "api key", "models": "gemini-api", "credentials": ["GEMINI_API_KEY"]},
+    {"name": "MiniMax", "kind": "api key", "models": "minimax · minimax-guided", "credentials": ["MINIMAX_API_KEY"]},
+    {"name": "OpenRouter", "kind": "api key", "models": "openrouter · openrouter-guided", "credentials": ["OPENROUTER_API_KEY"]},
+    {"name": "FreeToken", "kind": "local endpoint", "models": "freetoken · OpenAI compatible", "credentials": ["FREETOKEN_BASE_URL", "FREETOKEN_API_KEY"]},
+    {"name": "Desktop Ollama", "kind": "local endpoint", "models": "desktop · qwen2.5-coder", "credentials": ["OLLAMA_API_BASE"]}
+    ,{"name": "Anthropic Subscription", "kind": "subscription", "models": "Claude Code account session", "available": false}
+    ,{"name": "Anthropic API", "kind": "api key", "models": "Claude API", "available": false, "credentials": ["ANTHROPIC_API_KEY"]}
+    ,{"name": "DeepSeek API", "kind": "api key", "models": "DeepSeek V3 / R1", "available": false, "credentials": ["DEEPSEEK_API_KEY"]}
+    ,{"name": "Zhipu GLM API", "kind": "api key", "models": "GLM coding models", "available": false, "credentials": ["ZHIPUAI_API_KEY"]}
+    ,{"name": "Alibaba Qwen API", "kind": "api key", "models": "Qwen coder models", "available": false, "credentials": ["DASHSCOPE_API_KEY"]}
+  ]
+}

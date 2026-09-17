@@ -9,7 +9,7 @@ flowchart LR
     Proxy --> Ollama[Native Ollama provider]
     Proxy --> Antigravity[In-process Antigravity CustomLLM]
     Proxy --> Advisor[Advisor injection callback]
-    Control[Local control plane /m and /s] --> State[Atomic active_model.json]
+    Control[Local control plane /control] --> State[Atomic active_model.json]
     State --> Router[In-memory alias resolver]
     Router --> Proxy
     Advisor --> BuiltIn[LiteLLM AdvisorOrchestrationHandler]

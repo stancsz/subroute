@@ -1,0 +1,17 @@
+{
+  "name": "subroute-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A local, read-only usage companion for Subroute.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "36.7.3"
+  },
+  "allowScripts": {
+    "electron@36.7.3": true
+  }
+}
