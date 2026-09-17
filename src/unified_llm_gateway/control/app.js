@@ -39,6 +39,8 @@ function renderSources(sources, usageMap) {
     card.classList.add(source.accent || "blue"); node.querySelector("h3").textContent = source.name; node.querySelector(".kind").textContent = source.kind; node.querySelector(".models").textContent = source.models;
     const connection = source.configured ? "Configured" : source.available ? "Credential required" : "Not added to gateway", line = node.querySelector(".usage"), footer = node.querySelector("footer"), bar = node.querySelector("i");
     if (usage.state === "ready") { const percent = Math.min(100, usage.used / usage.limit * 100), remaining = usage.remaining ?? Math.max(0, usage.limit - usage.used), usd = usage.detail === "USD credits"; line.textContent = `${connection} · ${usd ? `$${remaining.toFixed(2)}` : `${Math.round(remaining)}%`} remaining`; footer.textContent = `${usd ? `$${usage.used.toFixed(2)} used` : `${Math.round(percent)}% used`} · ${usage.detail}`; bar.style.width = `${percent}%`; }
+    else if (usage.state === "connected") { line.textContent = `${connection} · authenticated`; footer.textContent = usage.detail; bar.style.width = "100%"; }
+    else if (usage.state === "sign_in_required") { line.textContent = "Docker bridge ready · sign-in required"; footer.textContent = usage.detail; bar.style.width = "0%"; }
     else { line.textContent = `${connection} · usage unavailable`; footer.textContent = usage.detail; bar.style.width = "0%"; }
     return node;
   }));

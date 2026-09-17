@@ -110,6 +110,39 @@ def test_codex_subscription_pair_collects_sol_and_injects_advice(monkeypatch):
     assert receipt["output_tokens"] == 7
 
 
+def test_codex_subscription_pair_collects_antigravity_advice(monkeypatch):
+    from litellm.types.utils import Usage
+    from unified_llm_gateway.plugins import advisor_plugin
+
+    async def fake_invoke(model, prompt):
+        assert model == "gemini-3.8-flash"
+        assert prompt == "[User]:\nreview this design"
+        return "Check the failure handling.", Usage(
+            prompt_tokens=9, completion_tokens=6, total_tokens=15
+        )
+
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", fake_invoke)
+    plugin = AdvisorPlugin(target_model_aliases=frozenset({"minimax-guided"}))
+    data = {
+        "model": "codex-luna",
+        "messages": [{"role": "user", "content": "review this design"}],
+        "metadata": {"gateway_policy": {
+            "active_model": "codex-luna", "mode": "force", "policy_version": 38,
+            "advisor_model": "gemini-subscription",
+        }},
+    }
+
+    run(plugin, data)
+
+    assert data["messages"][-1]["content"] == (
+        "Independent advisor guidance:\nCheck the failure handling."
+    )
+    receipt = data["metadata"]["gateway_advisor"]
+    assert receipt["status"] == "advice_injected"
+    assert receipt["model"] == "gemini-subscription"
+    assert receipt["usage_source"] == "provider"
+
+
 def test_codex_advisor_is_injected_for_supported_tool_history():
     plugin = AdvisorPlugin(
         advisor_model="codex-terra-advisor",

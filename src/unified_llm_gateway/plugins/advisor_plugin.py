@@ -14,6 +14,7 @@ from unified_llm_gateway.handlers.codex_advisor import (
     has_tool_history,
     supports_tool_history,
 )
+from unified_llm_gateway.handlers.antigravity import invoke_agy, prompt_from_messages
 
 
 ADVISOR_TOOL_TYPE = "advisor_20260301"
@@ -31,6 +32,7 @@ ADVISOR_MODEL_NAMES = {
     "codex-sol-advisor": "gpt-5.6-sol",
     "codex-astra-advisor": "gpt-6-astra",
 }
+ANTIGRAVITY_ADVISOR_MODEL = "gemini-3.8-flash"
 logger = logging.getLogger(__name__)
 
 
@@ -103,13 +105,19 @@ class AdvisorPlugin(CustomLogger):
 
         if (
             data.get("model") in CODEX_SUBSCRIPTION_MODELS
-            and advisor_model in ADVISOR_MODEL_NAMES
+            and advisor_model in {*ADVISOR_MODEL_NAMES, "gemini-subscription"}
         ):
             consultation_id = uuid.uuid4().hex
             try:
-                advice, usage = await call_codex_streaming_collect(
-                    ADVISOR_MODEL_NAMES[advisor_model], messages
-                )
+                if advisor_model == "gemini-subscription":
+                    advice, usage = await invoke_agy(
+                        ANTIGRAVITY_ADVISOR_MODEL,
+                        prompt_from_messages(messages),
+                    )
+                else:
+                    advice, usage = await call_codex_streaming_collect(
+                        ADVISOR_MODEL_NAMES[advisor_model], messages
+                    )
             except (RuntimeError, TimeoutError, ValueError) as exc:
                 metadata = data.setdefault("metadata", {})
                 metadata["gateway_advisor"] = {

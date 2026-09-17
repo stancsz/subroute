@@ -21,7 +21,21 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     assert "gateway-staging-state:/app/state" in staging["volumes"]
     assert "@postgres-staging:5432/litellm_staging" in stage_env["DATABASE_URL"]
     assert "@postgres:5432/litellm" in prod_env["DATABASE_URL"]
-    assert set(staging["depends_on"]) == {"postgres-staging"}
+    assert set(prod["depends_on"]) == {"postgres", "antigravity"}
+    assert set(staging["depends_on"]) == {"postgres-staging", "antigravity"}
+    assert prod["depends_on"]["antigravity"]["condition"] == "service_healthy"
+    assert staging["depends_on"]["antigravity"]["condition"] == "service_healthy"
+    antigravity = services["antigravity"]
+    assert "ports" not in antigravity
+    assert antigravity["volumes"] == [
+        "antigravity-config:/root/.config",
+        "antigravity-data:/root/.local/share",
+        "antigravity-gemini:/root/.gemini",
+    ]
+    antigravity_env = dict(
+        item.split("=", 1) for item in antigravity["environment"] if "=" in item
+    )
+    assert antigravity_env["GEMINI_FORCE_FILE_STORAGE"] == "true"
     assert set(services["postgres"]["volumes"]).isdisjoint(services["postgres-staging"]["volumes"])
     assert prod["image"] == staging["image"]
     assert "@sha256:" in prod["image"]

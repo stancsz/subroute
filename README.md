@@ -232,14 +232,50 @@ ChatGPT/Codex subscription authentication and the local Antigravity `agy`
 session are not standard hosted providers. A deployment hook reloads
 `.codex/auth.json` immediately before each Codex dispatch, while LiteLLM's
 Responses bridge owns the protocol conversion. Antigravity is registered as
-an in-process `CustomLLM` handler that launches an external `agy` subprocess for
-each request. Requests have a 120-second subprocess timeout and cancellation cleanup.
+an in-process `CustomLLM` handler that sends each request to the private
+Antigravity service. That service runs the `agy` subprocess with a bounded
+timeout.
 
 The Antigravity provider deliberately rejects streaming, tools, and multimodal
 content until those paths are supported and certified. It can serve simple text
 requests through LiteLLM, but that alias is not yet a Codex or Claude Code
 compatible channel. The CLI and authenticated session must be available inside
-the selected runtime; the stock Compose image does not provision them.
+the selected runtime.
+
+Compose runs Antigravity in its own internal `antigravity` service. The pinned
+LiteLLM gateway image does not contain the CLI or its credentials; it sends
+bounded text-only requests to that service on the private Compose network. The
+service keeps its Linux configuration and secure-session data in named Docker
+volumes and publishes no host port.
+
+On Windows, an existing host Antigravity session can be migrated once into the
+container's file-backed credential store. Read the raw UTF-8 credential blob
+from Windows Credential Manager and stream it to
+`/root/.config/agy-host-auth` over stdin. On the next service start, the
+entrypoint moves it into the private `antigravity-gemini` volume with mode 600.
+The credential is never written to the repository, Compose environment, image,
+or command line. If migration is not available, use the interactive OAuth flow
+below.
+
+After the first `docker compose up -d --build`, authenticate that container
+once. The forced SSH environment makes the CLI print a browser authorization
+URL and accept the returned code without attempting to launch a browser inside
+Docker:
+
+```powershell
+docker compose exec -e SSH_CONNECTION=container -it antigravity agy
+```
+
+Use the prompted URL and code with the approved Google account. The session is
+container-local and survives a restart through the named volumes. Confirm it
+without sending a model request:
+
+```powershell
+docker compose exec antigravity agy models
+```
+
+Only after that succeeds should `gemini-subscription` be selected as the
+advisor in `/control`.
 
 The Codex advisor retains a narrow text collector because the standard
 `openai/responses/` bridge preserves the advisor's `stream=False` request,
@@ -249,7 +285,20 @@ incomplete, truncated, or malformed streams fail visibly. Unsupported non-text
 and tool inputs are rejected. Retire this collector when the standard bridge
 can force upstream streaming while returning a validated completed advisor
 response. Credential reload is scoped to the Codex deployment URL, and system
-instructions map to developer messages at that boundary, never to user text.
+instructions map to developer messages only at that boundary, never to user
+text. LiteLLM
+also maps Claude Code's required `max_tokens` field to `max_output_tokens`.
+The subscription backend rejects that parameter, so the boundary removes it
+for Codex subscription dispatches and lets the provider choose its output
+length. Other Responses deployments keep their requested output limit.
+
+When a Codex subscription target is paired with a Codex advisor in the routing
+desk, the gateway first collects a completed streaming advisor response, then
+adds it as developer guidance for the selected target. This is a narrow
+compatibility path: LiteLLM's native advisor orchestration uses a non-streaming
+internal base call, while the Codex subscription backend requires streaming.
+The request fails closed if the advisor cannot complete, and the gateway log
+records an `advice_injected` consultation ID with provider usage.
 
 ## Verification
 

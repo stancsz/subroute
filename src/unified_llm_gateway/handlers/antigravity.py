@@ -11,9 +11,10 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+import httpx
 from litellm import CustomLLM
 from litellm.llms.custom_llm import CustomLLMError
-from litellm.types.utils import GenericStreamingChunk, ModelResponse
+from litellm.types.utils import GenericStreamingChunk, ModelResponse, Usage
 
 
 MODELS = {
@@ -40,14 +41,38 @@ def prompt_from_messages(messages: list[dict[str, Any]]) -> str:
     return prompt
 
 
-async def invoke_agy(model: str, prompt: str, timeout: float = 120.0) -> str:
-    executable = os.getenv("AGY_PATH") or shutil.which("agy")
-    if not executable:
-        raise RuntimeError("Antigravity CLI is unavailable")
+async def invoke_agy(model: str, prompt: str, timeout: float = 120.0) -> tuple[str, Usage]:
     target = MODELS.get(model)
     if target is None:
         raise ValueError(f"Unsupported Antigravity model: {model}")
-
+    bridge_url = os.getenv("ANTIGRAVITY_BRIDGE_URL")
+    if bridge_url:
+        try:
+            async with httpx.AsyncClient(timeout=timeout + 5) as client:
+                response = await client.post(
+                    f"{bridge_url.rstrip('/')}/v1/completions",
+                    json={"model": target, "prompt": prompt},
+                )
+            if response.status_code >= 400:
+                detail = response.json().get("detail", response.text)[:300]
+                raise RuntimeError(f"Antigravity bridge returned {response.status_code}: {detail}")
+            content = response.json().get("content")
+            if not isinstance(content, str) or not content:
+                raise RuntimeError("Antigravity bridge returned no response text")
+            raw_usage = response.json().get("usage", {})
+            keys = ("input_tokens", "output_tokens", "total_tokens")
+            if not all(type(raw_usage.get(key)) is int and raw_usage[key] >= 0 for key in keys):
+                raise RuntimeError("Antigravity bridge returned no valid provider usage")
+            return content, Usage(
+                prompt_tokens=raw_usage["input_tokens"],
+                completion_tokens=raw_usage["output_tokens"],
+                total_tokens=raw_usage["total_tokens"],
+            )
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"Antigravity bridge is unavailable: {type(exc).__name__}") from exc
+    executable = os.getenv("AGY_PATH") or shutil.which("agy")
+    if not executable:
+        raise RuntimeError("Antigravity CLI is unavailable")
     process = await asyncio.create_subprocess_exec(
         executable,
         "--model",
@@ -79,6 +104,7 @@ async def invoke_agy(model: str, prompt: str, timeout: float = 120.0) -> str:
 
     deltas: list[str] = []
     final_text = ""
+    raw_usage: dict[str, Any] = {}
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         try:
             event = json.loads(line)
@@ -90,10 +116,18 @@ async def invoke_agy(model: str, prompt: str, timeout: float = 120.0) -> str:
                 deltas.append(delta)
         elif event.get("event") == "result":
             final_text = event.get("result", {}).get("response", "")
+            raw_usage = event.get("result", {}).get("usage", {})
     content = final_text or "".join(deltas)
     if not content:
         raise RuntimeError("Antigravity returned no response text")
-    return content
+    keys = ("input_tokens", "output_tokens", "total_tokens")
+    if not all(type(raw_usage.get(key)) is int and raw_usage[key] >= 0 for key in keys):
+        raise RuntimeError("Antigravity returned no valid provider usage")
+    return content, Usage(
+        prompt_tokens=raw_usage["input_tokens"],
+        completion_tokens=raw_usage["output_tokens"],
+        total_tokens=raw_usage["total_tokens"],
+    )
 
 
 class AntigravityLLM(CustomLLM):
@@ -109,7 +143,7 @@ class AntigravityLLM(CustomLLM):
             raise CustomLLMError(status_code=400, message="Antigravity tool calls are not yet certified")
         try:
             prompt = prompt_from_messages(messages)
-            content = await invoke_agy(model, prompt)
+            content, usage = await invoke_agy(model, prompt)
         except ValueError as exc:
             raise CustomLLMError(status_code=400, message=str(exc)) from exc
         except (RuntimeError, TimeoutError, OSError) as exc:
@@ -126,6 +160,7 @@ class AntigravityLLM(CustomLLM):
                     "finish_reason": "stop",
                 }
             ],
+            usage=usage,
         )
 
     async def astreaming(self, *args: Any, **kwargs: Any) -> AsyncIterator[GenericStreamingChunk]:

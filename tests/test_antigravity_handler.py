@@ -27,7 +27,9 @@ def test_antigravity_custom_provider_returns_litellm_model_response(monkeypatch)
     async def fake_invoke(model: str, prompt: str) -> str:
         assert model == "gemini-3.8-flash"
         assert prompt == "[User]:\nhello"
-        return "provider response"
+        return "provider response", antigravity.Usage(
+            prompt_tokens=1, completion_tokens=2, total_tokens=3
+        )
 
     monkeypatch.setattr(antigravity, "invoke_agy", fake_invoke)
     response = asyncio.run(
@@ -51,3 +53,39 @@ def test_antigravity_custom_provider_rejects_tools(monkeypatch):
                 optional_params={"tools": [{"type": "function"}]},
             )
         )
+
+
+def test_bridge_receives_cli_display_model(monkeypatch):
+    request = {}
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "content": "ok",
+                "usage": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3},
+            }
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def post(self, url, json):
+            request.update(url=url, json=json)
+            return Response()
+
+    monkeypatch.setenv("ANTIGRAVITY_BRIDGE_URL", "http://antigravity:4015")
+    monkeypatch.setattr(antigravity.httpx, "AsyncClient", lambda **_: Client())
+
+    content, usage = asyncio.run(antigravity.invoke_agy("gemini-3.8-flash", "hello"))
+    assert content == "ok"
+    assert usage.total_tokens == 3
+    assert request["json"] == {
+        "model": "Gemini 3.8 Flash (High)",
+        "prompt": "hello",
+    }

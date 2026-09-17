@@ -39,6 +39,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      antigravity:
+        condition: service_healthy
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
@@ -56,6 +58,7 @@ services:
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-terra-advisor}
+      - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
@@ -76,6 +79,8 @@ services:
     depends_on:
       postgres-staging:
         condition: service_healthy
+      antigravity:
+        condition: service_healthy
     ports:
       - "127.0.0.1:4005:4005"
     volumes:
@@ -90,6 +95,7 @@ services:
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-terra-advisor}
+      - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
@@ -103,7 +109,25 @@ services:
       - "host.docker.internal:host-gateway"
     command: ["--config", "/app/config/litellm.yaml", "--port", "4005", "--host", "0.0.0.0", "--telemetry", "False"]
 
+  antigravity:
+    build: ./sidecars/antigravity
+    restart: unless-stopped
+    environment:
+      - GEMINI_FORCE_FILE_STORAGE=true
+    volumes:
+      - antigravity-config:/root/.config
+      - antigravity-data:/root/.local/share
+      - antigravity-gemini:/root/.gemini
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4015/health', timeout=2).read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
 volumes:
   litellm-postgres-data:
   litellm-postgres-staging-data:
   gateway-staging-state:
+  antigravity-config:
+  antigravity-data:
+  antigravity-gemini:

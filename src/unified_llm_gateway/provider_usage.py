@@ -94,6 +94,29 @@ def _openrouter_usage() -> dict[str, Any]:
         return _unavailable(f"OpenRouter usage read failed: {type(exc).__name__}")
 
 
+def _gemini_subscription_usage() -> dict[str, Any]:
+    bridge_url = os.getenv("ANTIGRAVITY_BRIDGE_URL")
+    if not bridge_url:
+        return _unavailable("Gemini subscription Docker bridge is not configured")
+    try:
+        response = httpx.get(f"{bridge_url.rstrip('/')}/v1/status", timeout=18.0)
+        response.raise_for_status()
+        status = response.json()
+        if status.get("authenticated") is not True:
+            return {
+                "state": "sign_in_required",
+                "detail": str(status.get("detail") or "Antigravity sign-in required"),
+            }
+        models = status.get("models")
+        count = len(models) if isinstance(models, list) else 0
+        return {
+            "state": "connected",
+            "detail": f"Authenticated Docker bridge; {count} subscription models available",
+        }
+    except (httpx.HTTPError, TypeError, ValueError) as exc:
+        return _unavailable(f"Gemini subscription bridge read failed: {type(exc).__name__}")
+
+
 def read_provider_usage(*, refresh: bool = False) -> dict[str, Any]:
     """Return a cached snapshot unless a local user explicitly requests refresh."""
     global _CACHE
@@ -105,7 +128,7 @@ def read_provider_usage(*, refresh: bool = False) -> dict[str, Any]:
                 "openai-subscription": _codex_subscription_usage(),
                 "minimax": _minimax_usage(),
                 "openrouter": _openrouter_usage(),
-                "gemini-subscription": _unavailable("No local Gemini subscription quota adapter is configured"),
+                "gemini-subscription": _gemini_subscription_usage(),
             },
             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
