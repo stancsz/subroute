@@ -140,6 +140,27 @@ LiteLLM Proxy also owns its Anthropic Messages and Responses endpoints. The clie
 one of the aliases above as its model. No client API key is required by default;
 set `GATEWAY_MASTER_KEY` before launch to require one.
 
+## Expert consultation API
+
+`experts` is a separate, loopback-only LiteLLM service for compact advisory
+questions. Start it independently when a Luna worker needs a second opinion:
+
+```powershell
+docker compose up -d experts
+```
+
+It listens at `http://127.0.0.1:4040/v1` and exposes only these non-streaming,
+text-only aliases: `codex-sol-advisor` and `codex-astra-advisor`. It deliberately
+does not expose `current`, Luna, a control UI, dynamic routing, fallbacks, or
+automatic advisor injection. It shares the existing read-only Codex subscription
+credential mount because the two advisor aliases use the subscription bridge;
+it has no database or mutable policy state.
+
+Keep port 4000 for normal worker execution. Use port 4040 only for a compact
+diagnostic packet and treat its answer as advice for the worker to verify. Set
+`EXPERTS_API_KEY` before starting the service if a local bearer token is needed;
+otherwise its loopback binding is the access boundary.
+
 The router has no retries and no fallbacks. A selected channel succeeds or
 fails visibly.
 

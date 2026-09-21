@@ -109,6 +109,23 @@ services:
       - "host.docker.internal:host-gateway"
     command: ["--config", "/app/config/litellm.yaml", "--port", "4005", "--host", "0.0.0.0", "--telemetry", "False"]
 
+  experts:
+    image: ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56
+    container_name: unified-llm-gateway-experts
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4040:4040"
+    volumes:
+      - ./config:/app/config:ro
+      - ./src:/app/src:ro
+      - ~/.codex/auth.json:/root/.codex/auth.json:ro
+    environment:
+      - PYTHONPATH=/app/src
+      - CODEX_AUTH_FILE=/root/.codex/auth.json
+      # Optional bearer token. Unset keeps the service loopback-only, like 4000.
+      - EXPERTS_API_KEY
+    command: ["--config", "/app/config/litellm.experts.yaml", "--port", "4040", "--host", "0.0.0.0", "--telemetry", "False"]
+
   antigravity:
     build: ./sidecars/antigravity
     restart: unless-stopped

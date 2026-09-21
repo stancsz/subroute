@@ -1,0 +1,39 @@
+# A deliberately narrow, loopback-only API for compact expert consultations.
+# It exposes no executor aliases, routing state, UI, or advisor orchestration.
+model_list:
+  - model_name: codex-sol-advisor
+    model_info:
+      display_name: Codex Sol Advisor
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-sol
+
+  - model_name: codex-astra-advisor
+    model_info:
+      display_name: Codex Astra Advisor
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-6-astra
+
+router_settings:
+  # An expert consultation succeeds once or fails visibly. Never retry or fall
+  # through to another model, because that would hide both cost and provenance.
+  num_retries: 0
+  fallbacks: []
+
+litellm_settings:
+  custom_provider_map:
+    - provider: codex-advisor
+      custom_handler: unified_llm_gateway.handlers.codex_advisor.codex_advisor_handler
+  drop_params: true
+  set_verbose: false
+
+general_settings:
+  # Optional. When unset, loopback is the security boundary, matching port 4000.
+  master_key: os.environ/EXPERTS_API_KEY
+  disable_spend_logs: true
+  disable_error_tracking: true

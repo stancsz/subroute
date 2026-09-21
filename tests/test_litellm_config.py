@@ -5,10 +5,15 @@ import yaml
 
 ROOT = Path(__file__).parents[1]
 CONFIG_PATH = ROOT / "config" / "litellm.yaml"
+EXPERTS_CONFIG_PATH = ROOT / "config" / "litellm.experts.yaml"
 
 
 def config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+
+
+def experts_config() -> dict:
+    return yaml.safe_load(EXPERTS_CONFIG_PATH.read_text(encoding="utf-8"))
 
 
 def test_compose_isolates_mutable_state_and_pins_gateway_image():
@@ -161,3 +166,26 @@ def test_gateway_defaults_to_loopback_no_auth_but_supports_an_explicit_master_ke
         for line in compose.splitlines()
     )
     assert config()["general_settings"]["master_key"] == "os.environ/GATEWAY_MASTER_KEY"
+
+
+def test_experts_port_exposes_only_bounded_advisor_aliases():
+    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
+    experts = services["experts"]
+    expert_models = experts_config()["model_list"]
+
+    assert experts["ports"] == ["127.0.0.1:4040:4040"]
+    assert experts["command"] == [
+        "--config", "/app/config/litellm.experts.yaml", "--port", "4040",
+        "--host", "0.0.0.0", "--telemetry", "False",
+    ]
+    assert "depends_on" not in experts
+    assert {model["model_name"] for model in expert_models} == {
+        "codex-sol-advisor", "codex-astra-advisor",
+    }
+    assert all(model["model_info"]["selectable"] is False for model in expert_models)
+    assert {
+        model["litellm_params"]["model"] for model in expert_models
+    } == {"codex-advisor/gpt-5.6-sol", "codex-advisor/gpt-6-astra"}
+    assert experts_config()["router_settings"] == {"num_retries": 0, "fallbacks": []}
+    assert "callbacks" not in experts_config()["litellm_settings"]
+    assert experts_config()["general_settings"]["master_key"] == "os.environ/EXPERTS_API_KEY"
