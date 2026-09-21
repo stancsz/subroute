@@ -1,0 +1,4 @@
+interface:
+  display_name: "Luna Advisor Escalation"
+  short_description: "Use compact Sol or Astra advice to unblock Luna work"
+  default_prompt: "Keep this task with Luna. If progress is genuinely stuck, ask Sol or Astra for a compact advice-only diagnosis, then verify and implement the chosen path yourself."
