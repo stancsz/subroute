@@ -21,11 +21,35 @@ MODELS = {
     "gemini-3.8-flash": "Gemini 3.8 Flash (High)",
     "gemini-3.8-flash-high": "Gemini 3.8 Flash (High)",
     "gemini-3.8-flash-med": "Gemini 3.8 Flash (Medium)",
+    "gemini-3.8-flash-medium": "Gemini 3.8 Flash (Medium)",
     "gemini-3.8-flash-low": "Gemini 3.8 Flash (Low)",
+    "gemini-3.7-flash": "Gemini 3.7 Flash (High)",
+    "gemini-3.7-flash-high": "Gemini 3.7 Flash (High)",
+    "gemini-3.7-flash-medium": "Gemini 3.7 Flash (Medium)",
+    "gemini-3.7-flash-low": "Gemini 3.7 Flash (Low)",
+    "gemini-3.6-flash": "Gemini 3.6 Flash (High)",
+    "gemini-3.6-flash-high": "Gemini 3.6 Flash (High)",
+    "gemini-3.6-flash-medium": "Gemini 3.6 Flash (Medium)",
+    "gemini-3.6-flash-low": "Gemini 3.6 Flash (Low)",
     "gemini-3.1-pro": "Gemini 3.1 Pro (High)",
     "gemini-3.1-pro-high": "Gemini 3.1 Pro (High)",
     "gemini-3.1-pro-low": "Gemini 3.1 Pro (Low)",
 }
+
+
+def model_with_effort(model: str, effort: str | None) -> str:
+    if effort is None:
+        return model
+    # The subscription catalog encodes thinking levels in the model variant.
+    base = model
+    for suffix in ("-high", "-medium", "-med", "-low"):
+        if base.endswith(suffix):
+            base = base.removesuffix(suffix)
+            break
+    selected = f"{base}-{effort}"
+    if selected not in MODELS:
+        raise ValueError(f"Unsupported Antigravity reasoning effort {effort!r} for {model}")
+    return selected
 
 
 def prompt_from_messages(messages: list[dict[str, Any]]) -> str:
@@ -142,6 +166,7 @@ class AntigravityLLM(CustomLLM):
         if optional_params.get("tools"):
             raise CustomLLMError(status_code=400, message="Antigravity tool calls are not yet certified")
         try:
+            model = model_with_effort(model, optional_params.get("reasoning_effort"))
             prompt = prompt_from_messages(messages)
             content, usage = await invoke_agy(model, prompt)
         except ValueError as exc:

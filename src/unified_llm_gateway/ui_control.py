@@ -17,7 +17,7 @@ SOURCE_PATH = ROOT / "config" / "ui_sources.json"
 CONTROL_PATH = Path(__file__).resolve().parent / "control"
 
 
-def _sources() -> list[dict[str, object]]:
+def source_configuration() -> list[dict[str, object]]:
     payload = json.loads(SOURCE_PATH.read_text(encoding="utf-8"))
     sources: list[dict[str, object]] = []
     for item in payload.get("sources", []):
@@ -37,19 +37,19 @@ def _sources() -> list[dict[str, object]]:
 
 
 async def control_desk(_: Request) -> FileResponse:
-    return FileResponse(CONTROL_PATH / "index.html", media_type="text/html")
+    return FileResponse(CONTROL_PATH / "index.html", media_type="text/html", headers={"Cache-Control": "no-cache"})
 
 
 async def control_styles(_: Request) -> FileResponse:
-    return FileResponse(CONTROL_PATH / "styles.css", media_type="text/css")
+    return FileResponse(CONTROL_PATH / "styles.css", media_type="text/css", headers={"Cache-Control": "no-cache"})
 
 
 async def control_script(_: Request) -> FileResponse:
-    return FileResponse(CONTROL_PATH / "app.js", media_type="text/javascript")
+    return FileResponse(CONTROL_PATH / "app.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
 async def source_status(_: Request) -> dict[str, object]:
-    return {"sources": _sources()}
+    return {"sources": source_configuration()}
 
 
 async def provider_usage(refresh: bool = False) -> dict[str, object]:

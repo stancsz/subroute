@@ -11,23 +11,24 @@ model_list:
 
   - model_name: openai
     model_info:
-      display_name: OpenAI Codex API
+      display_name: GPT-5.2 Codex
+      provider: OpenAI
+      source_id: openai
+      access: API key
+      reasoning_efforts: [low, medium, high]
+      reasoning_note: Extra high is unavailable through the installed API adapter.
       capabilities: [tools, streaming]
-    litellm_params:
-      model: openai/gpt-5.2-codex
-      api_key: os.environ/OPENAI_API_KEY
-
-  - model_name: openai-guided
-    model_info:
-      display_name: OpenAI Codex + Advisor
-      capabilities: [tools, streaming, advisor]
     litellm_params:
       model: openai/gpt-5.2-codex
       api_key: os.environ/OPENAI_API_KEY
 
   - model_name: gemini-api
     model_info:
-      display_name: Gemini API
+      display_name: Gemini 3 Flash Preview
+      provider: Gemini
+      source_id: gemini
+      access: API key
+      reasoning_efforts: [minimal, low, medium, high]
       capabilities: [tools, vision, streaming]
     litellm_params:
       model: gemini/gemini-3-flash-preview
@@ -35,18 +36,12 @@ model_list:
 
   - model_name: openrouter
     model_info:
-      display_name: OpenRouter MiniMax M3
+      display_name: MiniMax M3
+      provider: OpenRouter
+      source_id: openrouter
+      access: API key
+      reasoning_note: This M3 route uses adaptive thinking; graded effort levels are not exposed.
       capabilities: [tools, streaming]
-    litellm_params:
-      model: openrouter/minimax/minimax-m3
-      api_key: os.environ/OPENROUTER_API_KEY
-      reasoning:
-        exclude: true
-
-  - model_name: openrouter-guided
-    model_info:
-      display_name: OpenRouter MiniMax M3 + Advisor
-      capabilities: [tools, streaming, advisor]
     litellm_params:
       model: openrouter/minimax/minimax-m3
       api_key: os.environ/OPENROUTER_API_KEY
@@ -56,21 +51,69 @@ model_list:
   # Antigravity runs as an in-process LiteLLM CustomLLM provider.
   - model_name: gemini-subscription
     model_info:
-      display_name: Gemini Subscription
+      display_name: Gemini 3.8 Flash
+      provider: Gemini
+      source_id: gemini-subscription
+      access: Subscription
+      reasoning_efforts: [low, medium, high]
       capabilities: [text]
       advisor_selectable: true
     litellm_params:
       model: antigravity/gemini-3.8-flash
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: gemini-subscription-3.7-flash
+    model_info:
+      display_name: Gemini 3.7 Flash
+      provider: Gemini
+      source_id: gemini-subscription
+      access: Subscription
+      capabilities: [text]
+      advisor_selectable: true
+      reasoning_efforts: [low, medium, high]
+    litellm_params:
+      model: antigravity/gemini-3.7-flash
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: gemini-subscription-3.6-flash
+    model_info:
+      display_name: Gemini 3.6 Flash
+      provider: Gemini
+      source_id: gemini-subscription
+      access: Subscription
+      capabilities: [text]
+      advisor_selectable: true
+      reasoning_efforts: [low, medium, high]
+    litellm_params:
+      model: antigravity/gemini-3.6-flash
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: gemini-subscription-pro
+    model_info:
+      display_name: Gemini 3.1 Pro
+      provider: Gemini
+      source_id: gemini-subscription
+      access: Subscription
+      capabilities: [text]
+      advisor_selectable: true
+      reasoning_efforts: [low, high]
+    litellm_params:
+      model: antigravity/gemini-3.1-pro
+      allowed_openai_params: [reasoning_effort]
 
   # LiteLLM's native Responses-to-Chat bridge talks to the Codex subscription
   # backend. A deployment hook reloads the existing Codex auth file before
   # every dispatch, so refreshed credentials do not require a proxy restart.
   - model_name: codex-subscription
     model_info:
-      display_name: Codex Subscription (Sol)
+      display_name: GPT-6 Sol
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-5.6-sol
+      model: openai/responses/gpt-6-sol
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
@@ -80,7 +123,11 @@ model_list:
 
   - model_name: codex-astra
     model_info:
-      display_name: Codex Subscription (Astra)
+      display_name: GPT-6 Astra
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
       model: openai/responses/gpt-6-astra
@@ -93,7 +140,11 @@ model_list:
 
   - model_name: codex-terra
     model_info:
-      display_name: Codex Subscription (Terra)
+      display_name: GPT-5.6 Terra
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
       model: openai/responses/gpt-5.6-terra
@@ -106,10 +157,14 @@ model_list:
 
   - model_name: codex-luna
     model_info:
-      display_name: Codex Subscription (Luna)
+      display_name: GPT-6 Luna
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max]
       capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-5.6-luna
+      model: openai/responses/gpt-6-luna
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
@@ -119,7 +174,11 @@ model_list:
 
   - model_name: codex-reserve
     model_info:
-      display_name: Codex Subscription (Reserve)
+      display_name: GPT Reserve
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max]
       capabilities: [tools, streaming]
     litellm_params:
       model: openai/responses/gpt-reserve
@@ -132,45 +191,56 @@ model_list:
 
   - model_name: codex-terra-advisor
     model_info:
-      display_name: Codex Terra Advisor
+      display_name: GPT-5.6 Terra
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [text]
       selectable: false
       advisor_selectable: true
     litellm_params:
       model: codex-advisor/gpt-5.6-terra
+      allowed_openai_params: [reasoning_effort]
 
   - model_name: codex-sol-advisor
     model_info:
-      display_name: Codex Sol Advisor
+      display_name: GPT-6 Sol
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [text]
       selectable: false
       advisor_selectable: true
     litellm_params:
-      model: codex-advisor/gpt-5.6-sol
+      model: codex-advisor/gpt-6-sol
+      allowed_openai_params: [reasoning_effort]
 
   - model_name: codex-astra-advisor
     model_info:
-      display_name: Codex Astra Advisor
+      display_name: GPT-6 Astra
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [text]
       selectable: false
       advisor_selectable: true
     litellm_params:
       model: codex-advisor/gpt-6-astra
+      allowed_openai_params: [reasoning_effort]
 
 
 
   - model_name: minimax
     model_info:
       display_name: MiniMax M3
+      provider: MiniMax
+      source_id: minimax
+      access: API key
+      reasoning_note: This M3 route uses adaptive thinking; graded effort levels are not exposed.
       capabilities: [tools, streaming]
-    litellm_params:
-      model: minimax/MiniMax-M3
-      api_key: os.environ/MINIMAX_API_KEY
-
-  - model_name: minimax-guided
-    model_info:
-      display_name: MiniMax M3 + Advisor
-      capabilities: [tools, streaming, advisor]
     litellm_params:
       model: minimax/MiniMax-M3
       api_key: os.environ/MINIMAX_API_KEY
@@ -179,7 +249,11 @@ model_list:
   # adapters. Override the base URLs when starting the gateway if necessary.
   - model_name: freetoken
     model_info:
-      display_name: FreeToken
+      display_name: Endpoint default model
+      provider: FreeToken
+      source_id: freetoken
+      access: Local endpoint
+      reasoning_note: This local route has thinking disabled in its configuration.
       capabilities: [text, streaming]
     litellm_params:
       model: openai/local-model
@@ -191,7 +265,11 @@ model_list:
 
   - model_name: desktop
     model_info:
-      display_name: Local Ollama
+      display_name: Qwen 2.5 Coder
+      provider: Ollama
+      source_id: ollama
+      access: Local endpoint
+      reasoning_note: Qwen 2.5 Coder does not expose reasoning effort levels.
       capabilities: [local, text]
     litellm_params:
       model: ollama/qwen2.5-coder

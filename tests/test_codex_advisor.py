@@ -7,10 +7,12 @@ import pytest
 from unified_llm_gateway.handlers import codex_advisor as advisor
 
 
-def collect(monkeypatch, events, *, status=200, raw=None, error=None):
+def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=None):
     body = raw if raw is not None else "".join("data: " + json.dumps(event) + "\n\n" for event in events)
 
     def respond(request):
+        payload = json.loads(request.content)
+        assert payload.get("reasoning") == ({"effort": effort} if effort is not None else None)
         if error:
             raise error
         return httpx.Response(status, text=body)
@@ -19,7 +21,7 @@ def collect(monkeypatch, events, *, status=200, raw=None, error=None):
     client_type = httpx.AsyncClient
     monkeypatch.setattr(advisor, "read_codex_credentials", lambda: ("fixture", "fixture"))
     monkeypatch.setattr(advisor.httpx, "AsyncClient", lambda **kw: client_type(transport=transport, **kw))
-    return asyncio.run(advisor.call_codex_streaming_collect("terra", [{"role": "user", "content": "hello"}]))
+    return asyncio.run(advisor.call_codex_streaming_collect("terra", [{"role": "user", "content": "hello"}], reasoning_effort=effort))
 
 
 DELTA = {"type": "response.output_text.delta", "delta": "partial"}
@@ -32,13 +34,14 @@ def test_partial_text_is_not_success(monkeypatch, terminal):
         collect(monkeypatch, events)
 
 
-def test_completed_response_preserves_provider_usage(monkeypatch):
+@pytest.mark.parametrize("effort", [None, "low", "high"])
+def test_completed_response_preserves_provider_usage(monkeypatch, effort):
     text, usage = collect(monkeypatch, [DELTA, {
         "type": "response.completed", "response": {
             "status": "completed",
             "usage": {"input_tokens": 19, "output_tokens": 7, "total_tokens": 26},
         },
-    }])
+    }], effort=effort)
     assert text == "partial"
     assert (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens) == (19, 7, 26)
 

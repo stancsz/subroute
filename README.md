@@ -49,18 +49,15 @@ aliases:
 | --- | --- |
 | `current` | Virtual entry resolved by the dynamic routing callback |
 | `openai` | Native `openai/` provider |
-| `openai-guided` | OpenAI executor with automatic Advisor injection |
 | `gemini-api` | Native `gemini/` provider |
 | `openrouter` | Native `openrouter/` provider, defaulting to `minimax/minimax-m3` |
-| `openrouter-guided` | OpenRouter MiniMax M3 with automatic Advisor injection |
 | `minimax` | Native `minimax/` provider |
-| `minimax-guided` | MiniMax executor with automatic Advisor injection |
 | `freetoken` | Native OpenAI-compatible transport |
 | `desktop` | Native `ollama/` provider |
-| `codex-subscription` | LiteLLM Responses bridge to `gpt-5.6-sol` plus per-request credential refresh |
+| `codex-subscription` | LiteLLM Responses bridge to `gpt-6-sol` plus per-request credential refresh |
 | `codex-astra` | LiteLLM Responses bridge to `gpt-6-astra` |
 | `codex-terra` | LiteLLM Responses bridge to `gpt-5.6-terra` |
-| `codex-luna` | LiteLLM Responses bridge to `gpt-5.6-luna` |
+| `codex-luna` | LiteLLM Responses bridge to `gpt-6-luna` |
 | `codex-reserve` | LiteLLM Responses bridge to `gpt-reserve` |
 | `codex-terra-advisor` | Terra as an Advisor-only model |
 | `codex-sol-advisor` | Sol as an Advisor-only model |
@@ -176,8 +173,44 @@ stopping and separate usage receipts. See the [reader setup and limits](skills/l
 The official LiteLLM dashboard remains unchanged at `/ui`. Open
 `http://127.0.0.1:4000/control` for the small local
 routing control plane. It reads selectable physical models from
-`config/litellm.yaml`, displays their declared capability tags, and applies a
+`config/litellm.yaml` and applies a
 change only to requests that begin after the policy update.
+
+Target and Advisor both use Provider > Model > Reasoning effort. Provider menus
+show configured connections from `config/ui_sources.json`; model menus group
+subscription and API access separately. A saved route that loses configuration
+stays visible with a setup warning rather than silently switching providers.
+Configuration means the required environment settings exist, not that the
+provider has passed a live availability check. Choosing a provider does not save
+a different route until a model is selected. Public model aliases stay stable.
+
+Reasoning choices come from `model_info.reasoning_efforts` in `config/litellm.yaml`,
+checked against subscription catalogs and native API support. GPT-5.2 Codex API
+exposes low, medium, and high (the installed Chat adapter drops xhigh); Gemini 3 Flash API exposes minimal, low,
+medium, and high. Gemini subscription Flash 3.8/3.7/3.6 offers low, medium, and
+high; Pro 3.1 offers low and high. Gemini subscription thinking levels select
+the corresponding Antigravity model variant. This channel remains text-only,
+without certified streaming or tool support. MiniMax M3's current routes use
+adaptive thinking rather than graded effort levels; local routes without an
+effort control show a specific explanation instead of an empty field.
+
+`Default (client or provider)` preserves request settings and provider defaults.
+An explicit target effort overrides the client's effort only on requests routed
+by `alias` or `force`; `off` and explicit-model requests in `alias` mode keep the
+client's setting. Advisor effort is independent and applies to Messages API
+consultations. Both values are persisted with the routing policy and captured
+once per request. Switching models resets that selector to default. Older state
+files load with no effort override; older API callers can omit the field to keep
+the current effort when the selected model is unchanged. Send `reasoning_effort: null`
+to either control update endpoint to clear its override.
+
+LiteLLM owns the Chat, Responses, and Messages translations. Its deployment hook
+applies the captured policy, including native advisor subcalls. The custom
+subscription providers explicitly allow `reasoning_effort` so LiteLLM 1.101.0
+does not drop it. The Codex advisor collector sends it as `reasoning.effort`.
+Gemini subscription targets use the existing bounded advisor collector, because
+their text-only adapter cannot execute LiteLLM's injected advisor tool. Failed
+consultations stop before the base request, with no retries or fallback.
 
 The routing modes are:
 
@@ -211,9 +244,12 @@ streaming semantics interchangeable across providers.
 
 ## Advisor mode
 
-Requests sent to the Anthropic Messages endpoint with model
-`minimax-guided`, `openrouter-guided`, or `openai-guided` receive LiteLLM's `advisor_20260301` tool
-automatically. LiteLLM's built-in `AdvisorOrchestrationHandler` owns the loop:
+Selecting an Advisor model in the Routing desk enables automatic consultation
+on the Anthropic Messages endpoint. Choosing `No advisor` disables it. The target
+model does not need a separate advisor-enabled variant, and the advisor choice
+is independent of model-routing mode. Chat Completions and Responses retain
+their existing behavior. Native advisor subcalls never start another consultation.
+For standard target models, the gateway injects LiteLLM's `advisor_20260301` tool. LiteLLM's built-in `AdvisorOrchestrationHandler` owns the loop:
 it lets the executor request advice, calls the selected advisor, injects the
 result, and continues the executor. Existing client tools are preserved.
 
@@ -224,11 +260,10 @@ does not fail the executor request: advisor injection is skipped and the reason
 is recorded in request metadata. The original messages and client tools are
 never rewritten by this compatibility check.
 
-Configure the opt-in behavior before launch with:
+Set the initial advisor and native consultation limit before launch with:
 
 ```powershell
 $env:ADVISOR_MODEL = "gemini-subscription"
-$env:ADVISOR_TARGET_MODELS = "minimax-guided,openrouter-guided,openai-guided"
 $env:ADVISOR_MAX_USES = "3"  # accepted range: 1..5
 ```
 
@@ -239,7 +274,10 @@ on the Messages path.
 
 The persisted advisor selection is authoritative. `ADVISOR_MODEL` supplies the
 initial value only when no selection has been saved. Each request captures one
-policy snapshot for both executor resolution and advisor injection.
+policy snapshot for both executor resolution and advisor injection. The former
+`openai-guided`, `openrouter-guided`, and `minimax-guided` deployments are removed.
+Saved target selections migrate to their corresponding plain models without
+changing the advisor choice; API clients should use the plain model aliases.
 
 Docker uses the pinned image digest in Compose (LiteLLM 1.103.0, Python 3.13).
 The optional Windows environment uses Python 3.11 and pinned LiteLLM 1.101.0,

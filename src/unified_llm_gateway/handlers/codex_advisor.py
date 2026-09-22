@@ -20,12 +20,12 @@ from unified_llm_gateway.handlers.codex_messages import normalize_messages
 MODELS = {
     "gpt-5.6-terra": "gpt-5.6-terra",
     "terra": "gpt-5.6-terra",
-    "gpt-5.6-sol": "gpt-5.6-sol",
-    "sol": "gpt-5.6-sol",
+    "gpt-6-sol": "gpt-6-sol",
+    "sol": "gpt-6-sol",
     "gpt-6-astra": "gpt-6-astra",
     "astra": "gpt-6-astra",
-    "gpt-5.6-luna": "gpt-5.6-luna",
-    "luna": "gpt-5.6-luna",
+    "gpt-6-luna": "gpt-6-luna",
+    "luna": "gpt-6-luna",
     "gpt-reserve": "gpt-reserve",
 }
 
@@ -196,6 +196,8 @@ async def call_codex_streaming_collect(
     model_name: str,
     messages: list[dict[str, Any]],
     timeout: float = 60.0,
+    *,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, Usage]:
     access_token, account_id = read_codex_credentials()
     target_model = MODELS.get(model_name, model_name)
@@ -214,6 +216,8 @@ async def call_codex_streaming_collect(
         "store": False,
         "input": input_items,
     }
+    if reasoning_effort is not None:
+        payload["reasoning"] = {"effort": reasoning_effort}
 
     deltas: list[str] = []
     terminal = None
@@ -272,7 +276,9 @@ class CodexAdvisorLLM(CustomLLM):
             raise CustomLLMError(status_code=400, message="Codex advisor does not support tools")
 
         try:
-            content, usage = await call_codex_streaming_collect(model, messages)
+            content, usage = await call_codex_streaming_collect(
+                model, messages, reasoning_effort=optional_params.get("reasoning_effort")
+            )
         except ValueError as exc:
             raise CustomLLMError(status_code=400, message=str(exc)) from exc
         except (RuntimeError, TimeoutError) as exc:

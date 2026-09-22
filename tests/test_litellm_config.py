@@ -62,23 +62,14 @@ def test_standard_channels_use_native_litellm_provider_configuration():
 
     assert by_name["openai"]["litellm_params"]["model"].startswith("openai/")
     assert by_name["current"]["model_info"]["selectable"] is False
-    assert by_name["openai-guided"]["litellm_params"] == by_name["openai"][
-        "litellm_params"
-    ]
     assert by_name["gemini-api"]["litellm_params"]["model"].startswith("gemini/")
     assert by_name["openrouter"]["litellm_params"] == {
         "model": "openrouter/minimax/minimax-m3",
         "api_key": "os.environ/OPENROUTER_API_KEY",
         "reasoning": {"exclude": True},
     }
-    assert by_name["openrouter-guided"]["litellm_params"] == by_name["openrouter"][
-        "litellm_params"
-    ]
-    assert "advisor" in by_name["openrouter-guided"]["model_info"]["capabilities"]
+    assert not any(name.endswith("-guided") for name in by_name)
     assert by_name["minimax"]["litellm_params"]["model"].startswith("minimax/")
-    assert by_name["minimax-guided"]["litellm_params"] == by_name["minimax"][
-        "litellm_params"
-    ]
     assert by_name["freetoken"]["litellm_params"]["model"].startswith("openai/")
     assert by_name["desktop"]["litellm_params"] == {
         "model": "ollama/qwen2.5-coder",
@@ -109,12 +100,12 @@ def test_subscription_channels_stay_behind_litellm():
         },
     ]
     codex = by_name["codex-subscription"]["litellm_params"]
-    assert codex["model"] == "openai/responses/gpt-5.6-sol"
+    assert codex["model"] == "openai/responses/gpt-6-sol"
     assert codex["store"] is False
     assert codex["extra_headers"]["ChatGPT-Account-ID"] == "refreshed-at-dispatch"
     assert by_name["codex-terra-advisor"]["model_info"]["advisor_selectable"] is True
     assert by_name["codex-sol-advisor"]["litellm_params"]["model"] == (
-        "codex-advisor/gpt-5.6-sol"
+        "codex-advisor/gpt-6-sol"
     )
     assert by_name["codex-astra-advisor"]["litellm_params"]["model"] == (
         "codex-advisor/gpt-6-astra"
@@ -185,7 +176,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     assert all(model["model_info"]["selectable"] is False for model in expert_models)
     assert {
         model["litellm_params"]["model"] for model in expert_models
-    } == {"codex-advisor/gpt-5.6-sol", "codex-advisor/gpt-6-astra"}
+    } == {"codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra"}
     assert experts_config()["router_settings"] == {"num_retries": 0, "fallbacks": []}
     assert "callbacks" not in experts_config()["litellm_settings"]
     assert experts_config()["general_settings"]["master_key"] == "os.environ/EXPERTS_API_KEY"

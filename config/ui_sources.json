@@ -2,10 +2,10 @@
   "sources": [
     {"id": "openai-subscription", "name": "OpenAI Subscription", "kind": "subscription", "models": "ChatGPT / Codex · Sol, Astra, Terra, Luna, Reserve", "accent": "coral", "credentials": ["CODEX_AUTH_FILE"]},
     {"id": "gemini-subscription", "name": "Gemini Subscription", "kind": "subscription", "models": "gemini-subscription · advisor available", "accent": "blue"},
-    {"id": "openai", "name": "OpenAI API", "kind": "api key", "models": "openai · openai-guided", "accent": "coral", "credentials": ["OPENAI_API_KEY"]},
+    {"id": "openai", "name": "OpenAI API", "kind": "api key", "models": "GPT-5.2 Codex", "accent": "coral", "credentials": ["OPENAI_API_KEY"]},
     {"id": "gemini", "name": "Gemini API", "kind": "api key", "models": "gemini-api", "accent": "blue", "credentials": ["GEMINI_API_KEY"]},
-    {"id": "minimax", "name": "MiniMax", "kind": "api key", "models": "minimax · minimax-guided", "accent": "gold", "credentials": ["MINIMAX_API_KEY"]},
-    {"id": "openrouter", "name": "OpenRouter", "kind": "api key", "models": "openrouter · openrouter-guided", "accent": "violet", "credentials": ["OPENROUTER_API_KEY"]},
+    {"id": "minimax", "name": "MiniMax", "kind": "api key", "models": "MiniMax M3", "accent": "gold", "credentials": ["MINIMAX_API_KEY"]},
+    {"id": "openrouter", "name": "OpenRouter", "kind": "api key", "models": "MiniMax M3", "accent": "violet", "credentials": ["OPENROUTER_API_KEY"]},
     {"id": "freetoken", "name": "FreeToken", "kind": "local endpoint", "models": "freetoken · OpenAI compatible", "accent": "blue", "credentials": ["FREETOKEN_BASE_URL", "FREETOKEN_API_KEY"]},
     {"id": "ollama", "name": "Local Ollama", "kind": "local endpoint", "models": "desktop · qwen2.5-coder", "accent": "gold", "credentials": ["OLLAMA_API_BASE"]},
     {"id": "anthropic-subscription", "name": "Anthropic Subscription", "kind": "subscription", "models": "Claude Code account session", "accent": "violet", "available": false},

@@ -8,13 +8,14 @@ import logging
 from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
+from litellm.litellm_core_utils.core_helpers import get_or_create_metadata_bucket
 
 from unified_llm_gateway.handlers.codex_advisor import (
     call_codex_streaming_collect,
     has_tool_history,
     supports_tool_history,
 )
-from unified_llm_gateway.handlers.antigravity import invoke_agy, prompt_from_messages
+from unified_llm_gateway.handlers.antigravity import invoke_agy, model_with_effort, prompt_from_messages
 
 
 ADVISOR_TOOL_TYPE = "advisor_20260301"
@@ -29,37 +30,29 @@ CODEX_SUBSCRIPTION_MODELS = frozenset({
 })
 ADVISOR_MODEL_NAMES = {
     "codex-terra-advisor": "gpt-5.6-terra",
-    "codex-sol-advisor": "gpt-5.6-sol",
+    "codex-sol-advisor": "gpt-6-sol",
     "codex-astra-advisor": "gpt-6-astra",
 }
-ANTIGRAVITY_ADVISOR_MODEL = "gemini-3.8-flash"
+ANTIGRAVITY_ADVISOR_MODELS = {
+    "gemini-subscription": "gemini-3.8-flash",
+    "gemini-subscription-3.7-flash": "gemini-3.7-flash",
+    "gemini-subscription-3.6-flash": "gemini-3.6-flash",
+    "gemini-subscription-pro": "gemini-3.1-pro",
+}
 logger = logging.getLogger(__name__)
 
 
-def _csv(name: str, default: str) -> frozenset[str]:
-    value = os.getenv(name, default)
-    return frozenset(item.strip() for item in value.split(",") if item.strip())
-
-
 class AdvisorPlugin(CustomLogger):
-    """Inject LiteLLM's native advisor orchestration tool for opt-in aliases."""
+    """Enable advisor orchestration from the captured routing policy."""
 
     def __init__(
         self,
         *,
-        advisor_model: str = "gemini-subscription",
-        target_model_aliases: frozenset[str] | None = None,
         max_uses: int = 3,
     ) -> None:
         super().__init__()
-        if not advisor_model:
-            raise ValueError("advisor_model must not be empty")
         if not 1 <= max_uses <= 5:
             raise ValueError("max_uses must be between 1 and LiteLLM's hard cap of 5")
-        self.advisor_model = advisor_model
-        self.target_model_aliases = target_model_aliases or frozenset(
-            {"minimax-guided", "openai-guided", "openrouter-guided"}
-        )
         self.max_uses = max_uses
 
     async def async_pre_call_hook(
@@ -69,33 +62,28 @@ class AdvisorPlugin(CustomLogger):
         data: dict,
         call_type: str,
     ) -> dict | None:
-        """Add one advisor tool without mutating non-guided requests."""
+        """Consult the selected advisor on Messages requests; an empty selection disables it."""
 
         if call_type not in SUPPORTED_CALL_TYPES:
             return None
-        policy = (data.get("metadata") or {}).get("gateway_policy")
-        policy_selected_target = (
-            isinstance(policy, dict)
-            and policy.get("advisor_model") is not None
-            and policy.get("active_model") == data.get("model")
-        )
-        if data.get("model") not in self.target_model_aliases and not policy_selected_target:
+        _, metadata = get_or_create_metadata_bucket(data)
+        # Native advisor calls retain metadata. Never turn a consultation into
+        # another consultation, including Gemini aliases shared with targets.
+        if metadata.get("advisor_sub_call") is True:
             return None
-
-        advisor_model = self.advisor_model
-        if isinstance(policy, dict):
-            advisor_model = policy["advisor_model"]
-        elif self is advisor_plugin_instance:
-            raise ValueError("Gateway routing policy must be resolved before advisor injection")
-        if advisor_model is None:
-            return data
+        policy = metadata.get("gateway_policy")
+        if not isinstance(policy, dict):
+            return None
+        advisor_model = policy.get("advisor_model")
+        if not advisor_model:
+            return None
+        advisor_effort = policy.get("advisor_reasoning_effort")
 
         messages = data.get("messages") or []
         if has_tool_history(messages) and (
             advisor_model not in TOOL_HISTORY_ADVISORS
             or not supports_tool_history(messages)
         ):
-            metadata = data.setdefault("metadata", {})
             metadata["gateway_advisor"] = {
                 "status": "skipped",
                 "reason": "unsupported_tool_history",
@@ -104,42 +92,42 @@ class AdvisorPlugin(CustomLogger):
             return data
 
         if (
-            data.get("model") in CODEX_SUBSCRIPTION_MODELS
-            and advisor_model in {*ADVISOR_MODEL_NAMES, "gemini-subscription"}
+            data.get("model") in CODEX_SUBSCRIPTION_MODELS | ANTIGRAVITY_ADVISOR_MODELS.keys()
+            and advisor_model in {*ADVISOR_MODEL_NAMES, *ANTIGRAVITY_ADVISOR_MODELS}
         ):
             consultation_id = uuid.uuid4().hex
             try:
-                if advisor_model == "gemini-subscription":
+                if advisor_model in ANTIGRAVITY_ADVISOR_MODELS:
                     advice, usage = await invoke_agy(
-                        ANTIGRAVITY_ADVISOR_MODEL,
+                        model_with_effort(ANTIGRAVITY_ADVISOR_MODELS[advisor_model], advisor_effort),
                         prompt_from_messages(messages),
                     )
                 else:
                     advice, usage = await call_codex_streaming_collect(
-                        ADVISOR_MODEL_NAMES[advisor_model], messages
+                        ADVISOR_MODEL_NAMES[advisor_model], messages,
+                        **({"reasoning_effort": advisor_effort} if advisor_effort is not None else {}),
                     )
             except (RuntimeError, TimeoutError, ValueError) as exc:
-                metadata = data.setdefault("metadata", {})
                 metadata["gateway_advisor"] = {
                     "status": "failed", "model": advisor_model,
                     "consultation_id": consultation_id, "reason": str(exc),
                 }
-                raise RuntimeError("Codex advisor consultation failed; base request was not sent") from exc
+                raise RuntimeError("Subscription advisor consultation failed; base request was not sent") from exc
             data["messages"] = [
                 *messages,
                 {"role": "developer", "content": f"Independent advisor guidance:\n{advice}"},
             ]
-            metadata = data.setdefault("metadata", {})
             metadata["gateway_advisor"] = {
                 "status": "advice_injected", "model": advisor_model,
                 "consultation_id": consultation_id, "usage_source": "provider",
                 "input_tokens": usage.prompt_tokens,
                 "output_tokens": usage.completion_tokens,
+                "reasoning_effort": advisor_effort,
             }
             logger.warning(
-                "advisor advice_injected consultation_id=%s model=%s input_tokens=%s output_tokens=%s base_model=%s",
+                "advisor advice_injected consultation_id=%s model=%s input_tokens=%s output_tokens=%s base_model=%s reasoning_effort=%s",
                 consultation_id, advisor_model, usage.prompt_tokens,
-                usage.completion_tokens, data["model"],
+                usage.completion_tokens, data["model"], advisor_effort,
             )
             return data
 
@@ -168,10 +156,5 @@ class AdvisorPlugin(CustomLogger):
 
 
 advisor_plugin_instance = AdvisorPlugin(
-    advisor_model=os.getenv("ADVISOR_MODEL", "gemini-subscription"),
-    target_model_aliases=_csv(
-        "ADVISOR_TARGET_MODELS",
-        "minimax-guided,openai-guided,openrouter-guided",
-    ),
     max_uses=int(os.getenv("ADVISOR_MAX_USES", "3")),
 )

@@ -65,7 +65,7 @@ Align the supported interpreter, installed dependencies, and deployed image. Add
 
 ## Keep and simplify
 
-Keep Docker Compose as the deployment model, including the gateway, PostgreSQL, and staging roles. The user's priority is a simple, reliable Docker runtime. Keep native provider configuration, explicit guided aliases, the lightweight model switcher, atomic persistence, and visible failure behavior. These have identifiable requirements and modest implementation cost.
+Keep Docker Compose as the deployment model, including the gateway, PostgreSQL, and staging roles. The user's priority is a simple, reliable Docker runtime. Keep native provider configuration, the lightweight model switcher with one advisor selection, atomic persistence, and visible failure behavior. These have identifiable requirements and modest implementation cost.
 
 Prioritize changes by the failures they eliminate, rather than lines or containers removed:
 

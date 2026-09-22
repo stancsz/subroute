@@ -35,14 +35,14 @@ This repository owns:
 - fail-closed retry and fallback settings
 - acceptance tests that prevent protocol and provider abstractions from
   growing back into the project
-- an opt-in callback that injects LiteLLM's built-in Advisor tool for exact
-  guided aliases on the Anthropic Messages path
+- a callback that injects LiteLLM's built-in Advisor tool on the Anthropic
+  Messages path whenever the captured policy contains an advisor selection
 - a loopback-only routing control plane that resolves `current`, or explicitly
   applies `force` mode, before LiteLLM selects a deployment
 
 The dynamic routing callback precedes the Advisor callback. A request for
-`current` can therefore resolve to a guided alias and still receive Advisor
-injection. Rewrites carry requested and resolved model names, routing mode, and
+`current` resolves to the selected model, and the same policy snapshot decides
+whether to consult an advisor. An empty advisor selection disables consultation. Rewrites carry requested and resolved model names, routing mode, and
 policy version as audit metadata. Existing in-flight requests are never
 retargeted.
 

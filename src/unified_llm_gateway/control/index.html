@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width">
   <title>Subroute Control Desk</title>
-  <link rel="stylesheet" href="/control/styles.css">
+  <link rel="stylesheet" href="/control/styles.css?v=providers-3">
 </head>
 <body>
   <main>
@@ -14,13 +14,28 @@
     </header>
     <section class="gateway"><span class="pulse"></span><div><strong id="gateway">Local gateway</strong><small>One policy and one interface shared by browser and Desktop.</small></div><span id="surface" class="read-only">WEB CONTROL</span></section>
     <section class="routing-desk">
-      <div class="route-head"><div><strong>Routing desk</strong><small>Choose exactly where new requests go</small></div><span>LOCAL POLICY</span></div>
+      <div class="route-head"><div><strong>Routing desk</strong><small>Choose a provider, model, and reasoning level</small></div><span>LOCAL POLICY</span></div>
       <div class="route-grid">
-        <label>Target model<select id="route-model"></select></label>
-        <label>Request policy<select id="route-mode"><option value="alias">Current aliases only</option><option value="force">Force every new request</option><option value="off">LiteLLM pass through</option></select></label>
-        <label>Advisor model<select id="route-advisor"></select></label>
+        <div class="route-column route-model-panel">
+          <div class="route-panel-head"><strong>Target</strong><span>MAIN RESPONSE</span></div>
+          <label>Provider<select id="route-provider" aria-label="Target provider" disabled><option value="">Loading providers…</option></select></label>
+          <label>Model<select id="route-model" aria-label="Target model" disabled><option value="">Loading models…</option></select></label>
+          <label>Reasoning effort<select aria-label="Target reasoning" id="route-effort" aria-describedby="route-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
+          <p id="route-effort-help" class="route-help"></p>
+        </div>
+        <div class="route-column route-model-panel">
+          <div class="route-panel-head"><strong>Advisor</strong><span>OPTIONAL · MESSAGES API</span></div>
+          <label>Provider<select id="advisor-provider" aria-label="Advisor provider" disabled><option value="">Loading providers…</option></select></label>
+          <label>Model<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
+          <label>Reasoning effort<select aria-label="Advisor reasoning" id="route-advisor-effort" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
+          <p id="route-advisor-effort-help" class="route-help"></p>
+        </div>
       </div>
-      <div class="route-status"><span id="route-status">Loading routing policy…</span><span id="route-key">LOCAL CLIENT KEY BYPASS</span></div>
+      <div class="route-policy">
+        <label>Request policy<select id="route-mode" disabled><option value="alias">Current aliases only</option><option value="force">Force every new request</option><option value="off">LiteLLM pass through</option></select></label>
+        <p class="route-help">Applies to new requests. Default reasoning keeps the client's setting, or the provider's default.</p>
+      </div>
+      <div class="route-status"><span id="route-status" role="status" aria-live="polite">Loading routing policy…</span><span id="route-key">LOCAL CLIENT KEY BYPASS</span></div>
     </section>
     <section class="launcher">
       <div class="section-title"><div><p class="eyebrow">Launch agent</p><h2>Local coding agents</h2></div><span id="launcher-capability">Detecting Desktop bridge…</span></div>
@@ -33,6 +48,6 @@
   </main>
   <template id="card"><article class="card"><div class="card-head"><span class="mark"></span><span class="kind"></span></div><h3></h3><p class="models"></p><p class="usage"></p><div class="bar"><i></i></div><footer></footer></article></template>
   <template id="agent"><article class="agent"><span class="agent-state"></span><div><b></b><small></small></div><button type="button"></button></article></template>
-  <script src="/control/app.js"></script>
+  <script src="/control/app.js?v=providers-3"></script>
 </body>
 </html>

@@ -75,9 +75,11 @@ def test_alias_mode_only_resolves_current_and_preserves_trace(tmp_path: Path):
     assert data["model"] == "minimax"
     assert data["metadata"] == {
         "client": "codex",
+        "gateway_reasoning_effort": None,
         "gateway_policy": {
             "active_model": "minimax", "mode": "alias", "policy_version": 1,
             "advisor_model": "gemini-subscription",
+        "reasoning_effort": None, "advisor_reasoning_effort": None,
         },
         "routing": {
             "requested_model": "current",
@@ -112,19 +114,18 @@ def test_force_and_off_modes_have_explicit_semantics(tmp_path: Path):
     assert passthrough["model"] == "current"
 
 
-def test_routing_precedes_advisor_injection_for_guided_target(tmp_path: Path):
+def test_routing_precedes_advisor_injection_for_plain_target(tmp_path: Path):
     control = make_control_plane(tmp_path)
-    control.allowed_models = frozenset({*control.allowed_models, "minimax-guided"})
-    control.update("minimax-guided", "alias")
+    control.update("minimax", "alias")
     router = DynamicRoutingPlugin(control)
-    advisor = AdvisorPlugin(target_model_aliases=frozenset({"minimax-guided"}))
+    advisor = AdvisorPlugin()
     data = {"model": "current", "messages": [{"role": "user", "content": "help"}]}
 
     asyncio.run(router.async_pre_call_hook({}, None, data, "anthropic_messages"))
     control.update_advisor("codex-terra-advisor")
     asyncio.run(advisor.async_pre_call_hook({}, None, data, "anthropic_messages"))
 
-    assert data["model"] == "minimax-guided"
+    assert data["model"] == "minimax"
     assert data["tools"][0]["type"] == ADVISOR_TOOL_TYPE
     assert data["tools"][0]["model"] == "gemini-subscription"
 
@@ -139,7 +140,7 @@ def test_persisted_advisor_wins_over_startup_environment(tmp_path, monkeypatch):
     assert restarted.snapshot().advisor_model == "codex-sol-advisor"
 
 
-def test_advisor_is_optional_and_guided_requests_skip_injection(tmp_path: Path):
+def test_advisor_is_optional_and_requests_skip_injection(tmp_path: Path):
     control = make_control_plane(tmp_path)
     disabled = control.update_advisor(None)
 
@@ -147,8 +148,8 @@ def test_advisor_is_optional_and_guided_requests_skip_injection(tmp_path: Path):
     assert json.loads(control.state_path.read_text(encoding="utf-8"))["advisor_model"] is None
 
     router = DynamicRoutingPlugin(control)
-    advisor = AdvisorPlugin(target_model_aliases=frozenset({"minimax-guided"}))
-    data = {"model": "minimax-guided", "messages": [{"role": "user", "content": "help"}]}
+    advisor = AdvisorPlugin()
+    data = {"model": "minimax", "messages": [{"role": "user", "content": "help"}]}
     asyncio.run(router.async_pre_call_hook({}, None, data, "anthropic_messages"))
     asyncio.run(advisor.async_pre_call_hook({}, None, data, "anthropic_messages"))
 
@@ -163,8 +164,7 @@ def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
     from litellm.proxy._types import UserAPIKeyAuth
 
     control = make_control_plane(tmp_path)
-    control.allowed_models = frozenset({*control.allowed_models, "minimax-guided"})
-    control.update("minimax-guided", "alias")
+    control.update("minimax", "alias")
     control.update_advisor("codex-terra-advisor")
     proxy = ProxyLogging(user_api_key_cache=DualCache())
     monkeypatch.setattr(litellm, "callbacks", [DynamicRoutingPlugin(control), AdvisorPlugin()])
@@ -173,7 +173,7 @@ def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
         data={"model": "current", "messages": [{"role": "user", "content": "hello"}]},
         call_type="anthropic_messages",
     ))
-    assert result["model"] == "minimax-guided"
+    assert result["model"] == "minimax"
     assert result["tools"][0]["model"] == "codex-terra-advisor"
     assert result["metadata"]["gateway_policy"]["policy_version"] == control.snapshot().policy_version
 
@@ -188,6 +188,7 @@ def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "gemini-subscription",
+        "reasoning_effort": None, "advisor_reasoning_effort": None,
     }
     assert not list(tmp_path.glob("*.tmp"))
     with pytest.raises(ValueError, match="not selectable"):
@@ -222,6 +223,7 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "gemini-subscription",
+        "reasoning_effort": None, "advisor_reasoning_effort": None,
     }
     assert client.get("/api/active-model").json() == response.json()
     options = client.get("/api/routing-options")

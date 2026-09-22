@@ -95,6 +95,16 @@
    - 切换下拉项后，本地向 `http://127.0.0.1:4000/v1/chat/completions` 发送 `model: "current"` 请求，返回内容与元数据确认由所选模型生成。
 4. **代码纯净度**：无外部独立 sidecar 进程，所有测试均通过。
 
+## 补充范围：模型与推理强度选择
+
+控制台分别保存目标模型与 Advisor 的推理强度，默认不覆盖客户端或提供商的设置。
+候选值由 `config/litellm.yaml` 中各模型的 `reasoning_efforts` 定义，非法组合必须拒绝。
+Gemini 订阅提供 Flash 3.8、3.7、3.6 和 Pro 3.1；Flash 支持 low/medium/high，
+Pro 支持 low/high，并映射到现有 Antigravity 模型变体。该通道仍仅支持文本，
+不新增流式或工具调用支持。目标强度仅随 alias/force 路由生效，Advisor 强度独立应用
+于 Messages API 咨询。旧策略文件兼容默认值，单次请求使用同一策略快照。
+验收需覆盖持久化、非法组合、真实 LiteLLM 转换、界面保存与订阅调用。
+
 ## 补充范围：专家独立阅读
 
 Advisor skill 可按专家提出的证据问题启动短生命周期 Pi 阅读任务，不新增常驻
@@ -103,3 +113,7 @@ gateway 服务或直接 OpenAI 连接。Pi 使用 `http://localhost:4000/v1`，�
 授权源码快照中只读检索，返回简短摘要、可核对的源码引用与未知项；实现和运行
 验证仍由主 worker 负责。分别记录专家与 Pi 的用量，不把独立阅读当作无偏保证、
 运行验证或已证明的 token 节省。
+
+Routing desk: Target and Advisor use Provider > Model > Reasoning effort. Show configured connections, distinguish subscription from API access, retain saved unavailable choices with a warning, and save provider changes only after model selection.
+
+Advisor selection is the sole switch for automatic Messages API consultation: a selected advisor enables it, and No advisor disables it. Target models have no separate advisor-enabled variants. Preserve the saved advisor choice when migrating retired guided target aliases.
