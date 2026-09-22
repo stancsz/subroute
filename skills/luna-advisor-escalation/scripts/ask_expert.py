@@ -7,7 +7,9 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
+from typing import TextIO
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -27,6 +29,14 @@ Risk: one material risk or stop condition, or `none`.
 Target 160 words or fewer. Do not list alternatives unless the packet asks for them."""
 
 
+def configure_utf8_stdout(stdout: TextIO | None = None) -> None:
+    """Make JSON advice readable on Windows consoles using legacy code pages."""
+    stream = sys.stdout if stdout is None else stdout
+    reconfigure = getattr(stream, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", choices=MODEL_ALIASES, default="sol")
@@ -39,6 +49,12 @@ def parse_args() -> argparse.Namespace:
         help="Expert API base URL. Defaults to the local loopback service.",
     )
     parser.add_argument("--timeout-seconds", type=float, default=75.0)
+    parser.add_argument("--reader-root", type=Path,
+                        help="Enable expert-directed Pi reading within this Git repository.")
+    parser.add_argument("--reader-scope", action="append", default=[],
+                        help="Approved relative source directory/file; repeat as needed.")
+    parser.add_argument("--reader-model", default="current",
+                        help="Alias requested from localhost:4000; gateway policy still applies.")
     return parser.parse_args()
 
 
@@ -61,19 +77,12 @@ def read_packet(args: argparse.Namespace) -> str:
     return packet
 
 
-def main() -> int:
-    args = parse_args()
-    if args.timeout_seconds <= 0:
-        raise SystemExit("--timeout-seconds must be positive.")
-
-    packet = read_packet(args)
+def consult(args: argparse.Namespace, messages: list[dict]) -> dict:
+    started = time.monotonic()
     payload = {
         "model": MODEL_ALIASES[args.model],
         "stream": False,
-        "messages": [
-            {"role": "developer", "content": ADVISOR_INSTRUCTION},
-            {"role": "user", "content": packet},
-        ],
+        "messages": messages,
     }
     headers = {"Content-Type": "application/json"}
     api_key = os.environ.get("EXPERTS_API_KEY")
@@ -92,30 +101,54 @@ def main() -> int:
             body = json.load(response)
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:1_000]
-        print(f"Expert API returned HTTP {exc.code}: {detail}", file=sys.stderr)
-        return 1
+        raise RuntimeError(f"Expert API returned HTTP {exc.code}: {detail}") from exc
     except (URLError, TimeoutError) as exc:
-        print(f"Expert API is unavailable: {exc}", file=sys.stderr)
-        return 1
+        raise RuntimeError(f"Expert API is unavailable: {exc}") from exc
 
     try:
-        content = body["choices"][0]["message"]["content"]
+        choice = body["choices"][0]
+        content = choice["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        print("Expert API returned no usable advisor content.", file=sys.stderr)
-        return 1
+        raise RuntimeError("Expert API returned no usable advisor content.") from exc
+    if choice.get("finish_reason") != "stop":
+        raise RuntimeError("Expert API did not return a completed answer.")
     if not isinstance(content, str) or not content.strip():
-        print("Expert API returned empty advisor content.", file=sys.stderr)
-        return 1
+        raise RuntimeError("Expert API returned empty advisor content.")
 
     result = {
         "model": body.get("model", MODEL_ALIASES[args.model]),
         "advice": content.strip(),
-        "packet_chars": len(packet),
         "advice_words": len(content.split()),
         "usage": body.get("usage"),
+        "request_id": body.get("id"),
+        "elapsed_seconds": round(time.monotonic() - started, 3),
     }
+    return result
+
+
+def main() -> int:
+    configure_utf8_stdout()
+    args = parse_args()
+    if args.timeout_seconds <= 0:
+        raise SystemExit("--timeout-seconds must be positive.")
+    if args.reader_scope and not args.reader_root:
+        raise SystemExit("--reader-scope requires --reader-root.")
+    packet = read_packet(args)
+    try:
+        if args.reader_root:
+            from expert_reader import run_with_reader
+            result = run_with_reader(args, packet, consult, ADVISOR_INSTRUCTION)
+        else:
+            result = consult(args, [
+                {"role": "developer", "content": ADVISOR_INSTRUCTION},
+                {"role": "user", "content": packet},
+            ])
+        result["packet_chars"] = len(packet)
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(json.dumps({"status": "unavailable", "error": str(exc)}, ensure_ascii=False))
+        return 1
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if result.get("status", "ok") == "ok" else 1
 
 
 if __name__ == "__main__":

@@ -164,6 +164,13 @@ otherwise its loopback binding is the access boundary.
 The router has no retries and no fallbacks. A selected channel succeeds or
 fails visibly.
 
+The packaged [Luna advisor skill](skills/luna-advisor-escalation/SKILL.md) can
+optionally let the expert request independent Pi source reading. Pi uses the
+existing worker gateway at `http://localhost:4000/v1`, not direct provider
+credentials. It summarizes approved, read-only source evidence with validated
+citations. The task budget is at most 3 expert calls and 3 Pi tasks, with early
+stopping and separate usage receipts. See the [reader setup and limits](skills/luna-advisor-escalation/references/reader.md).
+
 ## Local model switcher
 
 The official LiteLLM dashboard remains unchanged at `/ui`. Open

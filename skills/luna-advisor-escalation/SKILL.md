@@ -66,8 +66,8 @@ The advisor must not write code, use tools, issue commands with side effects,
 or complete the task.
 
 Run the bundled caller. It rejects packets above 6,000 characters, requests a
-compact answer, and emits the answer, selected model, packet/output size, and
-reported provider usage:
+compact answer, emits UTF-8 JSON on Windows, and returns the answer, selected
+model, packet/output size, and reported provider usage:
 
 ```powershell
 py C:\Users\stanc\.codex\skills\luna-advisor-escalation\scripts\ask_expert.py --model sol --input-file .\advisor-packet.txt
@@ -78,6 +78,28 @@ must already be running with `docker compose up -d experts` in the unified
 gateway repository. Set `EXPERTS_API_KEY` in the caller environment only if
 that optional service key is configured. Never put a credential in a packet or
 write it to a file.
+
+## Let the expert independently read more
+
+Use reader mode when a legitimate consultation may need source evidence beyond
+the compact packet. The expert, not Luna, decides whether to dispatch Pi and
+chooses the evidence questions. There is no user round trip. Read
+[reader.md](references/reader.md) before using this mode for setup and limits.
+
+Pi is a separate, ephemeral harness using **http://localhost:4000/v1**, never
+direct OpenAI credentials. It receives only the expert's evidence question and
+an approved source snapshot, not Luna's conversation or conclusions. It can
+read and search, but cannot implement, run shell commands, or delegate again.
+This reduces shared-context bias; it does not guarantee unbiased findings.
+
+Reader mode replaces the ordinary two-call allowance with a maximum of **3
+expert calls and 3 Pi tasks total per task**, not per invocation. Each Pi task
+can use multiple bounded model/tool calls and returns a compact evidence brief.
+Independent Pi tasks may run in parallel; dependent questions wait for findings.
+Start this mode before any consultations, since the caller cannot know another
+invocation's spend. Do not restart it or add Astra calls beyond this shared
+budget without user direction. Stop early once evidence supports a decision.
+Default to the ordinary one-call path when the packet already suffices.
 
 ## Resume Luna ownership
 
