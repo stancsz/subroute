@@ -62,7 +62,7 @@
 ### 阶段 1：端口与基础环境规范化 (Port 4000 Baseline)
 - [ ] 将网关启动脚本 `scripts/start-gateway.ps1` 默认端口由 4005 调整为 **`4005 -> 4000`**。
 - [ ] 确保测试套件 `tests/test_litellm_config.py` 对端口 4000 与单进程 loopback 规范进行断言。
-- [ ] 更新 `README.md` 与 `docs/architecture.md` 中对应的端口与架构说明。
+- [ ] 更新 `README.md` 与 `docs/misc/architecture.md` 中对应的端口与架构说明。
 
 ### 阶段 2：OpenAI Subscription 通道与凭据守护
 - [ ] 验证 `config/litellm.yaml` 中 `codex-subscription` 部署声明与响应桥接配置。

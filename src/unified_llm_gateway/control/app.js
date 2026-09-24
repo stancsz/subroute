@@ -5,6 +5,7 @@ const agentFallback = [
   ["openclaw", "OpenClaw", "Open-source coding agent CLI"], ["opencode", "OpenCode", "Open-source terminal coding agent"],
 ].map(([id, name, protocol]) => ({ id, name, protocol, installed: false, ready: false }));
 const cards = document.querySelector("#cards"), cardTemplate = document.querySelector("#card"), updated = document.querySelector("#updated");
+const moreCards = document.querySelector("#more-cards"), connectionCount = document.querySelector("#connection-count"), otherCount = document.querySelector("#other-count");
 const routeModel = document.querySelector("#route-model"), routeMode = document.querySelector("#route-mode"), routeAdvisor = document.querySelector("#route-advisor");
 const routeProvider = document.querySelector("#route-provider"), advisorProvider = document.querySelector("#advisor-provider");
 const routeEffort = document.querySelector("#route-effort"), advisorEffort = document.querySelector("#route-advisor-effort");
@@ -13,10 +14,19 @@ let workingDirectory = null, routingReady = false;
 let routingModels = [], advisorModels = [];
 
 async function request(path, options) {
-  const response = await fetch(path, options);
+  let response;
+  try { response = await fetch(path, options); }
+  catch (error) { setGatewayStatus(false); throw error; }
+  setGatewayStatus(true);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.detail || `Gateway request failed (${response.status})`);
   return payload;
+}
+
+function setGatewayStatus(online) {
+  const pill = document.querySelector(".connection-pill");
+  document.querySelector("#gateway-status").textContent = online ? "Gateway online" : "Gateway unavailable";
+  pill.classList.toggle("offline", !online);
 }
 
 function option(value, label) { const node = document.createElement("option"); node.value = value; node.textContent = label; return node; }
@@ -109,17 +119,39 @@ async function saveAdvisorRouting() {
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
 }
 
-function renderSources(sources, usageMap) {
-  cards.replaceChildren(...sources.sort((a, b) => a.name.localeCompare(b.name)).map(source => {
-    const node = cardTemplate.content.cloneNode(true), card = node.querySelector(".card"), usage = usageMap[source.id] || { state: "unavailable", detail: "Provider quota data unavailable" };
+function renderSources(sources, usageMap, usageFallback = "Provider quota data unavailable") {
+  const ready = sources.filter(source => source.available && source.configured);
+  const more = sources.filter(source => !source.available || !source.configured);
+  connectionCount.textContent = `${ready.length} source${ready.length === 1 ? "" : "s"} configured for routing`;
+  otherCount.textContent = `${more.length} more provider${more.length === 1 ? "" : "s"} not ready on this gateway`;
+  if (!ready.length) cards.replaceChildren(Object.assign(document.createElement("p"), { className: "empty-sources", textContent: "No provider sources are configured for routing. Add credentials to a supported source in the gateway environment." }));
+  else cards.replaceChildren(...ready.sort((a, b) => a.name.localeCompare(b.name)).map(source => {
+    const node = cardTemplate.content.cloneNode(true), card = node.querySelector(".card"), usage = usageMap[source.id] || { state: "unavailable", detail: usageFallback };
     card.classList.add(source.accent || "blue"); node.querySelector("h3").textContent = source.name; node.querySelector(".kind").textContent = source.kind; node.querySelector(".models").textContent = source.models;
-    const connection = source.configured ? "Configured" : source.available ? "Credential required" : "Not added to gateway", line = node.querySelector(".usage"), footer = node.querySelector("footer"), bar = node.querySelector("i");
-    if (usage.state === "ready") { const percent = Math.min(100, usage.used / usage.limit * 100), remaining = usage.remaining ?? Math.max(0, usage.limit - usage.used), usd = usage.detail === "USD credits"; line.textContent = `${connection} · ${usd ? `$${remaining.toFixed(2)}` : `${Math.round(remaining)}%`} remaining`; footer.textContent = `${usd ? `$${usage.used.toFixed(2)} used` : `${Math.round(percent)}% used`} · ${usage.detail}`; bar.style.width = `${percent}%`; }
-    else if (usage.state === "connected") { line.textContent = `${connection} · authenticated`; footer.textContent = usage.detail; bar.style.width = "100%"; }
-    else if (usage.state === "sign_in_required") { line.textContent = "Docker bridge ready · sign-in required"; footer.textContent = usage.detail; bar.style.width = "0%"; }
-    else { line.textContent = `${connection} · usage unavailable`; footer.textContent = usage.detail; bar.style.width = "0%"; }
+    const line = node.querySelector(".usage"), footer = node.querySelector("footer"), bar = node.querySelector(".bar"), fill = node.querySelector(".bar i"), state = node.querySelector(".source-state");
+    state.textContent = "ENV CONFIGURED";
+    if (usage.state === "ready") { const percent = Math.min(100, usage.used / usage.limit * 100), remaining = usage.remaining ?? Math.max(0, usage.limit - usage.used), usd = usage.detail === "USD credits"; line.textContent = `${usd ? `$${remaining.toFixed(2)}` : `${Math.round(remaining)}%`} remaining`; footer.textContent = `${usd ? `$${usage.used.toFixed(2)} used` : `${Math.round(percent)}% used`} · ${compactReset(usage.detail)}`; fill.style.width = `${percent}%`; bar.setAttribute("role", "progressbar"); bar.setAttribute("aria-label", `${source.name} quota consumed`); bar.setAttribute("aria-valuenow", String(Math.round(percent))); bar.setAttribute("aria-valuemin", "0"); bar.setAttribute("aria-valuemax", "100"); }
+    else if (usage.state === "connected") { line.textContent = "Subscription connected"; footer.textContent = usage.detail; }
+    else if (usage.state === "sign_in_required") { line.textContent = "Sign in required"; footer.textContent = usage.detail; state.textContent = "ACTION NEEDED"; state.classList.add("needs-action"); }
+    else { line.textContent = "Usage unavailable"; footer.textContent = usage.detail; }
     return node;
   }));
+  moreCards.replaceChildren(...more.sort((a, b) => a.name.localeCompare(b.name)).map(source => {
+    const node = cardTemplate.content.cloneNode(true), card = node.querySelector(".card");
+    card.classList.add(source.accent || "blue"); node.querySelector("h3").textContent = source.name; node.querySelector(".kind").textContent = source.kind; node.querySelector(".models").textContent = source.models;
+    node.querySelector(".usage").textContent = source.available ? "Needs setup" : "Not supported";
+    node.querySelector(".source-state").textContent = source.available ? "ADD CREDENTIALS" : "UNAVAILABLE";
+    node.querySelector("footer").textContent = source.available ? "Configure its credentials in the gateway environment." : "This source is not currently enabled in the gateway.";
+    node.querySelector(".bar").remove();
+    return node;
+  }));
+}
+
+function compactReset(detail) {
+  const match = String(detail || "").match(/resets in (?:about )?(\d+) min/i);
+  if (!match) return detail || "Provider reported";
+  const minutes = Number(match[1]), days = Math.floor(minutes / 1440), hours = Math.floor(minutes % 1440 / 60), remainder = minutes % 60;
+  return `resets in ${days ? `${days}d ${hours}h` : `${hours}h ${remainder}m`}`;
 }
 
 async function chooseDirectory() { if (!native) return false; const selected = await native.chooseDirectory(); if (!selected) return false; workingDirectory = selected; const field = document.querySelector("#working-directory"); field.textContent = selected; field.title = selected; document.querySelector("#launch-status").textContent = `Selected: ${selected}`; return true; }
@@ -132,12 +164,40 @@ async function renderAgents() {
 async function load(refreshUsage = false) {
   const button = document.querySelector("#refresh"); button.disabled = true;
   const controls = Promise.all([renderRouting(), renderAgents()]);
-  try { const [sourceData, usage] = await Promise.all([request("/api/source-status"), request(`/api/provider-usage${refreshUsage ? "?refresh=true" : ""}`)]); renderSources(sourceData.sources || [], usage.sources || {}); updated.textContent = usage.updated_at ? `Updated ${new Date(usage.updated_at).toLocaleTimeString()}` : "Usage not refreshed"; }
-  catch (error) { updated.textContent = error.message; }
-  finally { await controls; button.disabled = false; }
+  try {
+    const [sourceResult, usageResult] = await Promise.allSettled([
+      request("/api/source-status"), request(`/api/provider-usage${refreshUsage ? "?refresh=true" : ""}`),
+    ]);
+    if (sourceResult.status === "rejected") {
+      connectionCount.textContent = "Provider status unavailable";
+      updated.textContent = "Refresh to retry";
+      document.querySelector(".connection-summary").classList.add("unavailable");
+      cards.replaceChildren(Object.assign(document.createElement("p"), { className: "empty-sources", textContent: `The gateway did not return its provider inventory. ${sourceResult.reason.message || "Check that the gateway is running, then refresh."}` }));
+      moreCards.replaceChildren();
+      return;
+    }
+    const sources = sourceResult.value.sources;
+    const inventoryValid = Array.isArray(sources) && sources.every(source => source && ["id", "name", "kind", "models"].every(field => typeof source[field] === "string") && typeof source.available === "boolean" && typeof source.configured === "boolean");
+    if (!inventoryValid) {
+      connectionCount.textContent = "Provider status unavailable";
+      updated.textContent = "Refresh after the gateway restarts";
+      document.querySelector(".connection-summary").classList.add("unavailable");
+      cards.replaceChildren(Object.assign(document.createElement("p"), { className: "empty-sources", textContent: "This gateway returned an incompatible provider inventory. Refresh after the gateway restarts." }));
+      moreCards.replaceChildren();
+      return;
+    }
+    const usage = usageResult.status === "fulfilled" ? usageResult.value : { sources: {}, updated_at: null };
+    renderSources(sources, usage.sources || {}, usageResult.status === "rejected" ? "Usage could not be loaded. Refresh to try again." : "Provider quota data unavailable");
+    updated.textContent = usage.updated_at ? `Usage updated ${new Date(usage.updated_at).toLocaleTimeString()}` : "Usage could not be loaded · refresh to retry";
+    document.querySelector(".connection-summary").classList.remove("unavailable");
+  } finally { await controls; button.disabled = false; }
 }
 document.querySelector("#gateway").textContent = location.origin;
+const localGateway = ["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
+document.querySelector(".privacy-note b").textContent = localGateway ? "Loopback gateway" : "Gateway connection";
+document.querySelector(".privacy-note small").textContent = localGateway ? "Bound to this device" : "Opened at this address";
 document.querySelector("#surface").textContent = native ? "DESKTOP CONTROL" : "WEB CONTROL";
+document.body.classList.add(native ? "surface-desktop" : "surface-web");
 document.querySelector("#launcher-capability").textContent = native ? "NATIVE LAUNCH ENABLED" : "OPEN DESKTOP TO LAUNCH";
 document.querySelector("#choose-directory").disabled = !native;
 document.querySelector("#refresh").addEventListener("click", () => load(true)); document.querySelector("#choose-directory").addEventListener("click", chooseDirectory);

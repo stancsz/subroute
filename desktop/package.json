@@ -2,16 +2,16 @@
   "name": "subroute-desktop",
   "private": true,
   "version": "0.1.0",
-  "description": "A local, read-only usage companion for Subroute.",
+  "description": "Desktop control desk and coding-agent launcher for the local Subroute gateway.",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
     "test": "node --test"
   },
   "devDependencies": {
-    "electron": "36.7.3"
+    "electron": "44.4.5"
   },
   "allowScripts": {
-    "electron@36.7.3": true
+    "electron@44.4.5": true
   }
 }

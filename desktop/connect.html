@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;">
+  <meta name="theme-color" content="#f5f3ec">
+  <title>Connect to Subroute</title>
+  <link rel="stylesheet" href="connect.css">
+</head>
+<body>
+  <main class="connect-shell">
+    <section class="story">
+      <a class="brand" href="#" aria-label="Subroute"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><b>subroute</b></a>
+      <div class="story-copy"><p class="eyebrow">LOCAL AI GATEWAY</p><h1>Your tools.<br>Your models.<br><em>Your call.</em></h1><p>One local endpoint keeps your coding agents on the route you choose.</p></div>
+      <div class="route-art" aria-hidden="true"><span>CLIENTS</span><i></i><i></i><i></i><span class="route-node"></span><b>SUBROUTE</b></div>
+      <small class="privacy-caption">LOCAL FIRST · PROVIDER KEYS STAY IN YOUR GATEWAY</small>
+    </section>
+    <section class="connect-card" aria-labelledby="connect-title">
+      <div class="card-brand"><span class="brand-mark compact" aria-hidden="true"><i></i><i></i><i></i></span><span>SUBROUTE DESKTOP</span></div>
+      <div class="card-copy"><p class="eyebrow">GET CONNECTED</p><h2 id="connect-title">Connect your gateway</h2><p>Start Subroute with Docker Compose, then connect this desktop app to its local address.</p></div>
+      <form id="connect-form">
+        <label for="gateway-url">GATEWAY ADDRESS</label>
+        <div class="input-wrap"><span aria-hidden="true">⌂</span><input id="gateway-url" name="gateway-url" inputmode="url" autocomplete="url" spellcheck="false" required></div>
+        <p class="hint">HTTP on this device only. Default: http://127.0.0.1:4000</p>
+        <button id="connect-button" type="submit">Connect to gateway <span aria-hidden="true">→</span></button>
+        <p id="connect-status" role="status" aria-live="polite"></p>
+      </form>
+      <div class="trust-row"><span aria-hidden="true">◈</span><p><b>Loopback address</b><br>The URL is saved in this desktop profile. Provider keys stay in the gateway.</p></div>
+      <p class="help-link">The gateway runs with <code>docker compose up -d</code>.</p>
+    </section>
+  </main>
+  <script src="connect.js"></script>
+</body>
+</html>

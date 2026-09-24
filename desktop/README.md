@@ -8,7 +8,7 @@ npm install
 npm start
 ```
 
-On first launch it creates `%APPDATA%/subroute-desktop/sources.json` from `sources.example.json`. That file contains only the loopback gateway URL. Provider inventory and usage adapters are owned by the gateway, so they cannot drift between the browser and Desktop interfaces. Do not place API keys in the Desktop file.
+On first launch it creates `%APPDATA%/subroute-desktop/sources.json` from `sources.example.json`. That file contains only the loopback gateway URL. If the gateway is not running or the address needs to change, Desktop opens a connection screen with a local address check and retry. The address is saved only after the gateway responds. Provider inventory and usage adapters are owned by the gateway, so they cannot drift between the browser and Desktop interfaces. Do not place API keys in the Desktop file.
 
 ## Launch agents
 

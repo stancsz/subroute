@@ -2,52 +2,94 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width">
-  <title>Subroute Control Desk</title>
-  <link rel="stylesheet" href="/control/styles.css?v=providers-3">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f3ec">
+  <meta name="description" content="A local control desk for your AI providers, model routes, and coding agents.">
+  <title>Subroute | Local AI gateway</title>
+  <link rel="stylesheet" href="/control/styles.css?v=readiness-1">
 </head>
 <body>
-  <main>
-    <header>
-      <div><p class="eyebrow">SUBROUTE · CONTROL DESK</p><h1>Subroute</h1><p class="sub">Sources, routing, and local coding-agent sessions.</p></div>
-      <button id="refresh" type="button">Refresh usage</button>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#overview" aria-label="Subroute home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span><b>subroute</b><small>LOCAL AI GATEWAY</small></span>
+      </a>
+      <div class="top-actions">
+        <div class="connection-pill"><i></i><span id="gateway-status">Connecting to gateway</span><code id="gateway">127.0.0.1:4000</code></div>
+        <button id="refresh" type="button"><span aria-hidden="true">↻</span> Refresh usage</button>
+      </div>
     </header>
-    <section class="gateway"><span class="pulse"></span><div><strong id="gateway">Local gateway</strong><small>One policy and one interface shared by browser and Desktop.</small></div><span id="surface" class="read-only">WEB CONTROL</span></section>
-    <section class="routing-desk">
-      <div class="route-head"><div><strong>Routing desk</strong><small>Choose a provider, model, and reasoning level</small></div><span>LOCAL POLICY</span></div>
+
+    <section id="overview" class="intro">
+      <div>
+        <p class="eyebrow">YOUR LOCAL CONTROL DESK</p>
+        <h1>One route. Every coding tool.</h1>
+        <p class="lede">Keep your clients steady while you choose which AI connection powers the next request.</p>
+      </div>
+        <div class="privacy-note"><span class="privacy-icon" aria-hidden="true">⌂</span><span><b>Loopback gateway</b><small>Bound to this device</small></span></div>
+    </section>
+
+    <nav class="section-nav" aria-label="Control desk sections">
+      <a class="active" href="#routing">Routing</a>
+      <a href="#connections">Connections</a>
+      <a class="desktop-nav" href="#agent-launch">Coding agents</a>
+      <span id="surface">WEB CONTROL</span>
+    </nav>
+
+    <section id="routing" class="routing-desk" aria-labelledby="routing-title">
+      <div class="section-heading route-heading">
+        <div><p class="eyebrow">01 / DIRECT TRAFFIC</p><h2 id="routing-title">Routing desk</h2><p>Set the model for every new request.</p></div>
+        <div class="policy-chip"><i></i> LOCAL POLICY</div>
+      </div>
       <div class="route-grid">
-        <div class="route-column route-model-panel">
-          <div class="route-panel-head"><strong>Target</strong><span>MAIN RESPONSE</span></div>
+        <div class="route-column route-model-panel target-panel">
+          <div class="route-panel-head"><span class="panel-index">A</span><div><strong>Target model</strong><small>The model that writes the response</small></div><span class="role-pill">PRIMARY</span></div>
           <label>Provider<select id="route-provider" aria-label="Target provider" disabled><option value="">Loading providers…</option></select></label>
-          <label>Model<select id="route-model" aria-label="Target model" disabled><option value="">Loading models…</option></select></label>
-          <label>Reasoning effort<select aria-label="Target reasoning" id="route-effort" aria-describedby="route-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
+          <label>Model route<select id="route-model" aria-label="Target model" disabled><option value="">Loading models…</option></select></label>
+          <label>Reasoning effort<select id="route-effort" aria-label="Target reasoning" aria-describedby="route-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
           <p id="route-effort-help" class="route-help"></p>
         </div>
-        <div class="route-column route-model-panel">
-          <div class="route-panel-head"><strong>Advisor</strong><span>OPTIONAL · MESSAGES API</span></div>
+        <div class="route-column route-model-panel advisor-panel">
+          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on tool requests</small></div><span class="role-pill optional">OPTIONAL</span></div>
           <label>Provider<select id="advisor-provider" aria-label="Advisor provider" disabled><option value="">Loading providers…</option></select></label>
-          <label>Model<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
-          <label>Reasoning effort<select aria-label="Advisor reasoning" id="route-advisor-effort" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
+          <label>Model route<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
+          <label>Reasoning effort<select id="route-advisor-effort" aria-label="Advisor reasoning" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
           <p id="route-advisor-effort-help" class="route-help"></p>
         </div>
       </div>
-      <div class="route-policy">
+      <div class="route-footer">
         <label>Request policy<select id="route-mode" disabled><option value="alias">Current aliases only</option><option value="force">Force every new request</option><option value="off">LiteLLM pass through</option></select></label>
-        <p class="route-help">Applies to new requests. Default reasoning keeps the client's setting, or the provider's default.</p>
+        <p class="policy-description">Applies to new requests. Default reasoning respects the client or provider setting.</p>
+        <div class="save-status"><span id="route-status" role="status" aria-live="polite">Loading routing policy…</span><span id="route-key">LOCAL CLIENT KEY BYPASS</span></div>
       </div>
-      <div class="route-status"><span id="route-status" role="status" aria-live="polite">Loading routing policy…</span><span id="route-key">LOCAL CLIENT KEY BYPASS</span></div>
     </section>
-    <section class="launcher">
-      <div class="section-title"><div><p class="eyebrow">Launch agent</p><h2>Local coding agents</h2></div><span id="launcher-capability">Detecting Desktop bridge…</span></div>
-      <div class="working-directory"><div><p class="field-label">WORKING DIRECTORY</p><code id="working-directory">Choose the project folder that the agent should open.</code></div><button id="choose-directory" class="secondary" type="button">Browse folder</button></div>
-      <div id="agents" class="agents"></div><p id="launch-status" class="launch-status">Agent launch is available in the Desktop app.</p>
+
+    <section id="agent-launch" class="launcher" aria-labelledby="agents-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">02 / START WORK</p><h2 id="agents-title">Coding agents</h2><p>Open a ready-to-use coding session in your project.</p></div>
+        <span id="launcher-capability" class="section-meta">Detecting Desktop bridge…</span>
+      </div>
+      <div class="working-directory"><div><p class="field-label">PROJECT FOLDER</p><code id="working-directory">Choose the folder where your agent should work.</code></div><button id="choose-directory" class="button-secondary" type="button">Choose folder</button></div>
+      <div id="agents" class="agents-list" aria-live="polite"></div>
+      <p id="launch-status" class="launch-status">Agent launch is available in the Subroute Desktop app.</p>
     </section>
-    <div class="section-title"><div><p class="eyebrow">API sources</p><h2>Configuration and usage</h2></div><span id="updated">Loading sources…</span></div>
-    <section id="cards" class="cards"></section>
-    <aside><strong>Provider-reported usage only</strong><p>Quota is refreshed explicitly and kept separate from routing. Missing provider quota APIs remain unavailable rather than being estimated.</p></aside>
+
+    <section id="connections" class="connections" aria-labelledby="connections-title">
+      <div class="section-heading connections-heading">
+        <div><p class="eyebrow">03 / KNOW YOUR SOURCES</p><h2 id="connections-title">Connections</h2><p>Provider status and usage, reported directly by each source.</p></div>
+        <div class="connection-summary"><span class="summary-led"></span><span id="connection-count">Loading connections…</span><small id="updated">Usage not refreshed</small></div>
+      </div>
+      <div id="cards" class="cards"></div>
+      <details class="other-sources"><summary><span>More connections</span><span id="other-count">Show providers not configured on this gateway</span></summary><div id="more-cards" class="cards"></div></details>
+      <p class="usage-note"><span aria-hidden="true">↗</span><span><b>Usage you can trust.</b> Quota appears only when the provider reports it. Unavailable values stay clearly marked and are never estimated.</span></p>
+    </section>
+
+    <footer class="footer"><span class="footer-brand"><span class="brand-mark small" aria-hidden="true"><i></i><i></i><i></i></span>SUBROUTE</span><span>Local first · Provider reported · Yours to control</span><a href="/ui/">Gateway administration <span aria-hidden="true">↗</span></a></footer>
   </main>
-  <template id="card"><article class="card"><div class="card-head"><span class="mark"></span><span class="kind"></span></div><h3></h3><p class="models"></p><p class="usage"></p><div class="bar"><i></i></div><footer></footer></article></template>
-  <template id="agent"><article class="agent"><span class="agent-state"></span><div><b></b><small></small></div><button type="button"></button></article></template>
-  <script src="/control/app.js?v=providers-3"></script>
+
+  <template id="card"><article class="card"><div class="card-head"><span class="source-mark" aria-hidden="true"></span><span class="kind"></span></div><h3></h3><p class="models"></p><div class="usage-row"><p class="usage"></p><span class="source-state"></span></div><div class="bar" role="img"><i></i></div><footer></footer></article></template>
+  <template id="agent"><article class="agent"><span class="agent-state" aria-hidden="true"></span><div><b></b><small></small></div><button type="button"></button></article></template>
+  <script src="/control/app.js?v=readiness-1"></script>
 </body>
 </html>
