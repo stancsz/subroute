@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import Request
 from fastapi.responses import FileResponse
 
-from unified_llm_gateway.provider_usage import read_provider_usage
+from subroute.provider_usage import read_provider_usage
 
 
 ROOT = Path(__file__).resolve().parents[2]

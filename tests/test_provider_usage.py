@@ -1,6 +1,6 @@
 import httpx
 
-from unified_llm_gateway import provider_usage
+from subroute import provider_usage
 
 
 def test_openrouter_usage_preserves_provider_credit_totals(monkeypatch):

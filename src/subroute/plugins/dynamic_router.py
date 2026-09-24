@@ -18,7 +18,7 @@ from litellm.integrations.custom_logger import CustomLogger
 from litellm.litellm_core_utils.core_helpers import get_or_create_metadata_bucket, get_metadata_variable_name_from_kwargs
 from litellm.proxy.proxy_server import app
 from pydantic import BaseModel, ValidationError
-from unified_llm_gateway.ui_control import register_ui_routes, source_configuration
+from subroute.ui_control import register_ui_routes, source_configuration
 
 
 RoutingMode = Literal["alias", "force", "off"]

@@ -14,8 +14,8 @@ from litellm import CustomLLM
 from litellm.llms.custom_llm import CustomLLMError
 from litellm.types.utils import GenericStreamingChunk, ModelResponse, Usage
 
-from unified_llm_gateway.plugins.codex_credentials import CODEX_API_BASE, read_codex_credentials
-from unified_llm_gateway.handlers.codex_messages import normalize_messages
+from subroute.plugins.codex_credentials import CODEX_API_BASE, read_codex_credentials
+from subroute.handlers.codex_messages import normalize_messages
 
 MODELS = {
     "gpt-5.6-terra": "gpt-5.6-terra",

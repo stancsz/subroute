@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
-from unified_llm_gateway.handlers.codex_messages import normalize_messages
+from subroute.handlers.codex_messages import normalize_messages
 
 
 CODEX_API_BASE = "https://chatgpt.com/backend-api/codex"

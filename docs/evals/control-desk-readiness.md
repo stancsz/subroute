@@ -23,7 +23,7 @@ The critic's first review found misleading inventory failure state, overbroad El
 
 ## Local verification
 
-- `node --check` passed for `src/unified_llm_gateway/control/app.js`, `desktop/main.cjs`, `desktop/preload.cjs`, and `desktop/connect.js`.
+- `node --check` passed for `src/subroute/control/app.js`, `desktop/main.cjs`, `desktop/preload.cjs`, and `desktop/connect.js`.
 - `git diff --check` passed.
 - Full `npm audit --json` in `desktop/` returned 0 total vulnerabilities.
 - Electron startup produced a responsive window with title `Subroute | Local AI gateway`.

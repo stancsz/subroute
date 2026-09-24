@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from unified_llm_gateway.handlers import codex_advisor as advisor
+from subroute.handlers import codex_advisor as advisor
 
 
 def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=None):

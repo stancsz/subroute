@@ -10,9 +10,9 @@ from fastapi.testclient import TestClient
 from litellm.proxy.proxy_server import app
 from litellm.types.utils import Usage
 
-from unified_llm_gateway.handlers import antigravity, codex_advisor
-from unified_llm_gateway.plugins import dynamic_router
-from unified_llm_gateway.plugins.dynamic_router import DynamicRoutingPlugin, RoutingControlPlane
+from subroute.handlers import antigravity, codex_advisor
+from subroute.plugins import dynamic_router
+from subroute.plugins.dynamic_router import DynamicRoutingPlugin, RoutingControlPlane
 
 
 ROOT = Path(__file__).parents[1]
@@ -117,7 +117,16 @@ def test_native_codex_bridge_transmits_selected_effort(control, monkeypatch, pro
     monkeypatch.setattr(litellm, "aresponses", endpoint)
     with pytest.raises(Exception, match="captured provider request"):
         if protocol == "chat":
-            asyncio.run(litellm.acompletion(model=f"openai/responses/{model}", messages=data["messages"], metadata=data["metadata"], api_key="fixture", num_retries=0))
+            asyncio.run(
+                litellm.acompletion(
+                    model=f"openai/responses/{model}",
+                    messages=data["messages"],
+                    metadata=data["metadata"],
+                    api_key="fixture",
+                    allowed_openai_params=["reasoning_effort"],
+                    num_retries=0,
+                )
+            )
         else:
             asyncio.run(litellm.anthropic.acreate(model=f"openai/responses/{model}", messages=data["messages"], metadata=data["metadata"], max_tokens=100, api_key="fixture"))
     assert len(captured) == 1

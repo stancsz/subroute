@@ -19,7 +19,7 @@ Make `/control` and the Electron shell feel like a coherent, trustworthy local d
 
 ## Work and decisions
 
-- Shared browser and Electron renderer remains `src/unified_llm_gateway/control/`; `desktop/` keeps only host APIs and connection recovery.
+- Shared browser and Electron renderer remains `src/subroute/control/`; `desktop/` keeps only host APIs and connection recovery.
 - Provider status and routing continue to use the existing gateway endpoints. The new Desktop handoff checks `/api/source-status` before saving the already-supported gateway URL.
 - External font loading is removed to keep rendering offline-capable and avoid unnecessary third-party requests.
 

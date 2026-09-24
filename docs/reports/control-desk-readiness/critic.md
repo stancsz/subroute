@@ -31,7 +31,7 @@ Additional code-level visual concerns: the design uses a lot of uppercase 7–9p
 
 - `GET http://127.0.0.1:4000/control` returned HTTP 200, title `Subroute | Local AI gateway` (2026-09-24).
 - Read-only GETs to `/api/source-status`, `/api/provider-usage`, and `/api/routing-options` returned JSON; route models included provider/configured/access/reasoning metadata, and usage distinguished quota-ready from sign-in-required. No state-changing calls were made.
-- Source review: `src/unified_llm_gateway/control/index.html` lines 19, 30, 43, 80–85; `app.js` lines 70–92 and 113–160; `desktop/main.cjs` lines 13–20, 41–62, 68–78; `desktop/connect.html` trust text and form; `desktop/connect.js` error handling.
+- Source review: `src/subroute/control/index.html` lines 19, 30, 43, 80–85; `app.js` lines 70–92 and 113–160; `desktop/main.cjs` lines 13–20, 41–62, 68–78; `desktop/connect.html` trust text and form; `desktop/connect.js` error handling.
 - Did not run tests, build, package, or launch Electron. Did not capture live desktop or narrow-browser screenshots. No implementation report or evaluation file referenced by the readiness goal existed at review time.
 
 ## Concrete next actions

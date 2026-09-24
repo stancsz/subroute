@@ -47,7 +47,7 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
 
 
 def test_all_public_protocols_are_owned_by_litellm_proxy():
-    package = ROOT / "src" / "unified_llm_gateway"
+    package = ROOT / "src" / "subroute"
 
     assert not (package / "kernel.py").exists()
     assert not any((package / "protocols").glob("*.py"))
@@ -76,9 +76,9 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         "api_base": "os.environ/OLLAMA_API_BASE",
     }
     assert config()["litellm_settings"]["callbacks"] == [
-        "unified_llm_gateway.plugins.dynamic_router.dynamic_routing_plugin",
-        "unified_llm_gateway.plugins.advisor_plugin.advisor_plugin_instance",
-        "unified_llm_gateway.plugins.codex_credentials.codex_credential_refresher",
+        "subroute.plugins.dynamic_router.dynamic_routing_plugin",
+        "subroute.plugins.advisor_plugin.advisor_plugin_instance",
+        "subroute.plugins.codex_credentials.codex_credential_refresher",
     ]
 
 
@@ -92,11 +92,11 @@ def test_subscription_channels_stay_behind_litellm():
     assert config()["litellm_settings"]["custom_provider_map"] == [
         {
             "provider": "antigravity",
-            "custom_handler": "unified_llm_gateway.handlers.antigravity.antigravity_handler",
+            "custom_handler": "subroute.handlers.antigravity.antigravity_handler",
         },
         {
             "provider": "codex-advisor",
-            "custom_handler": "unified_llm_gateway.handlers.codex_advisor.codex_advisor_handler",
+            "custom_handler": "subroute.handlers.codex_advisor.codex_advisor_handler",
         },
     ]
     codex = by_name["codex-subscription"]["litellm_params"]

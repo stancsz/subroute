@@ -10,12 +10,12 @@ from typing import Any
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.litellm_core_utils.core_helpers import get_or_create_metadata_bucket
 
-from unified_llm_gateway.handlers.codex_advisor import (
+from subroute.handlers.codex_advisor import (
     call_codex_streaming_collect,
     has_tool_history,
     supports_tool_history,
 )
-from unified_llm_gateway.handlers.antigravity import invoke_agy, model_with_effort, prompt_from_messages
+from subroute.handlers.antigravity import invoke_agy, model_with_effort, prompt_from_messages
 
 
 ADVISOR_TOOL_TYPE = "advisor_20260301"

@@ -1,7 +1,7 @@
 import json
 import asyncio
 
-from unified_llm_gateway.plugins.codex_credentials import (
+from subroute.plugins.codex_credentials import (
     CODEX_API_BASE,
     codex_credential_refresher,
 )
@@ -48,7 +48,7 @@ def test_non_codex_deployments_are_unchanged():
 
 
 def test_translation_only_applies_at_codex_deployment(monkeypatch):
-    from unified_llm_gateway.plugins import codex_credentials
+    from subroute.plugins import codex_credentials
     monkeypatch.setattr(codex_credentials, "read_codex_credentials", lambda: ("fixture", "account"))
     request = {"api_base": CODEX_API_BASE, "max_output_tokens": 50, "user": "client-user",
                "messages": [{"role": "system", "content": "constraints"}]}

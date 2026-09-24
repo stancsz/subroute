@@ -3,8 +3,8 @@ import asyncio
 import pytest
 from litellm.llms.custom_llm import CustomLLMError
 
-from unified_llm_gateway.handlers import antigravity
-from unified_llm_gateway.handlers.antigravity import (
+from subroute.handlers import antigravity
+from subroute.handlers.antigravity import (
     antigravity_handler,
     prompt_from_messages,
 )

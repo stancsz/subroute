@@ -74,8 +74,8 @@ py C:\Users\stanc\.codex\skills\luna-advisor-escalation\scripts\ask_expert.py --
 ```
 
 Use `--model astra` only under the Astra criteria above. The experts service
-must already be running with `docker compose up -d experts` in the unified
-gateway repository. Set `EXPERTS_API_KEY` in the caller environment only if
+must already be running with `docker compose up -d experts` in the Subroute
+repository. Set `EXPERTS_API_KEY` in the caller environment only if
 that optional service key is configured. Never put a credential in a packet or
 write it to a file.
 

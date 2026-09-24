@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "unified-llm-gateway"
+name = "subroute"
 version = "0.1.0"
 description = "A minimal, native LiteLLM Proxy gateway configuration"
 readme = "README.md"
@@ -19,7 +19,7 @@ test = ["pytest>=8", "pyyaml>=6"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-unified_llm_gateway = ["control/*.html", "control/*.css", "control/*.js"]
+subroute = ["control/*.html", "control/*.css", "control/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

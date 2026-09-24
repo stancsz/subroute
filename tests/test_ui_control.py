@@ -1,13 +1,13 @@
 from fastapi.testclient import TestClient
 from litellm.proxy.proxy_server import app
-import unified_llm_gateway.plugins.dynamic_router  # registers the presentation route
+import subroute.plugins.dynamic_router  # registers the presentation route
 
 
 def test_shared_control_desk_serves_assets_and_sanitized_sources():
     client = TestClient(app, client=("127.0.0.1", 50000))
     response = client.get("/control")
     assert response.status_code == 200
-    assert "SUBROUTE · CONTROL DESK" in response.text
+    assert "YOUR LOCAL CONTROL DESK" in response.text
     assert "Refresh usage" in response.text
     assert client.get("/control/styles.css").status_code == 200
     script = client.get("/control/app.js")

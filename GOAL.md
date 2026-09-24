@@ -1,6 +1,6 @@
-# unified-llm-gateway 核心目标与技术规格 (GOAL.md)
+# Subroute 核心目标与技术规格 (GOAL.md)
 
-本文档定义了 `unified-llm-gateway` 的核心目标、架构设计边界、功能规范及验收标准。
+本文档定义了 Subroute 的核心目标、架构设计边界、功能规范及验收标准。
 
 ---
 
@@ -70,7 +70,7 @@
 - [ ] 编写针对 Codex 凭据热加载逻辑的自动化单元测试。
 
 ### 阶段 3：动态路由与控制面实现 (Control Plane & Web UI)
-- [ ] 编写 `src/unified_llm_gateway/plugins/dynamic_router.py`：
+- [ ] 编写 `src/subroute/plugins/dynamic_router.py`：
   - 挂载 `/control` 极简控制台页面（包含现代轻量下拉菜单与生效状态提示）。
   - 实现原子状态存储管理（支持 `alias`、`force` 模式切换）。
   - 实现 `async_pre_call_hook` 路由改写与元数据打标。

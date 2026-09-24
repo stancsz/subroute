@@ -283,14 +283,14 @@ router_settings:
 
 litellm_settings:
   callbacks:
-    - unified_llm_gateway.plugins.dynamic_router.dynamic_routing_plugin
-    - unified_llm_gateway.plugins.advisor_plugin.advisor_plugin_instance
-    - unified_llm_gateway.plugins.codex_credentials.codex_credential_refresher
+    - subroute.plugins.dynamic_router.dynamic_routing_plugin
+    - subroute.plugins.advisor_plugin.advisor_plugin_instance
+    - subroute.plugins.codex_credentials.codex_credential_refresher
   custom_provider_map:
     - provider: antigravity
-      custom_handler: unified_llm_gateway.handlers.antigravity.antigravity_handler
+      custom_handler: subroute.handlers.antigravity.antigravity_handler
     - provider: codex-advisor
-      custom_handler: unified_llm_gateway.handlers.codex_advisor.codex_advisor_handler
+      custom_handler: subroute.handlers.codex_advisor.codex_advisor_handler
   # This removes known unsupported top-level parameters. It does not guarantee
   # cross-provider tool, vision, context, reasoning, or streaming compatibility.
   drop_params: true

@@ -30,7 +30,7 @@ router_settings:
 litellm_settings:
   custom_provider_map:
     - provider: codex-advisor
-      custom_handler: unified_llm_gateway.handlers.codex_advisor.codex_advisor_handler
+      custom_handler: subroute.handlers.codex_advisor.codex_advisor_handler
   drop_params: true
   set_verbose: false
 

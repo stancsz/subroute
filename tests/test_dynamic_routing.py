@@ -6,12 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 from litellm.proxy.proxy_server import app
 
-import unified_llm_gateway.plugins.dynamic_router as dynamic_routing
-from unified_llm_gateway.plugins.dynamic_router import (
+import subroute.plugins.dynamic_router as dynamic_routing
+from subroute.plugins.dynamic_router import (
     DynamicRoutingPlugin,
     RoutingControlPlane,
 )
-from unified_llm_gateway.plugins.advisor_plugin import ADVISOR_TOOL_TYPE, AdvisorPlugin
+from subroute.plugins.advisor_plugin import ADVISOR_TOOL_TYPE, AdvisorPlugin
 
 
 def make_control_plane(tmp_path: Path) -> RoutingControlPlane:
@@ -205,7 +205,7 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
 
     response = client.get("/control")
     assert response.status_code == 200
-    assert "API sources" in response.text
+    assert "Connections" in response.text
     assert "Routing desk" in response.text
     assert "/control/app.js" in response.text
 

@@ -5,7 +5,7 @@ from litellm.llms.anthropic.experimental_pass_through.messages.interceptors.advi
     AdvisorOrchestrationHandler,
 )
 
-from unified_llm_gateway.plugins.advisor_plugin import (
+from subroute.plugins.advisor_plugin import (
     ADVISOR_TOOL_TYPE,
     AdvisorPlugin,
 )
@@ -78,7 +78,7 @@ def test_policy_selected_non_subscription_target_uses_native_advisor():
 @pytest.mark.parametrize("metadata_key", ["metadata", "litellm_metadata"])
 def test_codex_subscription_pair_collects_sol_and_injects_advice(monkeypatch, effort, target, metadata_key):
     from litellm.types.utils import Usage
-    from unified_llm_gateway.plugins import advisor_plugin
+    from subroute.plugins import advisor_plugin
 
     async def fake_collect(model, messages, **kwargs):
         assert model == "gpt-6-sol"
@@ -123,7 +123,7 @@ def test_codex_subscription_pair_collects_sol_and_injects_advice(monkeypatch, ef
 ])
 def test_codex_subscription_pair_collects_antigravity_advice(monkeypatch, alias, expected, effort):
     from litellm.types.utils import Usage
-    from unified_llm_gateway.plugins import advisor_plugin
+    from subroute.plugins import advisor_plugin
 
     async def fake_invoke(model, prompt):
         assert model == expected
@@ -228,7 +228,7 @@ def test_rejects_max_uses_outside_litellm_hard_limit(max_uses: int):
 @pytest.mark.parametrize("target", ["minimax", "openai", "openrouter", "codex-luna", "gemini-subscription-pro"])
 def test_empty_advisor_never_injects_tools_or_calls_a_provider(monkeypatch, advisor_model, target):
     from copy import deepcopy
-    from unified_llm_gateway.plugins import advisor_plugin
+    from subroute.plugins import advisor_plugin
 
     async def unexpected(*args, **kwargs):
         pytest.fail("Disabled advisor must not call a provider")
