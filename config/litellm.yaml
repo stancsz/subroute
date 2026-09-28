@@ -48,7 +48,7 @@ model_list:
       reasoning:
         exclude: true
 
-  # Antigravity runs as an in-process LiteLLM CustomLLM provider.
+  # In-process CustomLLM handler backed by the Compose CLI bridge sidecar.
   - model_name: gemini-subscription
     model_info:
       display_name: Gemini 3.8 Flash
@@ -101,9 +101,9 @@ model_list:
       model: antigravity/gemini-3.1-pro
       allowed_openai_params: [reasoning_effort]
 
-  # LiteLLM's native Responses-to-Chat bridge talks to the Codex subscription
-  # backend. A deployment hook reloads the existing Codex auth file before
-  # every dispatch, so refreshed credentials do not require a proxy restart.
+  # The CustomLLM uses LiteLLM's OpenAI Responses adapter for the upstream
+  # stream; LiteLLM retains ownership of public Chat, Responses, and Messages
+  # conversion. The deployment hook rereads the Codex auth file per dispatch.
   - model_name: codex-subscription
     model_info:
       display_name: GPT-6 Sol
@@ -113,12 +113,13 @@ model_list:
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-6-sol
+      model: codex-subscription/gpt-6-sol
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
         ChatGPT-Account-ID: refreshed-at-dispatch
         User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
       store: false
 
   - model_name: codex-astra
@@ -130,12 +131,13 @@ model_list:
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-6-astra
+      model: codex-subscription/gpt-6-astra
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
         ChatGPT-Account-ID: refreshed-at-dispatch
         User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
       store: false
 
   - model_name: codex-terra
@@ -147,12 +149,13 @@ model_list:
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-5.6-terra
+      model: codex-subscription/gpt-5.6-terra
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
         ChatGPT-Account-ID: refreshed-at-dispatch
         User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
       store: false
 
   - model_name: codex-luna
@@ -164,12 +167,13 @@ model_list:
       reasoning_efforts: [low, medium, high, xhigh, max]
       capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-6-luna
+      model: codex-subscription/gpt-6-luna
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
         ChatGPT-Account-ID: refreshed-at-dispatch
         User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
       store: false
 
   - model_name: codex-reserve
@@ -181,12 +185,13 @@ model_list:
       reasoning_efforts: [low, medium, high, xhigh, max]
       capabilities: [tools, streaming]
     litellm_params:
-      model: openai/responses/gpt-reserve
+      model: codex-subscription/gpt-reserve
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
         ChatGPT-Account-ID: refreshed-at-dispatch
         User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
       store: false
 
   - model_name: codex-terra-advisor
@@ -287,6 +292,8 @@ litellm_settings:
     - subroute.plugins.advisor_plugin.advisor_plugin_instance
     - subroute.plugins.codex_credentials.codex_credential_refresher
   custom_provider_map:
+    - provider: codex-subscription
+      custom_handler: subroute.handlers.codex_subscription.codex_subscription_handler
     - provider: antigravity
       custom_handler: subroute.handlers.antigravity.antigravity_handler
     - provider: codex-advisor

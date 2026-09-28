@@ -20,7 +20,7 @@ def test_selected_advisor_enables_plain_model_on_messages_route():
         max_uses=2,
     )
     data = {
-        "model": "minimax",
+        "model": "openrouter",
         "messages": [{"role": "user", "content": "review this design"}],
         "tools": [{"name": "existing", "input_schema": {"type": "object"}}],
     }
@@ -29,7 +29,7 @@ def test_selected_advisor_enables_plain_model_on_messages_route():
     result = run(plugin, data)
 
     assert result is data
-    assert data["model"] == "minimax"
+    assert data["model"] == "openrouter"
     assert data["tools"][0]["name"] == "existing"
     assert data["tools"][1] == {
         "type": ADVISOR_TOOL_TYPE,
@@ -39,14 +39,14 @@ def test_selected_advisor_enables_plain_model_on_messages_route():
         "caching": {"type": "ephemeral", "ttl": "5m"},
     }
     assert AdvisorOrchestrationHandler().can_handle(
-        data["tools"], custom_llm_provider="minimax"
+        data["tools"], custom_llm_provider="openrouter"
     )
 
 
 def test_does_not_duplicate_existing_advisor_tool():
     plugin = AdvisorPlugin()
     existing = {"type": ADVISOR_TOOL_TYPE, "name": "advisor", "model": "other"}
-    data = {"model": "minimax", "tools": [existing]}
+    data = {"model": "openrouter", "tools": [existing]}
 
     data["metadata"] = {"gateway_policy": {"advisor_model": "gemini-subscription"}}
     run(plugin, data)
@@ -121,7 +121,8 @@ def test_codex_subscription_pair_collects_sol_and_injects_advice(monkeypatch, ef
     ("gemini-subscription-pro", "gemini-3.1-pro-low", "low"),
     ("gemini-subscription-3.7-flash", "gemini-3.7-flash-medium", "medium"),
 ])
-def test_codex_subscription_pair_collects_antigravity_advice(monkeypatch, alias, expected, effort):
+@pytest.mark.parametrize("target", ["codex-luna", "minimax"])
+def test_preconsult_target_collects_antigravity_advice(monkeypatch, alias, expected, effort, target):
     from litellm.types.utils import Usage
     from subroute.plugins import advisor_plugin
 
@@ -135,10 +136,10 @@ def test_codex_subscription_pair_collects_antigravity_advice(monkeypatch, alias,
     monkeypatch.setattr(advisor_plugin, "invoke_agy", fake_invoke)
     plugin = AdvisorPlugin()
     data = {
-        "model": "codex-luna",
+        "model": target,
         "messages": [{"role": "user", "content": "review this design"}],
         "metadata": {"gateway_policy": {
-            "active_model": "codex-luna", "mode": "force", "policy_version": 38,
+            "active_model": target, "mode": "force", "policy_version": 38,
             "advisor_model": alias,
             "advisor_reasoning_effort": effort,
         }},
@@ -153,6 +154,69 @@ def test_codex_subscription_pair_collects_antigravity_advice(monkeypatch, alias,
     assert receipt["status"] == "advice_injected"
     assert receipt["model"] == alias
     assert receipt["usage_source"] == "provider"
+
+
+def test_minimax_gemini_pair_injects_advice_before_main_call(monkeypatch):
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    async def fake_invoke(model, prompt):
+        assert model == "gemini-3.8-flash-medium"
+        assert prompt == "[User]:\nreview this design"
+        return "Use isolated fixtures and deterministic state.", Usage(
+            prompt_tokens=9, completion_tokens=7, total_tokens=16
+        )
+
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", fake_invoke)
+    data = {
+        "model": "minimax",
+        "messages": [{"role": "user", "content": "review this design"}],
+        "metadata": {"gateway_policy": {
+            "active_model": "minimax", "mode": "force", "policy_version": 40,
+            "advisor_model": "gemini-subscription",
+            "advisor_reasoning_effort": "medium",
+        }},
+    }
+
+    run(AdvisorPlugin(), data)
+
+    assert data["messages"][-1] == {
+        "role": "developer",
+        "content": "Independent advisor guidance:\nUse isolated fixtures and deterministic state.",
+    }
+    assert data["metadata"]["gateway_advisor"]["status"] == "advice_injected"
+    assert data["metadata"]["gateway_advisor"]["usage_source"] == "provider"
+
+
+def test_minimax_gemini_pair_skips_structured_content_without_changing_request(monkeypatch):
+    from copy import deepcopy
+    from subroute.plugins import advisor_plugin
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("Text-only Antigravity must not receive structured content")
+
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", unexpected)
+    messages = [{"role": "user", "content": [{
+        "type": "image", "source": {"type": "base64", "data": "opaque"}
+    }]}]
+    data = {
+        "model": "minimax",
+        "messages": messages,
+        "metadata": {"gateway_policy": {
+            "advisor_model": "gemini-subscription",
+            "advisor_reasoning_effort": "medium",
+        }},
+    }
+    original_messages = deepcopy(messages)
+
+    run(AdvisorPlugin(), data)
+
+    assert data["messages"] == original_messages
+    assert data["metadata"]["gateway_advisor"] == {
+        "status": "skipped",
+        "reason": "unsupported_content",
+        "model": "gemini-subscription",
+    }
 
 
 def test_codex_advisor_is_injected_for_supported_tool_history():

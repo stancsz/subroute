@@ -91,10 +91,26 @@ class AdvisorPlugin(CustomLogger):
             }
             return data
 
-        if (
+        minimax_gemini_pair = (
+            data.get("model") == "minimax"
+            and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
+        )
+        existing_preconsult_pair = (
             data.get("model") in CODEX_SUBSCRIPTION_MODELS | ANTIGRAVITY_ADVISOR_MODELS.keys()
             and advisor_model in {*ADVISOR_MODEL_NAMES, *ANTIGRAVITY_ADVISOR_MODELS}
+        )
+        if (
+            (minimax_gemini_pair or existing_preconsult_pair)
+            and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
+            and any(not isinstance(message.get("content", ""), str) for message in messages)
         ):
+            metadata["gateway_advisor"] = {
+                "status": "skipped",
+                "reason": "unsupported_content",
+                "model": advisor_model,
+            }
+            return data
+        if minimax_gemini_pair or existing_preconsult_pair:
             consultation_id = uuid.uuid4().hex
             try:
                 if advisor_model in ANTIGRAVITY_ADVISOR_MODELS:
