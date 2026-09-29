@@ -60,7 +60,7 @@
       </div>
       <div class="route-footer">
         <label>Request policy<select id="route-mode" disabled><option value="alias">Current aliases only</option><option value="force">Force every new request</option><option value="off">LiteLLM pass through</option></select></label>
-        <p class="policy-description">Applies to new requests. Default reasoning respects the client or provider setting.</p>
+        <p class="policy-description">Applies to new text requests. Image generation always uses Luna, including in Force mode. Default reasoning respects the client or provider setting.</p>
         <div class="save-status"><span id="route-status" role="status" aria-live="polite">Loading routing policy…</span><span id="route-key">LOCAL CLIENT KEY BYPASS</span></div>
       </div>
     </section>

@@ -4,6 +4,8 @@
 **优先级：最高（目标已完成）**
 **更新日期：2026-09-29**
 
+**2026-09-29 用户要求的图片生成扩展：** Images generation endpoint 现在优先于 Force/alias/off 和 `auto`，始终选择 Codex Subscription GPT-6 Luna，由 Luna 调用 hosted `image_generation` 工具。LiteLLM 继续负责公开协议与 Responses transport；窄适配器补足 CustomLLM Images 缺口，保留 output-item 图片并验证 terminal completion，不再将空图片列表当作成功。两次真实 staging/production Force 场景均生成并检查了 PNG；production 策略未改，staging 策略字段已恢复。锁定测试 292 passed、11 skipped；部署版本 1.103.0 的相关测试 51 passed。每进程最多两个图片并发、180 秒 deadline，无重试/fallback。仅支持单张完整 base64 图片，size 省略或 auto；订阅后端不遵守固定像素尺寸，故调用前拒绝固定值。此规则不分类普通聊天，也不实现图片编辑或公开 Responses hosted-image-tool 转换。证据、维护负担及限制见 [Luna 图片路由验证](docs/evals/luna-image-routing-2026-09-29.md)。这项用户明确授权的功能扩展不改变下方历史可靠性目标的验收定义。
+
 **2026-09-29 提交前复查：** 后续 Auto 路由增加三个 deployment，当前 production/staging inventory 为 21 项。深度复查修复 Gemini 结构化输出校验、target/advisor profile、terminal usage 分类、Linux 子进程回收和状态误报，并补充 Auto fallback 行为回归。用户明确选择保留 Gemini 后端管理输出上限的兼容行为；CLI 无输出 token cap 参数，README 和控制台现明确告知调用方上限不被执行。最新双运行环境验证及边界见 [提交前复查](docs/evals/uncommitted-review-2026-09-29.md)，下方原始结项收据保留为历史证据。
 
 ## 目标

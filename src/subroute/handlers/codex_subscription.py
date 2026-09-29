@@ -152,6 +152,25 @@ def _generic_chunks(chunk: Any) -> list[GenericStreamingChunk]:
 class CodexSubscriptionLLM(CustomLLM):
     """Force only the upstream Codex call to stream; LiteLLM owns public protocols."""
 
+    active_image_requests = 0
+
+    async def aimage_generation(
+        self, model, prompt, model_response, api_key, api_base,
+        optional_params, logging_obj, timeout=None, client=None,
+    ):
+        from subroute.handlers.codex_images import generate_image, image_options
+
+        if self.active_image_requests >= 2:
+            raise CustomLLMError(429, "Luna image generation is busy; retry later")
+        options = optional_params.get("image_generation_options")
+        if options is None:
+            options = image_options(optional_params)
+        self.active_image_requests += 1
+        try:
+            return await generate_image(prompt, options)
+        finally:
+            self.active_image_requests -= 1
+
     async def acompletion(
         self,
         model: str,

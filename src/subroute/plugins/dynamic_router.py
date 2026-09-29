@@ -15,6 +15,7 @@ from typing import Any, Literal
 import yaml
 from fastapi import HTTPException, Request
 from litellm.integrations.custom_logger import CustomLogger
+from litellm.llms.custom_llm import CustomLLMError
 from litellm.litellm_core_utils.core_helpers import get_or_create_metadata_bucket, get_metadata_variable_name_from_kwargs
 from litellm.proxy.proxy_server import app
 from pydantic import BaseModel, ValidationError
@@ -247,6 +248,24 @@ class DynamicRoutingPlugin(CustomLogger):
         call_type: str,
     ) -> dict | None:
         requested_model = data.get("model")
+        if call_type in {"image_generation", "aimage_generation"}:
+            from subroute.handlers.codex_images import IMAGE_MODEL, image_options
+
+            try:
+                options = image_options(data)
+            except CustomLLMError as exc:
+                raise HTTPException(exc.status_code, detail=str(exc)) from exc
+            _, metadata = get_or_create_metadata_bucket(data)
+            state = self.control_plane.snapshot()
+            metadata["gateway_policy"] = asdict(state)
+            metadata["gateway_reasoning_effort"] = None
+            metadata["routing"] = {
+                "requested_model": requested_model, "resolved_model": IMAGE_MODEL,
+                "mode": "image_generation", "policy_version": state.policy_version,
+            }
+            data["model"] = IMAGE_MODEL
+            data["image_generation_options"] = options
+            return data
         if call_type in {"aresponses", "responses"}:
             data.setdefault("litellm_metadata", {})
         _, metadata = get_or_create_metadata_bucket(data)

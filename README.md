@@ -88,11 +88,30 @@ docker compose up -d gateway-staging
 ## Routing, without surprises
 
 - **`alias`** is the default. It resolves `current` and `default` using the saved route. `auto` always uses the prioritized provider chain.
-- **`force`** applies the selected route to known model requests except explicit `auto` requests.
+- **`force`** applies the selected route to known model requests except explicit `auto` requests and image generation.
 - **`off`** leaves model dispatch to LiteLLM.
 - **Advisor** is selected independently. It enables consultation on the Anthropic Messages API; GPT-6 Luna is available alongside the other configured advisors. `No advisor` disables it.
 
 Subroute configures no automatic retries. Only requests explicitly using `auto` fall back across providers, in the documented order. Requests using `current` or a specific model fail visibly if that route fails.
+
+### Generate an image
+
+`POST /v1/images/generations` always routes to **GPT-6 Luna through the Codex subscription**, which invokes its hosted `image_generation` tool. This takes precedence over `force`, `alias`, `off`, and the request's model (including `auto`). It does not change the saved text/advisor policy and never falls back to another provider.
+
+```json
+{
+  "model": "codex-luna",
+  "prompt": "A small blue circle on a white background",
+  "n": 1,
+  "size": "auto",
+  "quality": "low",
+  "response_format": "b64_json"
+}
+```
+
+Decode `data[0].b64_json` to obtain the image. This endpoint returns a complete image, with at most two concurrent image requests per gateway process and a 180-second deadline. It rejects multiple images, URL responses, streaming, and legacy `style`/`user` parameters. Use `size: "auto"` or omit it: the subscription tool does not honor exact pixel dimensions, so fixed sizes are rejected before dispatch. For PNG outputs, `size` reports the dimensions read from the actual image bytes. Provider options are forwarded to the tool; provider support may vary. `luna_usage` is the reported Responses usage, and `image_usage` is unavailable unless supplied separately by the provider; neither is an estimate of total image-generation cost.
+
+This rule identifies image requests by the **Images generation endpoint**. It does not classify ordinary chat prompts, add hosted tools to text requests, or implement the Images edit/variation endpoints. The public Responses-to-Chat adapter still does not support hosted image tools; use the Images endpoint above. The native Responses call is internal to this image adapter.
 
 ## Know the limits
 
@@ -189,13 +208,15 @@ docker compose up -d gateway-staging
 ### 路由行为
 
 - **`alias`** 是默认模式，根据已保存的路由解析 `current` 和 `default`。`auto` 始终使用按优先级排列的服务链。
-- **`force`** 将所选路由应用到已知模型的推理请求，显式使用 `auto` 的请求除外。
+- **`force`** 将所选路由应用到已知模型的推理请求，显式使用 `auto` 和图片生成请求除外。
 - **`off`** 将模型分发交由 LiteLLM 处理。
 - **Advisor（顾问模型）** 独立选择。选择顾问后，Anthropic Messages API 请求会启用咨询；GPT-6 Luna 可与其他已配置顾问一样选择，选择 `No advisor` 则关闭。
 
 Subroute 不配置自动重试。只有明确使用 `auto` 的请求才会按文档顺序尝试备用服务。使用 `current` 或具体模型的请求在该路由失败时会明确报错。
 
 ### 使用边界
+
+`POST /v1/images/generations` 始终使用 Codex Subscription 的 GPT-6 Luna，并由 Luna 调用 `image_generation` 工具。此规则优先于 Force 和请求中的模型选择，不修改普通文本或顾问策略，也没有备用 provider。返回 `data[0].b64_json`；仅支持单张完整图片，每个 gateway 进程最多两个并发请求，截止时间 180 秒。请省略 `size` 或设为 `auto`，因为订阅后端不遵守指定像素尺寸；固定尺寸、URL 返回、流式输出和旧版 `style`/`user` 参数会在调用前被拒绝。PNG 的返回 `size` 来自实际图片字节。`luna_usage` 仅为 Luna Responses usage，不代表完整图片费用。此规则适用于 Images generation endpoint，不会对普通聊天做语义分类，也不实现编辑/变体端点或公开 Responses hosted image tool 转换。
 
 统一入口不代表各服务能力相同。工具调用、流式传输、图像输入、上下文长度、推理选项和订阅访问能力都取决于具体路由。Antigravity Gemini 订阅集成支持文本和受 schema 约束的工具调用。Sidecar 通过 CLI 的 NDJSON stdin 协议传递 prompt，避免长 prompt 占用操作系统命令行参数空间。工具调用由客户端执行，订阅 sidecar 不会代为执行；工具模式下 AGY 在 schema 结果后追加的有限纯文本说明会被忽略，额外的结构化结果会被拒绝；该路由不支持图像。流式请求会在 CLI 完成响应后通过 SSE 返回，不会逐 token 输出。Codex 订阅端点不接受调用方的输出 token 上限，Subroute 会在该 provider 路由中省略 `max_tokens` 和 `max_output_tokens`，由 Codex 后端选择输出上限。请根据实际选择的路由确认其能力。
 

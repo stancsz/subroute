@@ -1,0 +1,54 @@
+{
+  "endpoint": "http://127.0.0.1:4005/v1/images/generations",
+  "request": {
+    "model": "auto",
+    "prompt": "A small blue robot watering a potted sunflower on a cream background, clean flat illustration. No text.",
+    "n": 1,
+    "quality": "low",
+    "size": "auto",
+    "response_format": "b64_json"
+  },
+  "force_target": "minimax",
+  "elapsed_seconds": 33.743,
+  "model": "gpt-6-luna",
+  "response_id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMDI0Y2Y3NTA3MzAwYmQ2MzAxNmFiYzM0ZDUwMTI0ODdkMDk4Y2QwMGVhZGNkNzhjM2Q=",
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "quality": "low",
+  "output_format": "png",
+  "image_bytes": 1129736,
+  "image_sha256": "baba250efa296e14b1477e236b5405ad97293924b5547e1ba8314057d57023c9",
+  "luna_usage": {
+    "input_tokens": 2339,
+    "input_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0
+    },
+    "output_tokens": 88,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 2427
+  },
+  "image_usage": null,
+  "saved_image": "docs\\evals\\luna-image-generation-2026-09-29.png",
+  "policy_before": {
+    "active_model": "codex-luna",
+    "mode": "force",
+    "policy_version": 472,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": "high",
+    "advisor_reasoning_effort": null
+  },
+  "policy_restored": {
+    "active_model": "codex-luna",
+    "mode": "force",
+    "policy_version": 474,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": "high",
+    "advisor_reasoning_effort": null
+  },
+  "litellm_estimated_luna_cost_not_total_image_cost": 0.0002779
+}

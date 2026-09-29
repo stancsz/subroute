@@ -1,0 +1,86 @@
+{
+  "endpoint": "http://127.0.0.1:4000/v1/images/generations",
+  "requested_model": "current",
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 69,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "max"
+  },
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 69,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "max"
+  },
+  "elapsed_seconds": 36.042,
+  "model": "gpt-6-luna",
+  "response_id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMGRiNDU3Mjg1YWJjZDVhMTAxNmFiYzM1NjBkN2YwODdkMDg1ZGJjMTczY2Q0OWY5YTI=",
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "image_bytes": 1198099,
+  "image_sha256": "90b101ff28a382e4fe956a020d76fd67b6010a53bc4e08f76cc7993f19d3edde",
+  "luna_usage": {
+    "input_tokens": 2318,
+    "output_tokens": 67,
+    "total_tokens": 2385
+  },
+  "image_usage": null,
+  "saved_image": "docs\\evals\\luna-image-production-2026-09-29.png",
+  "invalid_image_requests": "3/3 HTTP 400 on each of ports 4000 and 4005",
+  "text_route_check": {
+    "id": "gen-1790719379-QzlS2WsSXVPJK3UxwKkt",
+    "created": 1790719379,
+    "model": "current",
+    "object": "chat.completion",
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "TEXT_ROUTE_OK",
+          "role": "assistant",
+          "provider_specific_fields": {
+            "refusal": null
+          }
+        },
+        "provider_specific_fields": {
+          "native_finish_reason": "stop"
+        }
+      }
+    ],
+    "usage": {
+      "completion_tokens": 33,
+      "prompt_tokens": 184,
+      "total_tokens": 217,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 27,
+        "image_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 128,
+        "video_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_creation_tokens": 0
+      },
+      "cost": 0,
+      "is_byok": true,
+      "cost_details": {
+        "upstream_inference_cost": 6.408e-05,
+        "upstream_inference_prompt_cost": 2.448e-05,
+        "upstream_inference_completions_cost": 3.96e-05
+      }
+    },
+    "provider": "Minimax",
+    "service_tier": "default"
+  },
+  "text_probe_note": "Initial max_tokens=20 check returned null content. With max_tokens=512, MiniMax returned TEXT_ROUTE_OK and finish_reason=stop."
+}

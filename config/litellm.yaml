@@ -180,7 +180,7 @@ model_list:
       source_id: openai-subscription
       access: Codex subscription
       reasoning_efforts: [low, medium, high, xhigh, max]
-      capabilities: [tools, streaming]
+      capabilities: [tools, streaming, image-generation]
     litellm_params:
       model: codex-subscription/gpt-6-luna
       api_base: https://chatgpt.com/backend-api/codex
@@ -335,6 +335,8 @@ litellm_settings:
   set_verbose: false
 
 general_settings:
+  # Cancel bounded provider work if a buffered client disconnects.
+  cancel_on_disconnect: true
   master_key: os.environ/GATEWAY_MASTER_KEY
   database_url: os.environ/DATABASE_URL
   health_check_concurrency: 2
