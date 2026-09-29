@@ -1,7 +1,16 @@
----
+# Luna Advisor has moved to Codex Advisor
+
+Get the maintained **[Codex Advisor skill in Northstar](https://github.com/stancsz/northstar/tree/main/skills/codex-advisor)**. Install the [four-skill Northstar package](https://github.com/stancsz/northstar/blob/main/docs/misc/install.md): `northstar`, `codex-qa`, `codex-subagents` and `codex-advisor`. Use `$northstar` as coordinator or `$codex-advisor` directly.
+
+This is a migration notice, not an installable skill. Caller/reader assets and their skill-specific tests have moved to Northstar. Subroute still owns the expert service, gateway runtime and provider authentication. Preserve local customizations before retiring an old installation. The old instructions below are retained only as history; their paths are no longer current.
+
+<details>
+<summary>Archived Luna Advisor instructions (not current setup)</summary>
+
+```yaml
 name: luna-advisor-escalation
 description: Use a compact Sol or Astra API consultation to unblock a Luna-led task, while keeping execution and verification with Luna.
----
+```
 
 # Luna Advisor Escalation
 
@@ -84,7 +93,7 @@ write it to a file.
 Use reader mode when a legitimate consultation may need source evidence beyond
 the compact packet. The expert, not Luna, decides whether to dispatch Pi and
 chooses the evidence questions. There is no user round trip. Read
-[reader.md](references/reader.md) before using this mode for setup and limits.
+[reader.md in its new home](https://github.com/stancsz/northstar/blob/main/skills/codex-advisor/references/reader.md) before using this mode for setup and limits.
 
 Pi is a separate, ephemeral harness using **http://localhost:4000/v1**, never
 direct OpenAI credentials. It receives only the expert's evidence question and
@@ -117,3 +126,5 @@ advisor tokens created practical value rather than merely restating a plan.
 
 An advisor response is not proof that the implementation works. Luna remains
 responsible for changes, tests, external actions, and the final evidence.
+
+</details>
