@@ -1,0 +1,101 @@
+{
+  "endpoint": "http://127.0.0.1:4005/v1/messages",
+  "request": {
+    "model": "auto",
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate an image of a small orange fox reading a blue book under a tree, watercolor illustration, no text."
+      }
+    ],
+    "max_tokens": 512
+  },
+  "saved_policy_before": {
+    "active_model": "minimax",
+    "mode": "force",
+    "policy_version": 475,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": null
+  },
+  "saved_policy_after": {
+    "active_model": "minimax",
+    "mode": "force",
+    "policy_version": 475,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": null
+  },
+  "status": 200,
+  "elapsed_seconds": 59.878,
+  "image_bytes": 3167808,
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "sha256": "5f7976c03a6c8be705e61f2ac8252b714efe43978d93be8a53839846a1e25175",
+  "response": [
+    {
+      "type": "ping"
+    },
+    {
+      "type": "ping"
+    },
+    {
+      "type": "ping"
+    },
+    {
+      "type": "message_start",
+      "message": {
+        "id": "msg_f1d25e9f-f66e-4eee-a149-40ff02066834",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "model": "auto",
+        "stop_reason": null,
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "type": "text",
+        "text": ""
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "text_delta",
+        "text": "\n\n![Generated image]([image data URL omitted])"
+      }
+    },
+    {
+      "type": "content_block_stop",
+      "index": 0
+    },
+    {
+      "type": "message_delta",
+      "delta": {
+        "stop_reason": "end_turn"
+      },
+      "usage": {
+        "input_tokens": 2344,
+        "output_tokens": 92
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "image": "luna-intent-4005-messages-stream-2026-09-29.png"
+}

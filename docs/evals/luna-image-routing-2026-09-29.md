@@ -1,5 +1,7 @@
 # Luna image routing verification
 
+Historical endpoint-only verification. The later [intent-routing extension](luna-image-intent-2026-09-29.md) supersedes the final scope limitation below and adds conversation/tool detection.
+
 Every request to the Images generation endpoint now selects `codex-luna` before the saved text routing policy, including Force and explicit `auto`. Luna calls the hosted image-generation tool through the existing Codex subscription credentials. There is no API-key deployment, advisor consultation, retry, or fallback on this path.
 
 The requirement came from the user's 2026-09-29 request to keep image generation on Luna regardless of Force selection. The previous staging request failed with `Not implemented yet`; production Force routed it to MiniMax and returned HTTP 200 with an empty image list.

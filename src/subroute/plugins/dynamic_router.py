@@ -240,6 +240,26 @@ class DynamicRoutingPlugin(CustomLogger):
         super().__init__()
         self.control_plane = control_plane
 
+    async def async_post_call_streaming_iterator_hook(self, user_api_key_dict, response, request_data):
+        # LiteLLM's Responses bridge emits text deltas but drops the caption
+        # from the final snapshot when the same Chat choice contains images.
+        # Preserve already-emitted items only on our hosted-image path.
+        context = request_data.get("gateway_image_request") or {}
+        repair = context.get("protocol") in {"responses", "aresponses"}
+        completed_items = {}
+        async for event in response:
+            if repair:
+                kind = getattr(event, "type", None)
+                if kind == "response.output_item.done":
+                    item = event.item
+                    item = item if isinstance(item, dict) else item.model_dump(exclude_none=True)
+                    completed_items[item["id"]] = item
+                elif kind == "response.completed":
+                    output = event.response.output
+                    ids = {item.get("id") if isinstance(item, dict) else item.id for item in output}
+                    event.response.output = [item for key, item in completed_items.items() if key not in ids] + list(output)
+            yield event
+
     async def async_pre_call_hook(
         self,
         user_api_key_dict: Any,
@@ -248,6 +268,30 @@ class DynamicRoutingPlugin(CustomLogger):
         call_type: str,
     ) -> dict | None:
         requested_model = data.get("model")
+        # This request snapshot is server-owned, never a client override.
+        data.pop("gateway_image_request", None)
+        if isinstance(data.get("extra_body"), dict):
+            data["extra_body"].pop("gateway_image_request", None)
+        if call_type in {"aresponses", "responses"}:
+            data.setdefault("litellm_metadata", {})
+        from subroute.plugins.image_intent import image_request_context
+
+        try:
+            image_context = image_request_context(data, call_type)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        if image_context is not None:
+            _, metadata = get_or_create_metadata_bucket(data)
+            state = self.control_plane.snapshot()
+            metadata["gateway_policy"] = asdict(state)
+            metadata["gateway_reasoning_effort"] = None
+            metadata["routing"] = {
+                "requested_model": requested_model, "resolved_model": "codex-luna",
+                "mode": image_context["reason"], "policy_version": state.policy_version,
+            }
+            data["model"] = "codex-luna"
+            data["gateway_image_request"] = image_context
+            return data
         if call_type in {"image_generation", "aimage_generation"}:
             from subroute.handlers.codex_images import IMAGE_MODEL, image_options
 

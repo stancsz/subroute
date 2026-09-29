@@ -7,7 +7,7 @@ from typing import Any
 
 import litellm
 from litellm.llms.custom_llm import CustomLLM, CustomLLMError
-from litellm.types.utils import GenericStreamingChunk, ModelResponse
+from litellm.types.utils import GenericStreamingChunk, ModelResponse, ModelResponseStream
 
 
 def _target_model(model: str) -> str:
@@ -154,6 +154,17 @@ class CodexSubscriptionLLM(CustomLLM):
 
     active_image_requests = 0
 
+    async def _image_conversation(self, messages, options):
+        from subroute.handlers.codex_images import image_conversation
+
+        if self.active_image_requests >= 2:
+            raise CustomLLMError(429, "Luna image generation is busy; retry later")
+        self.active_image_requests += 1
+        try:
+            return await image_conversation(messages, options, options["gateway_image_request"])
+        finally:
+            self.active_image_requests -= 1
+
     async def aimage_generation(
         self, model, prompt, model_response, api_key, api_base,
         optional_params, logging_obj, timeout=None, client=None,
@@ -190,6 +201,8 @@ class CodexSubscriptionLLM(CustomLLM):
         timeout=None,
         client=None,
     ) -> ModelResponse:
+        if optional_params.get("gateway_image_request"):
+            return await self._image_conversation(messages, optional_params)
         require_usage = _is_anthropic_messages_call(logging_obj)
         stream = await _codex_stream(
             model, messages, api_base, api_key, headers or {}, timeout, optional_params,
@@ -250,7 +263,19 @@ class CodexSubscriptionLLM(CustomLLM):
         headers=None,
         timeout=None,
         client=None,
-    ) -> AsyncIterator[GenericStreamingChunk]:
+    ) -> AsyncIterator[GenericStreamingChunk | ModelResponseStream]:
+        if optional_params.get("gateway_image_request"):
+            result = await self._image_conversation(messages, {**optional_params, "stream": True})
+            message = result.choices[0].message
+            delta = message.model_dump(exclude_none=True)
+            for index, tool in enumerate(delta.get("tool_calls", [])):
+                tool["index"] = index
+            yield ModelResponseStream(id=result.id, model=result.model, choices=[{
+                "index": 0, "delta": delta, "finish_reason": None,
+            }])
+            yield {"text": "", "is_finished": True, "finish_reason": result.choices[0].finish_reason,
+                   "usage": result.usage.model_dump(exclude_none=True)}
+            return
         require_usage = _is_anthropic_messages_call(logging_obj)
         stream = await _codex_stream(
             model, messages, api_base, api_key, headers or {}, timeout, optional_params,

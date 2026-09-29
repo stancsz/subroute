@@ -1,0 +1,76 @@
+{
+  "endpoint": "http://127.0.0.1:4000/v1/chat/completions",
+  "request": {
+    "model": "auto",
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate an image of a small orange fox reading a blue book under a tree, watercolor illustration, no text."
+      }
+    ]
+  },
+  "saved_policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 69,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "max"
+  },
+  "saved_policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 69,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "max"
+  },
+  "status": 200,
+  "elapsed_seconds": 50.826,
+  "image_bytes": 3126860,
+  "dimensions": [
+    1312,
+    1199
+  ],
+  "sha256": "2b4937b5aab5f431a5164d972ff7d136cec6cd4543896eaad846408985a013f5",
+  "response": [
+    {
+      "id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMDQ4NTk4YmU2ZWZiN2E1NTAxNmFiYzM5M2NkZDMwODdkMGIxNTE3NGViZmU2NDhjZDU=",
+      "created": 1790720366,
+      "model": "auto",
+      "object": "chat.completion.chunk",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "images": [
+              {
+                "image_url": {
+                  "url": "[image data URL omitted]"
+                },
+                "index": 0,
+                "type": "image_url"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMDQ4NTk4YmU2ZWZiN2E1NTAxNmFiYzM5M2NkZDMwODdkMGIxNTE3NGViZmU2NDhjZDU=",
+      "object": "chat.completion.chunk",
+      "created": 1790720366,
+      "model": "auto",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  ],
+  "image": "luna-intent-4000-chat-stream-2026-09-29.png"
+}

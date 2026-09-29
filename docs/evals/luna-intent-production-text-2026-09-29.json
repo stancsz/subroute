@@ -1,0 +1,84 @@
+{
+  "endpoint": "http://127.0.0.1:4000/v1/chat/completions",
+  "request": {
+    "model": "current",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Do not generate an image. Reply only TEXT_ROUTE_OK."
+      }
+    ],
+    "max_tokens": 512
+  },
+  "status": 200,
+  "elapsed_seconds": 1.749,
+  "response": {
+    "id": "gen-1790720344-WbfwVn5Bj5kv2jzcjLue",
+    "created": 1790720344,
+    "model": "current",
+    "object": "chat.completion",
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "TEXT_ROUTE_OK",
+          "role": "assistant",
+          "provider_specific_fields": {
+            "refusal": null
+          }
+        },
+        "provider_specific_fields": {
+          "native_finish_reason": "stop"
+        }
+      }
+    ],
+    "usage": {
+      "completion_tokens": 38,
+      "prompt_tokens": 189,
+      "total_tokens": 227,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 31,
+        "image_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 128,
+        "video_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_creation_tokens": 0
+      },
+      "cost": 0,
+      "is_byok": true,
+      "cost_details": {
+        "upstream_inference_cost": 7.158e-05,
+        "upstream_inference_prompt_cost": 2.598e-05,
+        "upstream_inference_completions_cost": 4.56e-05
+      }
+    },
+    "provider": "Minimax",
+    "service_tier": "default"
+  },
+  "routing_headers": {
+    "x-litellm-model-id": "7ec0fcd796f4452d965d34f010bc30802a1dd926dcb39eabd474cd913172a74e",
+    "x-litellm-attempted-retries": "0",
+    "x-litellm-attempted-fallbacks": "0"
+  },
+  "saved_policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 69,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "max"
+  },
+  "saved_policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 69,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "max"
+  }
+}

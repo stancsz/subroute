@@ -1,0 +1,78 @@
+{
+  "endpoint": "http://127.0.0.1:4005/v1/chat/completions",
+  "request": {
+    "model": "auto",
+    "stream": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate an image of a small orange fox reading a blue book under a tree, watercolor illustration, no text."
+      }
+    ]
+  },
+  "saved_policy_before": {
+    "active_model": "minimax",
+    "mode": "force",
+    "policy_version": 475,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": null
+  },
+  "saved_policy_after": {
+    "active_model": "minimax",
+    "mode": "force",
+    "policy_version": 475,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": null
+  },
+  "status": 200,
+  "elapsed_seconds": 38.919,
+  "image_bytes": 2952292,
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "sha256": "aa120d5a087d8db9a19618d96d9cd1a8a70054562452be8570b499ad345474c6",
+  "response": [
+    {
+      "id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMDc0MmRhMjE0NTBiNzkyYTAxNmFiYzM4ODY1OTA0ODdkMGFhMDRjNTNmNGI3NGEzMDE=",
+      "created": 1790720172,
+      "model": "auto",
+      "object": "chat.completion",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "images": [
+              {
+                "image_url": {
+                  "url": "[image data URL omitted]"
+                },
+                "index": 0,
+                "type": "image_url"
+              }
+            ],
+            "content": null
+          }
+        }
+      ],
+      "usage": {
+        "completion_tokens": 91,
+        "prompt_tokens": 2343,
+        "total_tokens": 2434,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "cache_creation_tokens": 0
+        }
+      }
+    }
+  ],
+  "image": "luna-intent-4005-chat-buffered-2026-09-29.png"
+}

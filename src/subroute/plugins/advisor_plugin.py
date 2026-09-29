@@ -87,6 +87,10 @@ class AdvisorPlugin(CustomLogger):
 
         if call_type not in SUPPORTED_CALL_TYPES:
             return None
+        if data.get("gateway_image_request") is not None:
+            # The image intent exception owns this request; do not add a
+            # saved advisor call, instructions, or provider spending.
+            return None
         _, metadata = get_or_create_metadata_bucket(data)
         # Native advisor calls retain metadata. Never turn a consultation into
         # another consultation, including Gemini aliases shared with targets.

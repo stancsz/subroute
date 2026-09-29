@@ -1,0 +1,199 @@
+{
+  "endpoint": "http://127.0.0.1:4005/v1/responses",
+  "request": {
+    "model": "auto",
+    "stream": true,
+    "input": "A small orange fox reading a blue book under a tree, watercolor illustration, no text.",
+    "tools": [
+      {
+        "type": "image_generation",
+        "quality": "low"
+      }
+    ],
+    "tool_choice": {
+      "type": "image_generation"
+    }
+  },
+  "saved_policy_before": {
+    "active_model": "minimax",
+    "mode": "force",
+    "policy_version": 475,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": null
+  },
+  "saved_policy_after": {
+    "active_model": "minimax",
+    "mode": "force",
+    "policy_version": 475,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": null
+  },
+  "status": 200,
+  "elapsed_seconds": 41.402,
+  "image_bytes": 3155392,
+  "dimensions": [
+    1312,
+    1199
+  ],
+  "sha256": "17108c3a2ad53fd4ba65b89e5700336cbc59bf3407c9b7750b95f50491294507",
+  "response": [
+    {
+      "type": "response.created",
+      "response": {
+        "id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMGJkOGQ2MTA0Y2Y5ZDUwYTAxNmFiYzM4YzdiZjY4ODdkMDk1NWQzYzEwMThiNjYxMDY=",
+        "created_at": 1790720239,
+        "model": "gpt-6-luna",
+        "object": "response",
+        "output": [],
+        "parallel_tool_calls": true,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 1.0,
+        "reasoning": {
+          "effort": null,
+          "summary": null
+        },
+        "status": "in_progress",
+        "store": true
+      },
+      "model": "auto"
+    },
+    {
+      "type": "response.in_progress",
+      "response": {
+        "id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMGJkOGQ2MTA0Y2Y5ZDUwYTAxNmFiYzM4YzdiZjY4ODdkMDk1NWQzYzEwMThiNjYxMDY=",
+        "created_at": 1790720239,
+        "model": "gpt-6-luna",
+        "object": "response",
+        "output": [],
+        "parallel_tool_calls": true,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 1.0,
+        "reasoning": {
+          "effort": null,
+          "summary": null
+        },
+        "status": "in_progress",
+        "store": true
+      },
+      "model": "auto"
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 0,
+      "item": {
+        "id": "msg_0dd4b7ae-1a7b-4027-a317-52873408ea24",
+        "type": "message",
+        "role": "assistant",
+        "status": "in_progress",
+        "content": []
+      },
+      "model": "auto"
+    },
+    {
+      "type": "response.content_part.added",
+      "item_id": "msg_0dd4b7ae-1a7b-4027-a317-52873408ea24",
+      "output_index": 0,
+      "content_index": 0,
+      "part": {
+        "type": "output_text",
+        "text": "",
+        "annotations": []
+      },
+      "model": "auto"
+    },
+    {
+      "type": "response.output_text.done",
+      "item_id": "msg_0dd4b7ae-1a7b-4027-a317-52873408ea24",
+      "output_index": 0,
+      "content_index": 0,
+      "text": "",
+      "model": "auto"
+    },
+    {
+      "type": "response.content_part.done",
+      "item_id": "msg_0dd4b7ae-1a7b-4027-a317-52873408ea24",
+      "output_index": 0,
+      "content_index": 0,
+      "part": {
+        "type": "output_text",
+        "text": "",
+        "annotations": []
+      },
+      "model": "auto"
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 0,
+      "sequence_number": 1,
+      "item": {
+        "id": "msg_0dd4b7ae-1a7b-4027-a317-52873408ea24",
+        "status": "completed",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "",
+            "annotations": []
+          }
+        ]
+      },
+      "model": "auto"
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMGJkOGQ2MTA0Y2Y5ZDUwYTAxNmFiYzM4YzdiZjY4ODdkMDk1NWQzYzEwMThiNjYxMDY=",
+        "created_at": 1790720239,
+        "metadata": {},
+        "model": "gpt-6-luna",
+        "object": "response",
+        "output": [
+          {
+            "id": "msg_0dd4b7ae-1a7b-4027-a317-52873408ea24",
+            "status": "completed",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "",
+                "annotations": []
+              }
+            ]
+          },
+          {
+            "type": "image_generation_call",
+            "id": "ig_839bbdea-22b7-4818-9b7d-b5bed4a0f192",
+            "status": "completed",
+            "result": "[image base64 omitted]"
+          }
+        ],
+        "parallel_tool_calls": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "status": "completed",
+        "text": {},
+        "usage": {
+          "input_tokens": 2273,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 76,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 2349
+        }
+      },
+      "model": "auto"
+    }
+  ],
+  "image": "luna-intent-4005-responses-stream-2026-09-29.png"
+}
