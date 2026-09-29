@@ -213,6 +213,10 @@ class RoutingControlPlane:
 
     def resolve(self, requested_model: str | None) -> tuple[str | None, RoutingState]:
         state = self.snapshot()
+        # `auto` is a LiteLLM model group with an explicit provider fallback
+        # chain, not another spelling of the saved control-desk selection.
+        if requested_model == "auto":
+            return requested_model, state
         if state.mode == "off":
             return requested_model, state
         if state.mode == "force" or (
@@ -249,11 +253,14 @@ class DynamicRoutingPlugin(CustomLogger):
         if (
             isinstance(metadata, dict)
             and metadata.get("advisor_sub_call") is True
-        ) or (
-            isinstance(requested_model, str)
-            and requested_model.endswith("-advisor")
         ):
             return None
+
+        if not isinstance(requested_model, str) or (
+            requested_model not in self.control_plane.allowed_models
+            and requested_model not in VIRTUAL_ALIASES
+        ):
+            raise HTTPException(status_code=404, detail="unknown model")
 
         resolved_model, state = self.control_plane.resolve(requested_model)
         # The advisor hook consumes this exact request snapshot, never a second
@@ -261,7 +268,10 @@ class DynamicRoutingPlugin(CustomLogger):
         metadata["gateway_policy"] = asdict(state)
         # Capture the override once. Deployment hooks also run for nested
         # LiteLLM translations, so they must never read mutable policy again.
-        routed = state.mode == "force" or (state.mode == "alias" and requested_model in VIRTUAL_ALIASES)
+        routed = requested_model != "auto" and (
+            state.mode == "force"
+            or (state.mode == "alias" and requested_model in VIRTUAL_ALIASES)
+        )
         metadata["gateway_reasoning_effort"] = state.reasoning_effort if routed else None
         if resolved_model == requested_model:
             return data
@@ -323,6 +333,66 @@ def _require_local_control_request(request: Request) -> None:
 
 control_plane = _default_control_plane()
 dynamic_routing_plugin = DynamicRoutingPlugin(control_plane)
+
+
+async def _unsupported_operation(request: Request):
+    from fastapi.responses import JSONResponse
+
+    operation = request.scope["subroute_unsupported_operation"]
+    return JSONResponse(
+        status_code=400,
+        content={"error": {
+            "message": f"No configured model supports {operation}.",
+            "type": "invalid_request_error",
+            "param": "model",
+            "code": "unsupported_operation",
+        }},
+    )
+
+
+def _register_unconfigured_operation_routes() -> None:
+    """Shadow unsupported LiteLLM operations before their generic handlers.
+
+    LiteLLM 1.103.0 routes custom provider names through its provider enum in
+    skills/rerank and fans embeddings across chat-only deployments, surfacing
+    internal failures as HTTP 500. The configured model metadata advertises
+    none of these operations. These exact route guards return a caller error
+    until a deployment advertises the capability; LiteLLM keeps ownership of
+    all supported protocols and requests.
+    """
+    guards = (
+        ("/v1/skills", {"GET", "POST"}, "skills"),
+        ("/v1/skills/{skill_id}", {"GET", "DELETE"}, "skills"),
+        ("/v1/rerank", {"POST"}, "rerank"),
+        ("/v1/embeddings", {"POST"}, "embeddings"),
+    )
+    for path, methods, operation in guards:
+        if any(
+            getattr(route, "path", None) == path
+            and methods.issubset(getattr(route, "methods", set()) or set())
+            and getattr(route, "name", None) == f"subroute_unsupported_{operation}"
+            for route in app.router.routes
+        ):
+            continue
+
+        def make_endpoint(unsupported_operation: str):
+            async def endpoint(request: Request):
+                request.scope["subroute_unsupported_operation"] = unsupported_operation
+                return await _unsupported_operation(request)
+
+            return endpoint
+
+        app.add_api_route(
+            path,
+            make_endpoint(operation),
+            methods=methods,
+            name=f"subroute_unsupported_{operation}",
+            include_in_schema=False,
+        )
+        app.router.routes.insert(0, app.router.routes.pop())
+
+
+_register_unconfigured_operation_routes()
 
 
 async def active_model_state(request: Request) -> dict[str, Any]:

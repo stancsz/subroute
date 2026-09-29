@@ -35,7 +35,25 @@ async def _codex_stream(
     headers: dict[str, Any],
     timeout: Any,
     optional_params: dict[str, Any],
+    *,
+    require_usage: bool = False,
 ) -> Any:
+    request_options = _request_options(optional_params)
+    if request_options.get("store") is None:
+        # Codex subscription rejects Responses requests unless storage is
+        # explicitly disabled. LiteLLM's public Responses-to-Chat conversion
+        # can omit the caller's store=false before it reaches this adapter.
+        request_options["store"] = False
+    if require_usage:
+        # LiteLLM's Anthropic Messages bridge needs completion usage even when
+        # the caller requested a buffered (non-streaming) response. This
+        # adapter always streams upstream, so ask the provider adapter to keep
+        # the terminal provider usage chunk for that conversion.
+        stream_options = request_options.get("stream_options")
+        request_options["stream_options"] = {
+            **(stream_options if isinstance(stream_options, dict) else {}),
+            "include_usage": True,
+        }
     return await litellm.acompletion(
         model=f"openai/responses/{_target_model(model)}",
         messages=messages,
@@ -45,8 +63,14 @@ async def _codex_stream(
         timeout=timeout,
         num_retries=0,
         stream=True,
-        **_request_options(optional_params),
+        **request_options,
     )
+
+
+def _is_anthropic_messages_call(logging_obj: Any) -> bool:
+    call_type = getattr(logging_obj, "call_type", None)
+    call_type = getattr(call_type, "value", call_type)
+    return call_type in {"anthropic_messages", "aanthropic_messages"}
 
 
 async def _close_stream(stream: Any) -> None:
@@ -147,8 +171,10 @@ class CodexSubscriptionLLM(CustomLLM):
         timeout=None,
         client=None,
     ) -> ModelResponse:
+        require_usage = _is_anthropic_messages_call(logging_obj)
         stream = await _codex_stream(
-            model, messages, api_base, api_key, headers or {}, timeout, optional_params
+            model, messages, api_base, api_key, headers or {}, timeout, optional_params,
+            require_usage=require_usage,
         )
         chunks = []
         terminal_reason = None
@@ -179,6 +205,11 @@ class CodexSubscriptionLLM(CustomLLM):
             )
         if not provider_usage_seen:
             response.usage = None
+            if require_usage:
+                raise CustomLLMError(
+                    status_code=502,
+                    message="Codex provider omitted usage required by the Anthropic Messages bridge",
+                )
         response.model = _target_model(model)
         return response
 
@@ -201,19 +232,28 @@ class CodexSubscriptionLLM(CustomLLM):
         timeout=None,
         client=None,
     ) -> AsyncIterator[GenericStreamingChunk]:
+        require_usage = _is_anthropic_messages_call(logging_obj)
         stream = await _codex_stream(
-            model, messages, api_base, api_key, headers or {}, timeout, optional_params
+            model, messages, api_base, api_key, headers or {}, timeout, optional_params,
+            require_usage=require_usage,
         )
         terminal_reason = None
+        provider_usage_seen = False
         try:
             async for chunk in stream:
                 terminal_reason = _terminal_finish_reason(chunk) or terminal_reason
+                provider_usage_seen = provider_usage_seen or _field(chunk, "usage") is not None
                 for generic_chunk in _generic_chunks(chunk):
                     yield generic_chunk
             if terminal_reason is None:
                 raise CustomLLMError(
                     status_code=502,
                     message="Codex stream ended without a terminal finish reason",
+                )
+            if require_usage and not provider_usage_seen:
+                raise CustomLLMError(
+                    status_code=502,
+                    message="Codex provider omitted usage required by the Anthropic Messages bridge",
                 )
         finally:
             await _close_stream(stream)

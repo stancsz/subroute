@@ -17,4 +17,5 @@ def test_shared_control_desk_serves_assets_and_sanitized_sources():
     status = client.get("/api/source-status")
     assert status.status_code == 200
     assert {source["name"] for source in status.json()["sources"]} >= {"OpenAI Subscription", "Anthropic API", "DeepSeek API", "Zhipu GLM API", "Alibaba Qwen API"}
+    assert not {"openai", "gemini"}.intersection(source["id"] for source in status.json()["sources"])
     assert all("credentials" not in source for source in status.json()["sources"])

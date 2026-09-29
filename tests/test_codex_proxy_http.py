@@ -72,17 +72,25 @@ def _configured_proxy(
     api_base="https://fixture.invalid/backend-api/codex",
     credential_callback=False,
     incomplete_stream=False,
+    omit_provider_usage=False,
     dynamic_routing_plugin=None,
 ):
     original_acompletion = litellm.acompletion
     upstream_models = []
     upstream_credentials = []
+    upstream_stream_options = []
+    upstream_request_options = []
 
     async def fake_upstream_or_dispatch(**kwargs):
         if kwargs.get("model", "").startswith("openai/responses/"):
             assert kwargs["stream"] is True
             upstream_models.append(kwargs["model"])
             upstream_credentials.append((kwargs.get("api_key"), kwargs.get("extra_headers", {})))
+            upstream_stream_options.append(kwargs.get("stream_options"))
+            upstream_request_options.append({
+                "store": kwargs.get("store"),
+                "stream_options": kwargs.get("stream_options"),
+            })
             if incomplete_stream:
                 return FakeStream([{
                     "id": "chatcmpl-incomplete",
@@ -95,6 +103,23 @@ def _configured_proxy(
                         "finish_reason": None,
                     }],
                 }])
+            if omit_provider_usage:
+                return FakeStream([
+                    {
+                        "id": "chatcmpl-no-usage",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "gpt-6-luna",
+                        "choices": [{"index": 0, "delta": {"role": "assistant", "content": "fixture answer"}, "finish_reason": None}],
+                    },
+                    {
+                        "id": "chatcmpl-no-usage",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "gpt-6-luna",
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    },
+                ])
             return FakeStream()
         return await original_acompletion(**kwargs)
 
@@ -151,7 +176,7 @@ def _configured_proxy(
         yield TestClient(
             proxy_server.app,
             client=("127.0.0.1", 50000),
-        ), upstream_models, upstream_credentials
+        ), upstream_models, upstream_credentials, upstream_stream_options, upstream_request_options
 
 
 def _request(protocol: str, stream: bool):
@@ -177,7 +202,7 @@ def _request(protocol: str, stream: bool):
 
 
 def verify_litellm_proxy_http_routes():
-    with _configured_proxy() as (client, upstream_models, _):
+    with _configured_proxy() as (client, upstream_models, _, upstream_stream_options, upstream_request_options):
         headers = {"anthropic-version": "2023-06-01"}
 
         for protocol in ("chat", "responses", "messages"):
@@ -196,6 +221,11 @@ def verify_litellm_proxy_http_routes():
 
         assert len(upstream_models) == 6
         assert set(upstream_models) == {"openai/responses/gpt-6-luna"}
+        assert upstream_stream_options[4:6] == [
+            {"include_usage": True},
+            {"include_usage": True},
+        ]
+        assert all(options["store"] is False for options in upstream_request_options), upstream_request_options
 
 
 def test_litellm_proxy_http_routes_serve_codex_protocols():
@@ -207,8 +237,10 @@ def verify_codex_auth_file_reload_through_proxy(auth_file: Path):
     with patch.dict("os.environ", {"CODEX_AUTH_FILE": str(auth_file)}):
         with _configured_proxy(api_base=CODEX_API_BASE, credential_callback=True) as (
             client,
-            _,
-            upstream_credentials,
+        _,
+        upstream_credentials,
+        _,
+        _,
         ):
             headers = {"anthropic-version": "2023-06-01"}
             for access_token, account_id in (
@@ -275,6 +307,8 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
             client,
             upstream_models,
             _,
+            _,
+            _,
         ):
             update_response = client.post("/api/active-model", json={
                 "model": "codex-terra",
@@ -307,7 +341,7 @@ def test_current_model_dispatch_uses_saved_control_plane_policy(tmp_path):
 
 
 def verify_incomplete_stream_through_proxy():
-    with _configured_proxy(incomplete_stream=True) as (client, upstream_models, _):
+    with _configured_proxy(incomplete_stream=True) as (client, upstream_models, _, _, _):
         for protocol in ("chat", "responses", "messages"):
             path, payload = _request(protocol, stream=True)
             response = client.post(path, json=payload, headers={
@@ -326,6 +360,31 @@ def verify_incomplete_stream_through_proxy():
             }[protocol]
             assert success_terminal not in response.text, (protocol, response.text)
     assert upstream_models == ["openai/responses/gpt-6-luna"] * 3
+
+
+def test_messages_without_provider_usage_fails_with_a_bounded_gateway_error():
+    with _configured_proxy(omit_provider_usage=True) as (client, _, _, _, _):
+        response = client.post("/v1/messages", json={
+            "model": "codex-luna",
+            "messages": [{"role": "user", "content": "say hello"}],
+            "max_tokens": 32,
+        }, headers={"anthropic-version": "2023-06-01"})
+
+    assert response.status_code == 502, response.text
+    assert "omitted usage required by the Anthropic Messages bridge" in response.text
+
+
+def test_streamed_messages_do_not_emit_success_when_provider_usage_is_missing():
+    with _configured_proxy(omit_provider_usage=True) as (client, _, _, _, _):
+        response = client.post("/v1/messages", json={
+            "model": "codex-luna",
+            "messages": [{"role": "user", "content": "say hello"}],
+            "max_tokens": 32,
+            "stream": True,
+        }, headers={"anthropic-version": "2023-06-01"})
+
+    assert "omitted usage required by the Anthropic Messages bridge" in response.text
+    assert "message_stop" not in response.text
 
 
 def test_proxy_stream_does_not_report_success_without_terminal_upstream_chunk():

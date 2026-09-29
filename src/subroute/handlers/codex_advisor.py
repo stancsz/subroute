@@ -26,8 +26,25 @@ MODELS = {
     "astra": "gpt-6-astra",
     "gpt-6-luna": "gpt-6-luna",
     "luna": "gpt-6-luna",
-    "gpt-reserve": "gpt-reserve",
+    "gpt-reserve": "gpt-5.6-luna",
 }
+
+
+class CodexAdvisorError(RuntimeError):
+    """A failed Codex Subscription request with its safe gateway status."""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        self.status_code = status_code
+        super().__init__(message)
+
+
+def _upstream_http_status(status_code: int) -> int:
+    """Translate provider errors without exposing provider auth as client auth."""
+    if status_code == 429:
+        return 429
+    if status_code in {408, 504}:
+        return 504
+    return 502
 
 
 def has_tool_history(messages: list[dict[str, Any]]) -> bool:
@@ -227,7 +244,10 @@ async def call_codex_streaming_collect(
                 if response.status_code >= 400:
                     err_body = await response.aread()
                     detail = err_body.decode("utf-8", errors="replace")[:200]
-                    raise RuntimeError(f"Codex subscription API error {response.status_code}: {detail}")
+                    raise CodexAdvisorError(
+                        _upstream_http_status(response.status_code),
+                        f"Codex subscription API error {response.status_code}: {detail}",
+                    )
                 async for event in stream_events(response):
                     if event.get("type") in {"response.failed", "response.incomplete", "error"}:
                         raise RuntimeError("Codex advisor stream failed or was incomplete")
@@ -242,6 +262,8 @@ async def call_codex_streaming_collect(
                         if terminal is not None or not isinstance(delta, str):
                             raise RuntimeError("Invalid Codex text delta")
                         deltas.append(delta)
+        except httpx.TimeoutException as exc:
+            raise TimeoutError("Codex subscription request timed out") from exc
         except httpx.HTTPError as exc:
             raise RuntimeError(f"HTTP error communicating with Codex backend: {exc}") from exc
 
@@ -282,7 +304,10 @@ class CodexAdvisorLLM(CustomLLM):
         except ValueError as exc:
             raise CustomLLMError(status_code=400, message=str(exc)) from exc
         except (RuntimeError, TimeoutError) as exc:
-            raise CustomLLMError(status_code=502, message=str(exc)) from exc
+            status_code = getattr(exc, "status_code", 504 if isinstance(exc, TimeoutError) else 502)
+            if status_code not in {429, 502, 504}:
+                status_code = 502
+            raise CustomLLMError(status_code=status_code, message=str(exc)) from exc
 
         return ModelResponse(
             id=f"chatcmpl-codex-advisor-{uuid.uuid4().hex[:12]}",

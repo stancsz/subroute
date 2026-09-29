@@ -71,7 +71,7 @@ function renderEfforts(select, choices, model, selected, helpId, advisor = false
   select.value = efforts.includes(selected) ? selected : "";
   let help = !model ? (advisor && !advisorProvider.value ? "No advisor will be consulted." : "Only models from configured connections are shown.") : !choice?.configured ? "This saved route needs provider configuration before it can be used." : !efforts.length ? (choice.reasoning_note || "This route has no verified reasoning effort control.") : advisor ? `${choice.access}. Reasoning is independent of the target.` : `${choice.access}. Lower effort favors speed; higher effort allows more reasoning.`;
   if (efforts.length && choice.reasoning_note) help += ` ${choice.reasoning_note}`;
-  if (model?.startsWith("gemini-subscription") && !advisor) help += " Text only; no streaming or tools.";
+  if (model?.startsWith("gemini-subscription") && !advisor) help += " Text and schema-constrained tool calls; client tools are not run by the subscription. SSE is buffered until completion; vision is unsupported. Output limits are backend-managed; client token caps are not enforced.";
   if (!advisor && routeMode.value === "off") help = "Routing is off. The client chooses the model and reasoning.";
   document.querySelector(helpId).textContent = help;
 }

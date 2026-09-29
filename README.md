@@ -16,7 +16,7 @@
 
 Your coding tools remember an endpoint and model. Your AI provider, account, or preferred route can change. Updating every client each time is tedious and makes it harder to know which connection will handle the next request.
 
-**Subroute gives compatible clients one local endpoint. Set the model to `current`, then choose the route centrally.**
+**Subroute gives compatible clients one local endpoint. Set the model to `auto` for prioritized automatic routing, or `current` to use the route selected centrally.**
 
 ## What you get
 
@@ -31,12 +31,12 @@ Your coding tools remember an endpoint and model. Your AI provider, account, or 
 
 ```text
 Your coding tools
-       │  OpenAI-compatible API · model: current
+       │  OpenAI-compatible API · model: auto
        ▼
 Subroute on 127.0.0.1:4000
-       │  saved local routing policy
+       │  MiniMax M3 → Gemini 3.8 Flash → Codex Luna
        ▼
-Configured subscription · API provider · local model
+First provider to complete the request
 ```
 
 LiteLLM handles the public API protocols, streaming, and standard provider adapters. Subroute adds the local routing policy, configured subscription integrations, provider status, and control desk. Electron uses the same control desk as `/control`; it does not run the gateway.
@@ -53,10 +53,10 @@ Open the control desk at [http://127.0.0.1:4000/control](http://127.0.0.1:4000/c
 
 ```text
 Base URL: http://127.0.0.1:4000/v1
-Model:    current
+Model:    auto
 ```
 
-You can select a specific model alias in a client when you want that client to keep a fixed route. The available choices come from this checkout's [`config/litellm.yaml`](config/litellm.yaml).
+`auto` tries MiniMax M3 first, then Gemini 3.8 Flash through the subscription integration, then Codex Luna through the subscription integration if the preceding provider returns an error. This is request-time fallback, so a failed upstream attempt may still incur provider cost. Use `current` to follow the route selected in the control desk, or select a specific model alias to keep a fixed route. Available models are listed in this checkout's [`config/litellm.yaml`](config/litellm.yaml).
 
 ### Use the Electron app
 
@@ -80,16 +80,18 @@ docker compose up -d gateway-staging
 
 ## Routing, without surprises
 
-- **`alias`** is the default. It resolves `current`, `default`, and `auto` using the saved route.
-- **`force`** applies the selected route to every new inference request.
+- **`alias`** is the default. It resolves `current` and `default` using the saved route. `auto` always uses the prioritized provider chain.
+- **`force`** applies the selected route to known model requests except explicit `auto` requests.
 - **`off`** leaves model dispatch to LiteLLM.
-- **Advisor** is selected independently. It enables consultation on the Anthropic Messages API; `No advisor` disables it.
+- **Advisor** is selected independently. It enables consultation on the Anthropic Messages API; GPT-6 Luna is available alongside the other configured advisors. `No advisor` disables it.
 
-Subroute does not configure gateway retries or fallback routes. If the selected provider fails, the request fails visibly rather than silently switching to another connection.
+Subroute configures no automatic retries. Only requests explicitly using `auto` fall back across providers, in the documented order. Requests using `current` or a specific model fail visibly if that route fails.
 
 ## Know the limits
 
-A stable endpoint does not make providers interchangeable. Tool use, streaming, vision, context size, reasoning options, and subscription access depend on each route. The Antigravity Gemini subscription integration is text-only and is not certified for streaming or tool use. Check the capabilities of the route you select.
+A stable endpoint does not make providers interchangeable. Tool use, streaming, vision, context size, reasoning options, and subscription access depend on each route. The Antigravity Gemini subscription integration supports text and schema-constrained tool calls. The sidecar sends prompts through the CLI's NDJSON stdin protocol, so long prompts do not consume OS command-line argument space. The client executes returned tool calls; the subscription sidecar does not execute them. In tool mode, bounded plain-text commentary AGY appends after its schema result is ignored, while additional structured results are rejected. It does not support vision. Stream requests are returned as SSE after the CLI has completed the response, so tokens are not progressively streamed.
+
+The Codex subscription endpoint rejects client output-token caps. Subroute omits `max_tokens` and `max_output_tokens` on that provider route, so the Codex backend chooses its own output limit. Gemini Subscription also uses backend-managed output limits: its CLI exposes no output-token cap, so client caps are not enforced. This applies to buffered and SSE responses, including Anthropic Messages. Subroute preserves the completed response and actual provider usage rather than truncating output to imply that a cap was honored. Tool schemas must be self-contained; remote schema references are rejected before provider dispatch.
 
 The gateway binds to loopback by default. Keep it on your machine unless you intentionally configure and secure a different network boundary.
 
@@ -115,7 +117,7 @@ The gateway binds to loopback by default. Keep it on your machine unless you int
 
 编码工具会记住 API 地址和模型，而你使用的 AI 服务、账号或首选模型可能会变化。每次切换都要逐个修改客户端，既麻烦，也不容易确认下一次请求会发给哪个服务。
 
-**Subroute 为兼容的客户端提供一个本地固定入口。客户端设置一次 `current`，之后在 Subroute 控制台集中选择路由。**
+**Subroute 为兼容的客户端提供一个本地固定入口。使用 `auto` 按优先级自动路由，或使用 `current` 跟随控制台中选择的路由。**
 
 ### 它能带来什么
 
@@ -130,12 +132,12 @@ The gateway binds to loopback by default. Keep it on your machine unless you int
 
 ```text
 你的编码工具
-       │  OpenAI 兼容 API · 模型：current
+       │  OpenAI 兼容 API · 模型：auto
        ▼
 Subroute（127.0.0.1:4000）
-       │  本地保存的路由策略
+       │  MiniMax M3 → Gemini 3.8 Flash → Codex Luna
        ▼
-已配置的订阅 · API 服务 · 本地模型
+第一个成功完成请求的服务
 ```
 
 LiteLLM 负责公开 API 协议、流式传输和标准服务适配。Subroute 负责本地路由策略、已配置的订阅集成、服务状态和控制台。Electron 与网页 `/control` 使用同一套控制界面；网关本身由独立的 Compose 服务运行。
@@ -152,10 +154,10 @@ docker compose up -d gateway
 
 ```text
 API 地址： http://127.0.0.1:4000/v1
-模型：     current
+模型：     auto
 ```
 
-如果希望某个客户端始终使用固定模型，也可以直接选择具体模型别名。当前可选项见本仓库的 [`config/litellm.yaml`](config/litellm.yaml)。
+`auto` 首先尝试 MiniMax M3；若服务返回错误，则依次尝试 Gemini 3.8 Flash 订阅和 Codex Luna 订阅。失败的上游尝试仍可能产生费用。使用 `current` 跟随控制台选择的路由，或选择具体模型别名以固定路由。当前模型见本仓库的 [`config/litellm.yaml`](config/litellm.yaml)。
 
 ### 使用 Electron 桌面端
 
@@ -179,16 +181,18 @@ docker compose up -d gateway-staging
 
 ### 路由行为
 
-- **`alias`** 是默认模式，根据已保存的路由解析 `current`、`default` 和 `auto`。
-- **`force`** 将所选路由应用到之后的所有推理请求。
+- **`alias`** 是默认模式，根据已保存的路由解析 `current` 和 `default`。`auto` 始终使用按优先级排列的服务链。
+- **`force`** 将所选路由应用到已知模型的推理请求，显式使用 `auto` 的请求除外。
 - **`off`** 将模型分发交由 LiteLLM 处理。
-- **Advisor（顾问模型）** 独立选择。选择顾问后，Anthropic Messages API 请求会启用咨询；选择 `No advisor` 则关闭。
+- **Advisor（顾问模型）** 独立选择。选择顾问后，Anthropic Messages API 请求会启用咨询；GPT-6 Luna 可与其他已配置顾问一样选择，选择 `No advisor` 则关闭。
 
-Subroute 不配置网关级重试或备用路由。所选服务失败时，请求会明确报错，不会悄悄改发给其他服务。
+Subroute 不配置自动重试。只有明确使用 `auto` 的请求才会按文档顺序尝试备用服务。使用 `current` 或具体模型的请求在该路由失败时会明确报错。
 
 ### 使用边界
 
-统一入口不代表各服务能力相同。工具调用、流式传输、图像输入、上下文长度、推理选项和订阅访问能力都取决于具体路由。Antigravity Gemini 订阅集成目前仅支持文本，尚未认证流式传输或工具调用。请根据实际选择的路由确认其能力。
+统一入口不代表各服务能力相同。工具调用、流式传输、图像输入、上下文长度、推理选项和订阅访问能力都取决于具体路由。Antigravity Gemini 订阅集成支持文本和受 schema 约束的工具调用。Sidecar 通过 CLI 的 NDJSON stdin 协议传递 prompt，避免长 prompt 占用操作系统命令行参数空间。工具调用由客户端执行，订阅 sidecar 不会代为执行；工具模式下 AGY 在 schema 结果后追加的有限纯文本说明会被忽略，额外的结构化结果会被拒绝；该路由不支持图像。流式请求会在 CLI 完成响应后通过 SSE 返回，不会逐 token 输出。Codex 订阅端点不接受调用方的输出 token 上限，Subroute 会在该 provider 路由中省略 `max_tokens` 和 `max_output_tokens`，由 Codex 后端选择输出上限。请根据实际选择的路由确认其能力。
+
+Gemini 订阅同样由后端管理输出上限：CLI 不提供输出 token 上限参数，因此不会执行调用方设置的上限。这适用于普通响应、SSE 和 Anthropic Messages。Subroute 保留完整响应和真实 provider usage，不通过截断输出伪装成遵守了上限。工具 schema 必须自包含；远程 schema 引用会在 provider 调用前被拒绝。
 
 网关默认只监听本机回环地址。除非你主动配置并保护其他网络边界，否则请将其保留在本机使用。
 

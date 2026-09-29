@@ -143,7 +143,8 @@ def test_native_custom_provider_transmits_target_or_advisor_effort(control, monk
     monkeypatch.setattr(litellm, "callbacks", [plugin])
     captured = []
 
-    async def fake_agy(model, prompt):
+    async def fake_agy(model, prompt, **kwargs):
+        assert kwargs.get("json_schema") is None
         captured.append((model, None))
         return "OK", Usage(prompt_tokens=1, completion_tokens=1, total_tokens=2)
 
@@ -182,43 +183,23 @@ def test_gemini_effort_selects_catalog_variant(model, effort, expected):
         antigravity.model_with_effort(model, "xhigh")
 
 
-@pytest.mark.parametrize("alias,provider,model", [
-    ("openai", "openai", "gpt-5.2-codex"),
-    ("gemini-api", "gemini", "gemini-3-flash-preview"),
-])
-def test_api_effort_choices_survive_native_translation(control, alias, provider, model):
-    from litellm.utils import get_optional_params
-
-    choice = next(item for item in control.choices if item.model_id == alias)
-    for effort in choice.reasoning_efforts:
-        control.update(alias, "force", reasoning_effort=effort)
-        params = get_optional_params(model=model, custom_llm_provider=provider, reasoning_effort=effort, drop_params=True)
-        if provider == "gemini":
-            assert params["thinkingConfig"]["thinkingLevel"] == effort
-        else:
-            assert params["reasoning_effort"] == effort
-
-
 def test_routing_choices_follow_configured_sources_without_exposing_credentials(control, monkeypatch):
     monkeypatch.setattr(dynamic_router, "control_plane", control)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("CODEX_AUTH_FILE", "fixture-auth-path")
     monkeypatch.setenv("ANTIGRAVITY_BRIDGE_URL", "http://fixture-bridge")
     client = TestClient(app, client=("127.0.0.1", 50000))
     result = client.get("/api/routing-options").json()
     choices = {item["model_id"]: item for item in result["models"]}
-    assert choices["openai"]["configured"] is False
+    assert "openai" not in choices
+    assert "gemini-api" not in choices
     assert choices["codex-luna"]["configured"] is True
-    assert choices["codex-luna"]["provider"] == choices["openai"]["provider"] == "OpenAI"
-    assert choices["codex-luna"]["access"] != choices["openai"]["access"]
+    assert choices["codex-luna"]["provider"] == "OpenAI"
     assert next(item for item in result["advisor_models"] if item["model_id"] == "gemini-subscription")["configured"] is True
-    monkeypatch.setenv("OPENAI_API_KEY", "fixture-secret-do-not-expose")
     response = client.get("/api/routing-options")
-    assert next(item for item in response.json()["models"] if item["model_id"] == "openai")["configured"] is True
-    assert "fixture-secret" not in response.text
+    assert "openai" not in {item["model_id"] for item in response.json()["models"]}
 
 
-@pytest.mark.parametrize("old,canonical", [("openai-guided", "openai"), ("openrouter-guided", "openrouter"), ("minimax-guided", "minimax")])
+@pytest.mark.parametrize("old,canonical", [("openrouter-guided", "openrouter"), ("minimax-guided", "minimax")])
 @pytest.mark.parametrize("advisor", [None, "codex-sol-advisor"])
 def test_retired_model_state_migrates_without_changing_advisor(control, old, canonical, advisor):
     original = {"active_model": old, "mode": "force", "policy_version": 9,

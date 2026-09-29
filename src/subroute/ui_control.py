@@ -53,7 +53,7 @@ async def source_status(_: Request) -> dict[str, object]:
 
 
 async def provider_usage(refresh: bool = False) -> dict[str, object]:
-    return read_provider_usage(refresh=refresh)
+    return await read_provider_usage(refresh=refresh)
 
 
 def register_ui_routes(app: object) -> None:

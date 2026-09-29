@@ -2579,6 +2579,30 @@ wheels = [
 ]
 
 [[package]]
+name = "subroute"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "jsonschema" },
+    { name = "litellm", extra = ["extra-proxy", "proxy"] },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jsonschema", specifier = "==4.26.0" },
+    { name = "litellm", extras = ["extra-proxy", "proxy"], specifier = "==1.101.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
+    { name = "pyyaml", marker = "extra == 'test'", specifier = ">=6" },
+]
+provides-extras = ["test"]
+
+[[package]]
 name = "tenacity"
 version = "9.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -2709,28 +2733,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/81/5b/879b2f932adfa7a05
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/a4/017a7a6cbe387d961a688ec31364ae60a5c4e22c96ae9921b79a947c855d/tzlocal-5.4.4-py3-none-any.whl", hash = "sha256:aae09f0126a8a86fa736be266eb4a471380d26a0de3bc14844e7821fee3e2a15", size = 18115, upload-time = "2026-06-29T08:03:38.666Z" },
 ]
-
-[[package]]
-name = "subroute"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "litellm", extra = ["extra-proxy", "proxy"] },
-]
-
-[package.optional-dependencies]
-test = [
-    { name = "pytest" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "litellm", extras = ["extra-proxy", "proxy"], specifier = "==1.101.0" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
-    { name = "pyyaml", marker = "extra == 'test'", specifier = ">=6" },
-]
-provides-extras = ["test"]
 
 [[package]]
 name = "urllib3"

@@ -102,9 +102,11 @@ def test_nonstreaming_collects_native_chat_stream_with_tool_usage_and_terminal_s
 
     assert captured["model"] == "openai/responses/gpt-6-luna"
     assert captured["stream"] is True
+    assert "stream_options" not in captured
     assert captured["num_retries"] == 0
     assert captured["timeout"] == 12
     assert captured["api_base"] == "https://chatgpt.com/backend-api/codex"
+    assert captured["store"] is False
     assert "max_tokens" not in captured
     assert "max_output_tokens" not in captured
     assert "user" not in captured
@@ -114,6 +116,71 @@ def test_nonstreaming_collects_native_chat_stream_with_tool_usage_and_terminal_s
     assert response.choices[0].message.tool_calls[0].function.name == "lookup"
     assert response.choices[0].message.tool_calls[0].function.arguments == '{"q":1}'
     assert response.usage.total_tokens == 6
+    assert stream.closed
+
+
+def test_anthropic_calls_request_usage_from_the_forced_codex_stream(monkeypatch):
+    captured = {}
+    stream = FakeStream(tool_call_chunks())
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return stream
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    logging_obj = type("Logging", (), {"call_type": "anthropic_messages"})()
+    response = call_handler(logging_obj=logging_obj)
+
+    assert captured["stream_options"] == {"include_usage": True}
+    assert response.usage.total_tokens == 6
+
+
+def test_codex_dispatch_disables_storage_when_litellm_omits_it(monkeypatch):
+    captured = {}
+    stream = FakeStream(tool_call_chunks())
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return stream
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    optional_params = {
+        "stream": False,
+        "max_tokens": 64,
+        "max_output_tokens": 96,
+        "user": "client-user",
+    }
+    call_handler(optional_params=optional_params)
+
+    assert captured["store"] is False
+
+
+def test_anthropic_calls_reject_missing_provider_usage_clearly(monkeypatch):
+    stream = FakeStream([
+        {
+            "id": "chatcmpl-fixture",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "gpt-6-luna",
+            "choices": [{"index": 0, "delta": {"role": "assistant", "content": "done"}, "finish_reason": None}],
+        },
+        {
+            "id": "chatcmpl-fixture",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "gpt-6-luna",
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        },
+    ])
+
+    async def fake_acompletion(**kwargs):
+        return stream
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    logging_obj = type("Logging", (), {"call_type": "anthropic_messages"})()
+
+    with pytest.raises(CustomLLMError, match="omitted usage required by the Anthropic Messages bridge"):
+        call_handler(logging_obj=logging_obj)
     assert stream.closed
 
 

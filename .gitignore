@@ -6,3 +6,4 @@ desktop/node_modules/
 .tmp-*.png
 *.egg-info/
 config/active_model.json
+/tmp/

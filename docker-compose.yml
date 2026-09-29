@@ -47,6 +47,7 @@ services:
       - ~/.codex/auth.json:/root/.codex/auth.json:ro
     environment:
       - PYTHONPATH=/app/src
+      - HEALTH_CHECK_TIMEOUT_SECONDS=10
       # Preserve the existing production policy file during migration.
       - ACTIVE_MODEL_STATE_PATH=/app/config/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres:5432/litellm
@@ -62,8 +63,6 @@ services:
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
       - UI_USERNAME=${UI_USERNAME:-admin}
       - UI_PASSWORD=${UI_PASSWORD:-sk-gateway-local-dev}
-      - OPENAI_API_KEY
-      - GEMINI_API_KEY
       - MINIMAX_API_KEY
       - OPENROUTER_API_KEY
     extra_hosts:
@@ -87,6 +86,7 @@ services:
       - ~/.codex/auth.json:/root/.codex/auth.json:ro
     environment:
       - PYTHONPATH=/app/src
+      - HEALTH_CHECK_TIMEOUT_SECONDS=10
       - ACTIVE_MODEL_STATE_PATH=/app/state/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
       - CODEX_AUTH_FILE=/root/.codex/auth.json
@@ -98,8 +98,6 @@ services:
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
       - UI_USERNAME=${UI_USERNAME:-admin}
       - UI_PASSWORD=${UI_PASSWORD:-sk-gateway-local-dev}
-      - OPENAI_API_KEY
-      - GEMINI_API_KEY
       - MINIMAX_API_KEY
       - OPENROUTER_API_KEY
     extra_hosts:

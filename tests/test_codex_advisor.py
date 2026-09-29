@@ -51,6 +51,38 @@ def test_missing_usage_is_not_fabricated(monkeypatch):
         collect(monkeypatch, [DELTA, {"type": "response.completed", "response": {"status": "completed"}}])
 
 
+def test_reserve_advisor_alias_uses_luna_reserve_model(monkeypatch):
+    sent = {}
+
+    def respond(request):
+        sent.update(json.loads(request.content))
+        return httpx.Response(200, text="".join(
+            "data: " + json.dumps(event) + "\n\n"
+            for event in [DELTA, {"type": "response.completed", "response": {
+                "status": "completed",
+                "usage": {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3},
+            }}]
+        ))
+
+    monkeypatch.setattr(advisor, "read_codex_credentials", lambda: ("fixture", "fixture"))
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        advisor.httpx, "AsyncClient",
+        lambda **kwargs: client_type(
+            transport=httpx.MockTransport(respond), **kwargs
+        ),
+    )
+
+    text, usage = asyncio.run(advisor.call_codex_streaming_collect(
+        "gpt-reserve", [{"role": "user", "content": "hello"}]
+    ))
+
+    assert sent["model"] == "gpt-5.6-luna"
+    assert sent["stream"] is True
+    assert text == "partial"
+    assert usage.total_tokens == 3
+
+
 @pytest.mark.parametrize("message", [
     {"role": "tool", "content": "result"},
     {"role": "user", "content": [{"type": "image_url", "image_url": "fixture"}]},
@@ -129,10 +161,11 @@ def test_malformed_or_unsupported_tool_history_fails_closed(messages, match):
         advisor.build_responses_input(messages)
 
 
-@pytest.mark.parametrize("status", [401, 429, 500])
-def test_http_failures_are_not_success(monkeypatch, status):
-    with pytest.raises(RuntimeError, match="API error"):
+@pytest.mark.parametrize(("status", "gateway_status"), [(401, 502), (408, 504), (429, 429), (500, 502), (503, 502)])
+def test_http_failures_are_not_success_and_keep_gateway_classification(monkeypatch, status, gateway_status):
+    with pytest.raises(advisor.CodexAdvisorError, match="API error") as error:
         collect(monkeypatch, [], status=status)
+    assert error.value.status_code == gateway_status
 
 
 @pytest.mark.parametrize("body", ["data: not-json\n\n", "data: [DONE]\n\n", ""])
@@ -141,10 +174,15 @@ def test_invalid_or_empty_stream_fails(monkeypatch, body):
         collect(monkeypatch, [], raw=body)
 
 
-@pytest.mark.parametrize("error", [httpx.ReadTimeout("fixture"), httpx.ConnectError("fixture")])
+@pytest.mark.parametrize("error", [httpx.ConnectError("fixture")])
 def test_transport_failure_is_not_retried(monkeypatch, error):
     with pytest.raises(RuntimeError, match="HTTP error"):
         collect(monkeypatch, [], error=error)
+
+
+def test_timeout_is_classified_as_gateway_timeout_without_retry(monkeypatch):
+    with pytest.raises(TimeoutError, match="timed out"):
+        collect(monkeypatch, [], error=httpx.ReadTimeout("fixture"))
 
 
 def test_cancelled_request_propagates(monkeypatch):

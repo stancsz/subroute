@@ -1,6 +1,6 @@
 # Control desk and Electron review
 
-**Date:** 2026-09-24
+**Date:** 2026-09-24; visual recheck 2026-09-25
 **Verdict:** UI implementation delivered; visual acceptance partial; commercial release readiness not established
 
 ## Acceptance ledger
@@ -12,9 +12,9 @@
 | Provider inventory truthfulness | Pass for observed API state | Seven configured routes, sign-in required, unavailable quota, setup needed, and unsupported sources have distinct labels. Usage is not estimated. |
 | API failure recovery | Pass in source review | Inventory failure changes the summary to unavailable, clears stale cards, and offers refresh. Usage-only failure retains the inventory with a quota error state. |
 | Electron URL boundary | Pass in source review | Only loopback HTTP with no URL credentials is accepted; a timed API probe and source payload validation precede the settings write. |
-| Browser visual quality | Inspected, one desktop viewport | Direct screenshot at 1208 × 900 showed the routing-first layout, configured cards, quota state, and expandable other providers. This is not a narrow-width or human release approval. |
+| Browser visual quality | Inspected, one desktop viewport | Fresh read-only browser capture at 1278 × 910 on 2026-09-25 shows the routing-first layout, separate target/advisor controls, policy scope, and configured source cards. [View the capture](control-desk-live-2026-09-25.png). The live page showed production `codex-luna`, Force mode, policy v10. No routing controls were changed. This is not a narrow-width or human release approval. |
 | Electron visual quality | Unverified | Electron 44.4.5 opened a responsive titled window. The native UI was inaccessible to the available visual-control interface. |
-| Narrow browser layout | Unverified | CSS defines narrow breakpoints; no viewport override was exposed for direct inspection. |
+| Narrow browser layout | Partial | At a 390 × 844 emulated viewport, the first-fold capture showed the routing header and target card in a single column. `document.documentElement.scrollWidth` was 390, equal to the viewport, so there was no horizontal overflow. A second capture at the same viewport visibly shows the target and advisor controls stacked vertically and the beginning of the request-policy section ([first fold](control-desk-narrow-live-2026-09-25.png), [target, advisor, and policy transition](control-desk-narrow-mid-live-2026-09-25.png)). The screenshot helper remained unreliable after scrolling, so the rest of the policy and source sections were not visually verified. |
 | Commercial launch readiness | Not established | No installer, signing, update path, supported release channel, customer onboarding commitment, support model, pricing, or production rollout was delivered or validated. |
 
 ## Independent source review
@@ -31,4 +31,4 @@ The critic's first review found misleading inventory failure state, overbroad El
 
 ## Follow-up for release evaluation
 
-Inspect the same first-run connection and routing journey at narrow browser width and actual Electron dimensions, including initial no-gateway, invalid URL, incompatible service, offline recovery, and keyboard focus. Separately establish target OS/release channel, packaging and signing, update behavior, provider onboarding, support expectations, and the intended commercial model before claiming launch readiness.
+Finish visual review of the lower control-desk sections at narrow browser width and inspect actual Electron dimensions, including initial no-gateway, invalid URL, incompatible service, offline recovery, and keyboard focus. Separately establish target OS/release channel, packaging and signing, update behavior, provider onboarding, support expectations, and the intended commercial model before claiming launch readiness.

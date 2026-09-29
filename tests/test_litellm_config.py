@@ -21,6 +21,10 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     prod, staging = services["gateway"], services["gateway-staging"]
     prod_env = dict(item.split("=", 1) for item in prod["environment"] if "=" in item)
     stage_env = dict(item.split("=", 1) for item in staging["environment"] if "=" in item)
+    assert prod_env["HEALTH_CHECK_TIMEOUT_SECONDS"] == "10"
+    assert stage_env["HEALTH_CHECK_TIMEOUT_SECONDS"] == "10"
+    assert "OPENAI_API_KEY" not in prod_env and "OPENAI_API_KEY" not in stage_env
+    assert "GEMINI_API_KEY" not in prod_env and "GEMINI_API_KEY" not in stage_env
     assert prod_env["ACTIVE_MODEL_STATE_PATH"] != stage_env["ACTIVE_MODEL_STATE_PATH"]
     assert "./config:/app/config:ro" in staging["volumes"]
     assert "gateway-staging-state:/app/state" in staging["volumes"]
@@ -46,6 +50,49 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     assert "@sha256:" in prod["image"]
 
 
+def test_compose_publishes_gateway_ports_on_loopback():
+    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
+
+    assert services["gateway"]["ports"] == ["127.0.0.1:4000:4000"]
+    assert services["gateway-staging"]["ports"] == ["127.0.0.1:4005:4005"]
+
+
+def test_antigravity_image_pins_build_dependencies_and_disables_self_update():
+    dockerfile = (ROOT / "sidecars" / "antigravity" / "Dockerfile").read_text()
+
+    assert "FROM --platform=$BUILDPLATFORM python:3.13-slim@sha256:" in dockerfile
+    assert "ARG TARGETARCH" in dockerfile
+    assert 'case "${TARGETARCH}" in' in dockerfile
+    assert 'if [ "${TARGETARCH}" = "$(dpkg --print-architecture)" ]' in dockerfile
+    runtime_stage = dockerfile.split("\nFROM python:3.13-slim@sha256:", 1)[1]
+    assert "apt-get" not in runtime_stage
+    assert "curl" not in runtime_stage
+    assert "python:3.13-slim@sha256:" in dockerfile
+    assert "ARG DEBIAN_SNAPSHOT=20260925T000000Z" in dockerfile
+    assert "https://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}" in dockerfile
+    assert (
+        "https://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}"
+        in dockerfile
+    )
+    assert dockerfile.count("apt-get update") == 1
+    assert (
+        dockerfile.index("> /etc/apt/sources.list")
+        < dockerfile.index("apt-get update")
+    )
+    assert dockerfile.index("apt-get update") < dockerfile.index("apt-get install")
+    assert "ARG AGY_VERSION=1.2.11" in dockerfile
+    assert (
+        "AGY_SHA256_AMD64=c91c62c5e6fa954f5a7e1d7b9ad417d749db4aa60a4ba0b3d604dec1b645d190"
+        in dockerfile
+    )
+    assert (
+        "AGY_SHA256_ARM64=01513bc61f9592353045ba801ebb407fbccb8984fcbfde591bc6b681b24e92bc"
+        in dockerfile
+    )
+    assert "AGY_CLI_DISABLE_AUTO_UPDATE=true" in dockerfile
+    assert "https://antigravity.google/cli/install.sh" not in dockerfile
+
+
 def test_all_public_protocols_are_owned_by_litellm_proxy():
     package = ROOT / "src" / "subroute"
 
@@ -60,9 +107,14 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     deployments = config()["model_list"]
     by_name = {deployment["model_name"]: deployment for deployment in deployments}
 
-    assert by_name["openai"]["litellm_params"]["model"].startswith("openai/")
+    assert "openai" not in by_name
     assert by_name["current"]["model_info"]["selectable"] is False
-    assert by_name["gemini-api"]["litellm_params"]["model"].startswith("gemini/")
+    assert by_name["current"]["model_info"]["disable_background_health_check"] is True
+    assert "gemini-api" not in by_name
+    assert not any(
+        "gpt-5.2-codex" in str(deployment.get("litellm_params", {}).get("model", ""))
+        for deployment in deployments
+    )
     assert by_name["openrouter"]["litellm_params"] == {
         "model": "openrouter/minimax/minimax-m3",
         "api_key": "os.environ/OPENROUTER_API_KEY",
@@ -89,7 +141,20 @@ def test_subscription_channels_stay_behind_litellm():
     assert by_name["gemini-subscription"]["litellm_params"]["model"] == (
         "antigravity/gemini-3.8-flash"
     )
+    for name in (
+        "gemini-subscription",
+        "gemini-subscription-3.7-flash",
+        "gemini-subscription-3.6-flash",
+        "gemini-subscription-pro",
+    ):
+        capabilities = set(by_name[name]["model_info"]["capabilities"])
+        assert "buffered-sse" in capabilities
+        assert "streaming" not in capabilities
     assert config()["litellm_settings"]["custom_provider_map"] == [
+        {
+            "provider": "codex-subscription",
+            "custom_handler": "subroute.handlers.codex_subscription.codex_subscription_handler",
+        },
         {
             "provider": "antigravity",
             "custom_handler": "subroute.handlers.antigravity.antigravity_handler",
@@ -100,9 +165,20 @@ def test_subscription_channels_stay_behind_litellm():
         },
     ]
     codex = by_name["codex-subscription"]["litellm_params"]
-    assert codex["model"] == "openai/responses/gpt-6-sol"
+    assert codex["model"] == "codex-subscription/gpt-6-sol"
     assert codex["store"] is False
+    assert codex["allowed_openai_params"] == ["reasoning_effort"]
     assert codex["extra_headers"]["ChatGPT-Account-ID"] == "refreshed-at-dispatch"
+    for alias in ("codex-astra", "codex-terra", "codex-luna", "codex-reserve"):
+        params = by_name[alias]["litellm_params"]
+        assert params["allowed_openai_params"] == ["reasoning_effort"]
+        assert params["store"] is False
+    assert by_name["codex-reserve"]["litellm_params"]["model"] == (
+        "codex-subscription/gpt-5.6-luna"
+    )
+    assert by_name["codex-reserve"]["model_info"]["display_name"] == (
+        "GPT-5.6 Luna (reserve-capable)"
+    )
     assert by_name["codex-terra-advisor"]["model_info"]["advisor_selectable"] is True
     assert by_name["codex-sol-advisor"]["litellm_params"]["model"] == (
         "codex-advisor/gpt-6-sol"
@@ -110,17 +186,24 @@ def test_subscription_channels_stay_behind_litellm():
     assert by_name["codex-astra-advisor"]["litellm_params"]["model"] == (
         "codex-advisor/gpt-6-astra"
     )
+    luna_advisor = by_name["codex-luna-advisor"]
+    assert luna_advisor["model_info"]["advisor_selectable"] is True
+    assert luna_advisor["model_info"]["selectable"] is False
+    assert luna_advisor["litellm_params"]["model"] == "codex-advisor/gpt-6-luna"
     assert by_name["gemini-subscription"]["litellm_params"]["model"] == (
         "antigravity/gemini-3.8-flash"
     )
 
 
-def test_routing_fails_closed_without_retry_or_fallback():
+def test_only_explicit_auto_route_has_fallbacks_without_retries():
     settings = config()
     routing = settings["router_settings"]
 
     assert routing["num_retries"] == 0
-    assert routing["fallbacks"] == []
+    assert routing["fallbacks"] == [
+        {"auto": ["auto-gemini-subscription"]},
+        {"auto-gemini-subscription": ["auto-codex-luna"]},
+    ]
     assert settings["litellm_settings"]["drop_params"] is True
     assert settings["general_settings"]["master_key"] == (
         "os.environ/GATEWAY_MASTER_KEY"
@@ -128,6 +211,8 @@ def test_routing_fails_closed_without_retry_or_fallback():
     assert settings["general_settings"]["database_url"] == (
         "os.environ/DATABASE_URL"
     )
+    assert settings["general_settings"]["health_check_concurrency"] == 2
+    assert settings["general_settings"]["health_check_skip_disabled_background_models"] is True
     assert "disable_error_logs" not in settings["general_settings"]
 
 

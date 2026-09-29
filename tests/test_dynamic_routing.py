@@ -41,6 +41,9 @@ def make_control_plane(tmp_path: Path) -> RoutingControlPlane:
   - model_name: codex-astra-advisor
     model_info: {selectable: false, advisor_selectable: true}
     litellm_params: {model: codex-advisor/astra}
+  - model_name: codex-luna-advisor
+    model_info: {selectable: false, advisor_selectable: true}
+    litellm_params: {model: codex-advisor/luna}
 """,
         encoding="utf-8",
     )
@@ -61,12 +64,13 @@ def test_candidates_filter_virtual_and_non_selectable_models(tmp_path: Path):
         "codex-terra-advisor",
         "codex-sol-advisor",
         "codex-astra-advisor",
+        "codex-luna-advisor",
     ]
     assert control.choices[0].display_name == "MiniMax M3"
     assert control.choices[0].capabilities == ("tools", "204k")
 
 
-def test_alias_mode_only_resolves_current_and_preserves_trace(tmp_path: Path):
+def test_alias_mode_resolves_current_but_preserves_explicit_models(tmp_path: Path):
     control = make_control_plane(tmp_path)
     plugin = DynamicRoutingPlugin(control)
     data = {"model": "current", "metadata": {"client": "codex"}}
@@ -92,10 +96,16 @@ def test_alias_mode_only_resolves_current_and_preserves_trace(tmp_path: Path):
     assert run(plugin, explicit) is explicit
     assert explicit["model"] == "desktop"
 
-    for alias in ("default", "auto"):
+    for alias in ("default",):
         compatible = {"model": alias}
         run(plugin, compatible)
         assert compatible["model"] == "minimax"
+
+    automatic = {"model": "auto"}
+    run(plugin, automatic)
+    assert automatic["model"] == "auto"
+    assert automatic["metadata"]["gateway_reasoning_effort"] is None
+    assert "routing" not in automatic["metadata"]
 
 
 def test_force_and_off_modes_have_explicit_semantics(tmp_path: Path):
@@ -103,7 +113,7 @@ def test_force_and_off_modes_have_explicit_semantics(tmp_path: Path):
     plugin = DynamicRoutingPlugin(control)
 
     force = control.update("desktop", "force")
-    data = {"model": "some-client-model"}
+    data = {"model": "minimax"}
     run(plugin, data)
     assert data["model"] == "desktop"
     assert data["metadata"]["routing"]["policy_version"] == force.policy_version
@@ -114,20 +124,54 @@ def test_force_and_off_modes_have_explicit_semantics(tmp_path: Path):
     assert passthrough["model"] == "current"
 
 
+def test_unknown_model_is_rejected_before_force_routing(tmp_path: Path):
+    from fastapi import HTTPException
+
+    control = make_control_plane(tmp_path)
+    control.update("desktop", "force")
+    data = {"model": "does-not-exist"}
+
+    with pytest.raises(HTTPException) as error:
+        run(DynamicRoutingPlugin(control), data)
+
+    assert error.value.status_code == 404
+    assert data["model"] == "does-not-exist"
+    assert data["metadata"] == {}
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("get", "/v1/skills", None),
+        ("post", "/v1/rerank", {"model": "current", "query": "q", "documents": ["d"]}),
+        ("post", "/v1/embeddings", {"model": "current", "input": "x"}),
+    ],
+)
+def test_unconfigured_provider_operations_return_client_errors(method, path, body):
+    client = TestClient(app, client=("127.0.0.1", 50000))
+    response = getattr(client, method)(path, json=body) if body is not None else client.get(path)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "unsupported_operation"
+
+
 def test_routing_precedes_advisor_injection_for_plain_target(tmp_path: Path):
     control = make_control_plane(tmp_path)
     control.update("minimax", "alias")
+    # Capture the intended advisor in the same policy snapshot as the target.
+    # Changing the persisted policy after the router hook would leave this
+    # request on its original snapshot and could invoke a live Gemini advisor.
+    control.update_advisor("codex-terra-advisor")
     router = DynamicRoutingPlugin(control)
     advisor = AdvisorPlugin()
     data = {"model": "current", "messages": [{"role": "user", "content": "help"}]}
 
     asyncio.run(router.async_pre_call_hook({}, None, data, "anthropic_messages"))
-    control.update_advisor("codex-terra-advisor")
     asyncio.run(advisor.async_pre_call_hook({}, None, data, "anthropic_messages"))
 
     assert data["model"] == "minimax"
     assert data["tools"][0]["type"] == ADVISOR_TOOL_TYPE
-    assert data["tools"][0]["model"] == "gemini-subscription"
+    assert data["tools"][0]["model"] == "codex-terra-advisor"
 
 
 def test_persisted_advisor_wins_over_startup_environment(tmp_path, monkeypatch):
@@ -237,6 +281,13 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     )
     assert advisor.status_code == 200
     assert advisor.json()["advisor_model"] == "codex-terra-advisor"
+    luna_advisor = client.post(
+        "/api/advisor-model",
+        json={"advisor_model": "codex-luna-advisor"},
+        headers={"origin": "http://testserver"},
+    )
+    assert luna_advisor.status_code == 200
+    assert luna_advisor.json()["advisor_model"] == "codex-luna-advisor"
     no_advisor = client.post(
         "/api/advisor-model",
         json={"advisor_model": None},

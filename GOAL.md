@@ -1,119 +1,88 @@
-# Subroute 核心目标与技术规格 (GOAL.md)
+# Subroute 维护性与可靠性目标
 
-本文档定义了 Subroute 的核心目标、架构设计边界、功能规范及验收标准。
+**状态：complete**
+**优先级：最高（目标已完成）**
+**更新日期：2026-09-29**
 
----
+**2026-09-29 提交前复查：** 后续 Auto 路由增加三个 deployment，当前 production/staging inventory 为 21 项。深度复查修复 Gemini 结构化输出校验、target/advisor profile、terminal usage 分类、Linux 子进程回收和状态误报，并补充 Auto fallback 行为回归。用户明确选择保留 Gemini 后端管理输出上限的兼容行为；CLI 无输出 token cap 参数，README 和控制台现明确告知调用方上限不被执行。最新双运行环境验证及边界见 [提交前复查](docs/evals/uncommitted-review-2026-09-29.md)，下方原始结项收据保留为历史证据。
 
-## 一、 核心目标 (Core Goals)
+## 目标
 
-1. **统一接入 OpenAI Subscription (ChatGPT / Codex 订阅)**：
-   - 深度复用本地个人订阅凭证（读取 `~/.codex/auth.json` 中的 `access_token` 与 `account_id`）。
-   - 请求发往 `https://chatgpt.com/backend-api/codex`，通过 LiteLLM 原生 Responses-to-Chat bridge 转换。
-   - 支持凭据请求前热加载与自动刷新（防止 JWT 过期导致 401 掉线），无需手动配置官方付费 `OPENAI_API_KEY`。
+让 Subroute 的现有本地网关在正常工作和依赖故障时都表现可预测：请求不因网关内部阻塞、竞态、未回收的子进程或无法诊断的异常而随机失败。任何无法避免的 provider 错误都必须有边界、可归因，并且不能把无关请求一起拖垮。
 
-2. **规范化网关端口：4000 作为生产环境 (Production)**：
-   - **4000 (Prod 生产端口)**：对外统一服务端口，服务根路径 `http://127.0.0.1:4000`，API 入口 `http://127.0.0.1:4000/v1`。所有日常开发的主力 IDE 与工具（Cursor, Claude Code, Aider, Windsurf 等）统一且仅配置该端口。
-   - **4005 (Staging 测试端口)**：作为预发布与集成回归演练环境，保障新 Provider、插件升级或配置变更时具备独立的隔离沙箱，不影响 4000 生产流量。
-   - 单进程架构：废弃独立外部 Sidecar 进程，所有定制 Provider（如 Antigravity）与路由扩展全部运行在同一网关进程内。
+当前只做维护性、可靠性和证明这两者所需的修复。此前的产品功能、兼容性和界面目标已存档，作为历史决策与证据，不构成当前活动目标或新增功能要求。归档见 `docs/goal/archive/`。
 
-3. **控制面快速切模型：下拉菜单动态指定当前模型**：
-   - 提供直观极简的网页控制台（生产环境 **`http://127.0.0.1:4000/control`**）。
-   - 页面内置下拉菜单（Dropdown），可一键选取当前生效的目标模型。
-   - 遵循架构准则：**“配置提供候选集，控制面保存路由策略，数据面在请求入口解析模型别名”**。
+## 当前运行基线
 
----
+2026-09-28 复查确认 production (`4000`) 和 staging (`4005`) 均运行 LiteLLM 1.103.0；两者 readiness 可用，PostgreSQL 和 Antigravity sidecar healthy。初始失败包含 Anthropic Messages 的 `NoneType.prompt_tokens` HTTP 500，以及 Responses API 的 Codex `Store must be set to false` HTTP 400。Messages 失败时 Codex Advisor 已成功并记录 `advice_injected`；失败发生在 LiteLLM 转换缺少 provider usage 的 Codex completion 时。修复后，Chat Completions、Responses、Anthropic Messages 的 buffered 与 streaming 路径分别在 production 和 staging 通过真实 Codex Subscription 请求，且 Anthropic Messages 的 advisor-enabled 路径也完成。当前保存策略保持 production `codex-luna` / `force` / 无 Advisor，staging `codex-luna` / `force` / `gemini-subscription`；另在 staging 临时选择 `codex-sol-advisor` 做完两种 Messages 检查后恢复原策略。端到端证据不关闭下方其他可靠性门槛。
 
-## 二、 架构设计与实现规范
+**2026-09-29 用户限定的 provider 范围：** 已从活动 LiteLLM config、控制台 source 列表和两个 gateway 的环境中移除 `openai` → `openai/gpt-5.2-codex` 与 Gemini API key deployment；不再向 gateway 注入 `OPENAI_API_KEY` 或 `GEMINI_API_KEY`。保留 Codex Subscription、Gemini Subscription、OpenRouter，以及动态 `current` alias。不得把 Direct Gemini API 或 GPT-5.2 Codex API 请求放入验证矩阵。可靠性 closeout 当时 public `/v1/models` 有 17 项，两个 API-key alias 均不存在；之后按用户要求新增 `codex-luna-advisor` Subscription advisor alias，当前 inventory 为 18，API-key deployments 仍不存在。真实 Gemini 请求仅经 Subscription sidecar。
 
-### 1. 动静分离的路由模型
-* **IDE 侧契约**：客户端模型名称统一固定填 **`current`**（兼容别名：`default`, `auto`）。IDE 仅配置一次，后续永远无需重新打开设置修改模型。
-* **策略模式（State Modes）**：
-  * **`alias` 模式（默认推荐）**：仅重写模型名为 `current` / `default` 的请求，精准转发到控制面选中的目标物理模型；客户端明确指定特定模型（如指定请求 `desktop`）时不予干预，契约清晰，易于审计。
-  * **`force` 模式（显式全局覆盖）**：控制面勾选后开启，无论客户端请求何种模型，一律强制改写为当前选中的物理模型。
-  * **`off` 模式（旁路直通）**：关闭动态路由，完全回退至 LiteLLM 原生静态分发。
+初始全量 `/health` 探测约耗时 15 秒并报告 6 个 unhealthy deployments；readiness 探测约耗时 0.14 秒。provider-usage 查询的源码路径由 async route 同步调用；在 cache miss 或显式刷新时，会在全局锁内串行访问多个 provider，代码声明的单源 timeout 合计最高约 36 秒。此前观察到的 0.02 秒 usage 响应命中了缓存，不能证明首次查询或刷新不会阻塞。这些只记录调查时状态；新的证据写在下方对应验收项。
 
-### 2. 控制面 (Control Plane) 规范
-* **候选集过滤与防环路**：
-  - 控制面自动从 `config/litellm.yaml` 的 `model_list` 读取可路由的模型，自动排除 `current`、`default` 等虚拟别名，杜绝死循环递归。
-* **原子写入与读写分离**：
-  - 控制面修改策略后，通过 `tempfile -> flush -> os.replace` 原子写入持久化状态文件 `config/active_model.json`，防止进程崩溃或并发写入导致文件损坏。
-  - 数据面运行时使用内存快照读取当前状态，杜绝每次推理请求都读磁盘 I/O。
-* **最小安全边界**：
-  - 严格限制本地回环监听 (`127.0.0.1`)。
-  - API 接口 (`POST /api/active-model`) 实施严格的模型白名单比对，阻断非法模型名及路径注入。
+这些是调查起点，不是修复完成证据。每次后续验证都必须重新取得时间和结果明确的运行证据。
 
-### 3. 数据面 (Data Plane) 规范
-* **显式路由解析与审计追踪**：
-  - 在请求入口 Hook (`async_pre_call_hook`) 中执行路由解析：
-    ```python
-    requested_model = data.get("model")
-    resolved_model = resolve_model(requested_model, routing_state)
-    data["model"] = resolved_model
-    ```
-  - 将 `requested_model`、`resolved_model`、`routing_mode`、`policy_version` 写入请求元数据与调试日志，保证全链路可观测，杜绝“改写后查不到原始意图”的隐式黑盒。
-* **异构参数与能力防御**：
-  - 启用 `drop_params: true` 静默剔除非通用参数。
-  - 控制面提供目标模型的能力指示（如是否支持 Tools、上下文容量），避免盲目强转导致请求失败。
+## 不可放宽的约束
 
----
+- LiteLLM 继续负责公开协议、流式转换、标准 provider adapter、重试和 advisor orchestration。只有经运行版本确认存在具体缺口时，才保留窄的自定义实现，并记录其用途与退役条件。
+- 保持 Docker Compose 生产、staging、PostgreSQL 和 Antigravity Subscription sidecar 的既有角色。除非有当前证据证明某项运行角色造成故障，否则不得用主机进程或删服务作为清理方式。
+- 不静默丢弃内容、改写指令角色、放宽调用限制、伪造成功、掩盖错误或增加隐藏重试、fallback/provider 调用。用户明确要求且调用方可见的 `auto` 优先级 fallback 链是唯一例外；每次失败转发都由 LiteLLM 管理并保留实际失败，不用于 `current` 或固定模型请求。任何有意翻译或能力限制都必须可见且有回归证据。
+- Provider 工作必须有并发上限、超时和取消后的子进程/连接清理；成功只在确认 provider 的 terminal completion 后报告。
+- 保持生产和 staging 状态、配置、凭据与数据库的已声明边界。不得把当前共享状态描述成完全隔离。
+- 不为假设中的未来需求新增服务、依赖、数据库、配置项或抽象。每项改动都要说明消除的具体失败机制及必须保留的行为。
+- 保留已有用户改动。归档的文档是历史凭证，不得删除或冒充当前实现状态。
 
-## 三、 实施阶段与任务拆解 (Milestones)
+## 优先修复与调查
 
-### 阶段 1：端口与基础环境规范化 (Port 4000 Baseline)
-- [ ] 将网关启动脚本 `scripts/start-gateway.ps1` 默认端口由 4005 调整为 **`4005 -> 4000`**。
-- [ ] 确保测试套件 `tests/test_litellm_config.py` 对端口 4000 与单进程 loopback 规范进行断言。
-- [ ] 更新 `README.md` 与 `docs/misc/architecture.md` 中对应的端口与架构说明。
+按降低故障影响和缩短诊断时间排序；每项只有在验收证据完成后才能勾选。
 
-### 阶段 2：OpenAI Subscription 通道与凭据守护
-- [ ] 验证 `config/litellm.yaml` 中 `codex-subscription` 部署声明与响应桥接配置。
-- [ ] 确保 `codex_credentials.py` 钩子在每次请求前准实时读取 `~/.codex/auth.json`，保证 Token 刷新无缝继承。
-- [ ] 编写针对 Codex 凭据热加载逻辑的自动化单元测试。
+- [x] **消除 provider usage 对网关事件循环的阻塞。** 将 provider 网络读取移出 async event loop；不要在网络 I/O 期间持有共享缓存锁。为每个来源保持有界 timeout 和独立状态。验收：以受控慢 provider 将查询挂到其 timeout 上限时，50 次 readiness 请求的 p95 不超过 1 秒；同一窗口中的独立本地 stub generation 不被 usage 查询等待；超时只将对应来源标记 unavailable，后续刷新仍可恢复。
 
-### 阶段 3：动态路由与控制面实现 (Control Plane & Web UI)
-- [ ] 编写 `src/subroute/plugins/dynamic_router.py`：
-  - 挂载 `/control` 极简控制台页面（包含现代轻量下拉菜单与生效状态提示）。
-  - 实现原子状态存储管理（支持 `alias`、`force` 模式切换）。
-  - 实现 `async_pre_call_hook` 路由改写与元数据打标。
-- [ ] 在 `config/litellm.yaml` 中增加 `current` 虚拟别名声明并挂载该回调插件。
-- [ ] 编写全面的单元测试（覆盖别名映射、强制模式、原子读写、白名单拦截等）。
+  **2026-09-28 修复与验收：** `provider_usage.py` 现用 HTTPX async 请求分别读取四个 quota/status 来源，各自保留 6/18 秒总 deadline；`asyncio.gather` 并发采集，单飞 refresh 锁把 provider 并发限制为最多四个请求，缓存锁只覆盖快照读写。取消传播到 HTTPX 并关闭连接；单源解析/超时错误变成该来源的 `unavailable`，其他来源仍独立返回。源码回归确认慢源并发、失败隔离、刷新合并。Compose staging 对抗测试将 Gemini status bridge 延迟 22 秒（超过 18 秒 deadline），usage API 在 18 秒后返回 HTTP 200 且只把该来源标记 unavailable；同一窗口 50 次 readiness 全部 200，p95 0.084 秒、max 0.085 秒，本地 OpenAI-compatible stub generation 返回预期 marker。恢复正式 Compose bridge 后，新鲜 usage 刷新再次报告 Gemini `connected`；staging 策略字段恢复为测试前值，production 策略未改。两个 gateway 的 readiness 和 usage refresh 均 HTTP 200，Codex Subscription、OpenRouter quota 与 Gemini Subscription 均返回 ready/connected。真实 OpenRouter buffered Chat 与 SSE、Gemini Subscription Messages 与 Codex Subscription target/advisor 请求均通过并带终止 usage。最近一次锁定测试结果为 250 passed、10 skipped、28 warnings；完整 staging 运行证据详见 [provider reliability evaluation](docs/evals/provider-reliability-2026-09-28.md)。
+- [x] **找出并修复近期 Messages 500 的实际根因。** 覆盖 `Subscription advisor consultation failed; base request was not sent` 和 `NoneType.prompt_tokens`，不得从通用包装异常猜测根因。为 gateway 请求和 Advisor consultation 记录可关联 ID、base/advisor model、失败阶段及经截断和脱敏的根因。明确 Advisor 失败时 base request 应失败还是继续，并以显式策略实现，不准隐藏备用调用或额外 provider 消耗。验收：注入各类 advisor/provider 错误时，响应分类、日志原因和 base dispatch 行为一致；修复后目标路径的回归及运行请求成功，且失败请求可关联到唯一根因。
 
-### 阶段 4：集成验证与文档交付
-- [ ] 运行完整测试套件（`pytest -q` 全绿）。
-- [ ] 验证本地打开 `http://127.0.0.1:4000/control` 下拉切换后，请求 `http://127.0.0.1:4000/v1` 的动态生效表现。
-- [ ] 清理仓库内所有历史僵尸代码与废弃未提交变更。
+  **2026-09-28 执行记录：** 实际 `/v1/messages` 请求确认 Codex Advisor 已成功返回 usage 并注入建议；主模型随后因 Codex stream 未提供 usage 而让 LiteLLM Anthropic adapter 解引用 `None.prompt_tokens`。自定义 Codex adapter 现对 Anthropic Messages 的 forced upstream stream 请求 `stream_options.include_usage=true`，并在 provider 仍未给出 usage 时返回明确 502；streaming 缺少 usage 时不会发出 `message_stop`。实际 `/v1/responses` 请求另复现 Codex 的 `Store must be set to false`；其原因是 LiteLLM Responses-to-Chat 转换没有把 `store=false` 带到自定义 provider，adapter 现在只在该字段缺失时于 Codex provider 边界补 `false`，显式值保留。对应回归测试覆盖丢失 usage、缺失 store、公开代理路径与流完成状态。真实 Compose 验证在两个端口均通过全部 3 种协议 × 2 种 stream 模式；staging 的 Gemini Advisor 和临时 Codex Advisor 均有 `advice_injected` usage 收据，Codex Advisor 策略随后恢复为 staging 原值。后续已补齐可关联的请求/consultation 根因日志、Advisor 请求上限失败关闭的 staging live 证据，以及客户端断连后子进程回收和下一请求恢复证据（见 2026-09-29 live failure matrix）。
 
----
+  **2026-09-28 后续验证及 2026-09-29 补充：** Gemini Advisor 的 RuntimeError、TimeoutError、ValueError 注入单测均验证 fail-closed、消息不变和截断原因；错误日志同时记录 LiteLLM `litellm_call_id` 与独立 consultation ID，常见 bearer/API/access-token/password 和 OpenAI/Google key 形态先脱敏。早期 staging live failure test 通过受控 request ID 触发 bridge 请求上限失败，确认不派发 base；真实客户端断连已独立复现，确认 sidecar 子进程退出且后续 Gemini target 请求成功（详细 receipt 见 live failure matrix）。Sol advisor 咨询 receipt：model `codex-sol-advisor`，request `chatcmpl-codex-advisor-0f7dd4386694`，prompt/completion 408/206 tokens、6.095 秒；建议维持已选 advisor 失败即 fail-closed，`decision_changed: false`。**2026-09-29 错误分类补充：** 将 selected advisor 失败从通用 RuntimeError 改为 LiteLLM hook 支持的 HTTPException，保留 `base request was not sent` 语义和 Anthropic error envelope；超大桥接输入 413、输入转换错误 400、上游 429 为 429、超时 504、上游 auth/connectivity/server 错误 502。provider 原始原因只进入脱敏/截断日志，客户端响应带 gateway 与 consultation correlation ID。单测覆盖 8 种错误类别；staging `/v1/messages` 真实超限请求 HTTP 413、Anthropic `type:error` 响应且不调用 sidecar/base；timeout mapping 修复前曾完成 9/9 live matrix（67.26 秒）；之后出现过一次真实 Gemini 3.6 Flash INTERNAL 500，gateway 返回 502 且没有隐藏重试，紧接着同一模型恢复成功。最终相关 ID 由 gateway 传至 sidecar 并写入 sidecar terminal logs，JSON provider request 保持不变。真实 provider auth/quota/down/timeout 故障没有被主动注入；按 live-matrix 验收要求，这些故障保留为明确的未实测边界，不将本地 transport 注入冒充 live 证据。
 
-## 四、 验收标准 (Acceptance Criteria)
+  **2026-09-29 最终源码验收：** 完整 staging live failure matrix 10/10 通过（60.54 秒），覆盖未知模型 404、输入拒绝、advisor fail-closed、断连回收、OpenRouter buffered/SSE，以及全部启用的 Gemini Subscription、Codex Subscription 和 Advisor aliases。未配置的 `/v1/skills`、`/v1/rerank`、`/v1/embeddings` 均在 provider dispatch 前返回标准 400 `unsupported_operation`，不再表现为 500。Gemini 3.6 Flash 在完整矩阵和 health probe timeout 之后的单独复测中均真实成功。Production gateway 与 Antigravity sidecar 在最终源码下重建；Codex Subscription 请求精确返回 marker，HTTP 200、end_turn、18/13 provider tokens；请求前后策略均为 `codex-luna` / `force` / 无 Advisor，policy version 39。Production readiness 50/50（p95 3.61 ms，max 8.99 ms），staging readiness 50/50（p95 5.32 ms，max 103.98 ms）；production 与最终 staging health 均为 14/2，唯一不健康部署为按要求排除的 local-model/Ollama。staging 曾有一次 Gemini 3.6 Flash health timeout，随后 target 重试及完整健康扫描均成功。Direct Gemini API、GPT-5.2 Codex、FreeToken/Ollama 均不在此次 live matrix。此后的更新验证见下方 2026-09-29 closeout。
 
-1. **端口与环境验收**：
-   - 默认运行 `start-gateway.ps1` 成功在 **Prod 生产端口 `127.0.0.1:4000`** 监听，所有生产开发工具仅连接该端口。
-   - 运行 `start-gateway.ps1 -Port 4005` 可启动独立的 **Staging 测试沙箱**，用于验证新配置与测试套件。
-2. **订阅通道验收**：在存在 `~/.codex/auth.json` 的环境下，请求 `codex-subscription` 能够顺利通过 Responses 桥接完成响应，并在 Token 更新时无需重启网关。
-3. **控制面体验验收**：
-   - 浏览器打开生产控制面 `http://127.0.0.1:4000/control` 呈现直观的下拉菜单。
-   - 切换下拉项后，本地向 `http://127.0.0.1:4000/v1/chat/completions` 发送 `model: "current"` 请求，返回内容与元数据确认由所选模型生成。
-4. **代码纯净度**：无外部独立 sidecar 进程，所有测试均通过。
+  **2026-09-29 closeout：** 在当前 staging 和 production 上重新检查，readiness 均 HTTP 200、数据库 connected，`/v1/models` 均返回 17 项且不含 `openai`、`gemini-api` 或 `openai/gpt-5.2-codex`。当前 staging live failure matrix 10/10 passed（68.88 秒）：Gemini Subscription、3.7/3.6 Flash、Pro、Codex Subscription/Astra/Terra/Reserve、Codex Terra/Astra Advisor aliases、OpenRouter buffered/SSE 均以真实内容和 provider usage 完成；覆盖未知模型拒绝、输入边界、Advisor 失败关闭及 correlation、断连后的 CLI 回收与后续成功、能力未配置时的 400。production policy 为 `codex-luna` / `force` / 无 Advisor / medium（version 43）；staging 为 `codex-luna` / `force` / Gemini Subscription Advisor / high（version 445），与测试前保存字段相同。锁定回归套件 250 passed、10 skipped、28 warnings；跳过项均为显式 opt-in live cases。真实 provider auth/quota/down/timeout 未主动注入，仍是标注清楚的外部证据边界。所有优先项、行为回归、Compose live 验收和完成标准现已满足，目标关闭。
 
-## 补充范围：模型与推理强度选择
+  **2026-09-29 用户后续需求：** 已将 GPT-6 Luna 加入可选 Advisor，复用现有 Codex Subscription Advisor adapter；详见 [Luna Advisor live evaluation](docs/evals/codex-luna-advisor-2026-09-29.md)。这项后续功能不改变本可靠性目标的结项范围。
+- [x] **限制 Antigravity sidecar 的并发 CLI 工作并保证回收。** 为同时运行的 CLI 进程设有限额；过载时明确拒绝或排队且等待有上限；超时、客户端断开和进程启动失败后，终止并回收相关子进程。验收：并发超过限额时进程数不再增长，取消/超时后无残留进程；错误之后紧接的有效请求仍能完成。
 
-控制台分别保存目标模型与 Advisor 的推理强度，默认不覆盖客户端或提供商的设置。
-候选值由 `config/litellm.yaml` 中各模型的 `reasoning_efforts` 定义，非法组合必须拒绝。
-Gemini 订阅提供 Flash 3.8、3.7、3.6 和 Pro 3.1；Flash 支持 low/medium/high，
-Pro 支持 low/high，并映射到现有 Antigravity 模型变体。该通道仍仅支持文本，
-不新增流式或工具调用支持。目标强度仅随 alias/force 路由生效，Advisor 强度独立应用
-于 Messages API 咨询。旧策略文件兼容默认值，单次请求使用同一策略快照。
-验收需覆盖持久化、非法组合、真实 LiteLLM 转换、界面保存与订阅调用。
+  **2026-09-28 修复与验收：** `bridge.py` 用一个容量为 4 的 `BoundedSemaphore` 限制 `agy` CLI 和 `agy models` inventory 总进程数。请求最多等待 0.5 秒，之后 sidecar 返回明确 429；slot 会在所有退出路径释放。CLI 通过 `Popen` 启动独立进程组，125 秒 deadline 或检测到客户端 socket EOF 时先 TERM，2 秒后仍存活则 KILL，并 `communicate` reap 后才释放 slot。Linux Compose 容器中的真实 HTTP server 以测试 CLI 证明：设置单 slot 时第二个并发请求 429，第一个返回 usage 且后续请求 200；client disconnect 和 0.2 秒 timeout 均终止并回收 CLI，之后的有效请求继续 200。源码回归 13 个 sidecar 测试加 handler boundary 测试通过。新镜像 `subroute-antigravity` 启动为 healthy，`/health` 和 `/v1/status` 都返回 200，认证状态可用且列出 14 个 Gemini Subscription models；重建后 staging 真实 Gemini target 与 Gemini advisor + Codex target 再次返回 HTTP 200 和 provider usage。
+- [x] **让 Gemini Subscription 功能声明与实际行为一致。** 早期归档称其为 text-only；当前实现的合同是文本、schema-constrained tool call 和 buffered SSE，client tool 仍由调用方执行，vision 不支持。SSE 在 CLI 完成后才开始发事件，不是逐 token streaming。模型元数据、控制台说明、README 与 handler 行为必须共同维持此区别，不在本目标中新增能力。
 
-## 补充范围：专家独立阅读
+  **2026-09-28 验收：** 四个 Gemini Subscription deployment 的能力 metadata 已从 `streaming` 改成 `buffered-sse`；控制台和 README 原有提示已确认准确。Live staging 实际 Messages buffered 和 SSE 请求均返回 HTTP 200、正确终止事件及 provider usage；SSE 的 message delta 携带 provider 报告的 input/output tokens。真实强制工具选择返回声明的工具名与符合 schema 的参数、`stop_reason=tool_use`，网关不会执行 client tool。回归锁定 adapter 必须等 CLI 完成后才 yield SSE chunk。staging 策略已恢复。
+- [x] **减少或约束重复的 Antigravity CLI transport 实现。** Compose 使用 sidecar，handler 另保留直接启动 CLI 的本地路径；二者分别实现输入、输出解析、usage 和取消行为。先确认两种运行模式是否都受支持；若两者保留，建立共享合同并对长 prompt、terminal status、usage、超时、取消和错误做一致性回归；若一条路径无当前用途，记录证据后再收敛。
 
-Advisor skill 可按专家提出的证据问题启动短生命周期 Pi 阅读任务，不新增常驻
-gateway 服务或直接 OpenAI 连接。Pi 使用 `http://localhost:4000/v1`，专家仍走
-4040。每个任务最多 3 次专家调用和 3 个 Pi 任务，证据充分即提前结束。Pi 在
-授权源码快照中只读检索，返回简短摘要、可核对的源码引用与未知项；实现和运行
-验证仍由主 worker 负责。分别记录专家与 Pi 的用量，不把独立阅读当作无偏保证、
-运行验证或已证明的 token 节省。
+  **2026-09-28 收敛决策：** `docker-compose.yml` 是唯一声明的部署方式，README、architecture 和实时运行全部指向 Compose sidecar；宿主机 `AGY_PATH` 直启仅由旧的生命周期测试覆盖，没有面向用户的运行说明或 Compose 调用。该 fallback 使用另一套 CLI 参数、stdin framing、terminal-result 校验，已造成行为合同分叉。删除该未文档化 fallback，缺少 `ANTIGRAVITY_BRIDGE_URL` 时显式返回配置错误；移除旧生命周期测试，以拒绝直启的回归替代。Compose HTTP bridge 成为唯一 Gemini Subscription transport，保留其 CLI personal-subscription 运行角色。真实 staging target 与 advisor 请求证明公开 LiteLLM 链路仍成功。
+- [x] **明确 readiness 与 provider health 的职责并控制探测耗时。** 区分进程/数据库 readiness 与每个 deployment/provider 的可用性；解释或纠正无效 OpenAI API key、本地不可达 endpoint 等 optional deployment 在全量健康结果中的状态。验收：readiness 在 1 秒内响应；完整 provider 检查有明确的总时间上限、逐部署结果和失败原因；已知 optional provider 故障不会被显示为整个 gateway 无法服务，也不会被健康状态隐藏。
 
-Routing desk: Target and Advisor use Provider > Model > Reasoning effort. Show configured connections, distinguish subscription from API access, retain saved unavailable choices with a warning, and save provider changes only after model selection.
+  **2026-09-28 修复与 2026-09-29 复验：** LiteLLM 1.103.0 的 `/health` 默认将全部模型探测并发执行；生产和 staging 同时检查时会超过 Gemini sidecar 的 4 个 CLI 槽位，健康探测本身可能造成 429。使用 LiteLLM 支持的 `health_check_concurrency: 2` 和 `HEALTH_CHECK_TIMEOUT_SECONDS=10`，两个实例同时检查最多占 4 个 sidecar CLI 槽位。2026-09-29 又按 LiteLLM 本地实现，对仅供动态 hook 使用的虚拟 `current` deployment 设置 `disable_background_health_check`，并启用 `health_check_skip_disabled_background_models`；这消除 health 将虚拟 `openai/current` 误报为缺少 OpenAI API key 的情况，不改变 `current` 的请求路由。活动 health probe 现有 16 deployments，理论最长 `ceil(16/2) * 10 = 80` 秒。最终分别独立运行生产和 staging 完整 health：两者 HTTP 200，production 21.34 秒、staging 19.31 秒，均 14 healthy / 2 unhealthy；两项明确为 FreeToken local endpoint 和 Ollama unreachable，符合用户的排除范围。OpenRouter、4 个 Gemini Subscription、5 个 Codex Subscription/Reserve 及 3 个 Codex Advisor 均在两个实例 healthy。此前一次 health 与 usage refresh 重叠时 production Gemini 3.8 出现一次 unhealthy，紧接着 production 单独 health 复测恢复正常；日志没有匹配的 sidecar 429，原因未证实。最终重建后生产与 staging 各 50 次 readiness 全部 HTTP 200，p95/max 为 39.9/63.7 ms 和 30.0/34.3 ms；两端 PostgreSQL connected。
+- [x] **拒绝未配置的模型，避免 force 路由静默选用其他 provider。** dynamic router 只允许 config 中可选择的模型或 `current/default/auto`；未知名在改写目标前以 HTTP 404 拒绝。内部 Advisor sub-call 由显式 metadata 标识，不再仅凭 `-advisor` 后缀绕过检查。验收：staging Chat Completions、Responses 和 Anthropic Messages 的未知模型均 404，未发送到 provider；真实 Gemini Subscription / Codex / OpenRouter 路径通过矩阵。
 
-Advisor selection is the sole switch for automatic Messages API consultation: a selected advisor enables it, and No advisor disables it. Target models have no separate advisor-enabled variants. Preserve the saved advisor choice when migrating retired guided target aliases.
+  **2026-09-29 验收：** staging 上三个公开协议对 `subroute-live-no-such-model` 分别 HTTP 404；响应没有 provider 成功或 provider usage。显式 `force` 仍将已知公开模型/virtual alias 发往所选 active target。
+- [x] **把当前无 deployment 能力的操作错误从 500 收敛为明确 client error。** LiteLLM 1.103.0 的 custom provider 名不能转换成内置 `LlmProviders`，而当前 model inventory 也没有 skills、rerank 或 embeddings 能力。启动阶段注册的精确 route guard 返回 400 `unsupported_operation`，避免内部 provider-enum 异常和 chat-only embedding 扇出。部署具备相应 capability 后应移除对应 guard 并让 LiteLLM 接管。
+
+  **2026-09-29 验收：** staging `/v1/skills`、`/v1/rerank`、`/v1/embeddings` 均返回 HTTP 400 和稳定错误码，不再产生 LiteLLM 500。没有新增服务或 provider transport。
+- [x] **建立 target 与 advisor 的真实 live API 失败矩阵。** 新增默认跳过、显式 opt-in 的 staging integration tests，直接请求运行中的 gateway 和实际订阅 provider，不用 mock provider response。覆盖 Gemini Subscription 与 Codex Subscription target 的真实成功、未知模型拒绝、Gemini 不支持的输入块、bridge 请求上限；覆盖 Gemini 与 Codex advisor 的真实咨询成功、Gemini advisor 请求上限导致的失败关闭，以及失败后的真实 target/advisor 恢复。每项记录实际 HTTP status、终止原因、provider usage 是否存在及相关日志；测试需恢复 staging 原有 target/advisor 策略，禁止改动生产策略。对真实 provider auth、quota、服务不可用和超时等不能安全主动触发的故障，单独标注未实测；不得把本地 mock 或纯 adapter unit test 写成 live 覆盖。
+  已新增 `tests/test_live_gateway_failure_matrix.py`，默认跳过，显式设置 `SUBROUTE_RUN_LIVE_TESTS=1` 后直连 loopback staging，不 mock provider。此处 8 passed、1 failed 是 2026-09-29 后续版本的一次历史运行：Gemini Subscription 3.6 Flash 的真实 provider 返回 `INTERNAL 500`，sidecar 报告 CLI terminal status `ERROR`，网关按合同返回 502，没有重试或 fallback。显式重试同一模型后 HTTP 200、marker 和 provider usage 均正常；随后单独重跑被中断的剩余 alias 子集为 1 passed。该瞬态 provider 故障和恢复仍保留为历史证据，不覆盖其真实 502 结果。之后 final-source 矩阵 10/10 通过，且本次 closeout 新鲜重跑同样 10/10 通过，故该项已完成。真实 provider auth/quota/down/timeout 注入仍标注未实测；FreeToken/Ollama 不在用户要求范围内。
+
+  **2026-09-29 production route check：** 未改 production 策略，保持 `codex-luna` / `force` / 无 Advisor (version 35)；向 `model=current` 发送真实 `/v1/messages` 请求返回 HTTP 200、精确 marker、`end_turn` 和 26/15 provider tokens，请求前后 policy snapshot 完全一致。
+
+  **2026-09-29 最终源代码部署复验：** production gateway 重建后策略仍为 version 35，`current` Codex Subscription `/v1/messages` marker 请求返回 HTTP 200、`end_turn` 和 20/14 provider tokens；策略前后相同。production/staging readiness 各 50/50 HTTP 200，p95 为 4.7/6.4 ms、max 12.7/15.5 ms。两个 gateway 的完整 health 分别 20.39/27.31 秒返回 HTTP 200，均有 14 healthy / 2 unhealthy；全部 13 个本目标保留的 OpenRouter、Gemini Subscription、Codex target/advisor deployments healthy。唯一不健康项为按用户范围排除的 FreeToken 与 Ollama。
+
+## 完成标准
+
+- 上述全部优先项都有代码/配置修复、行为边界回归检查和新鲜本地 Compose 运行证据；未复现的失败必须标明未证实，不能通过勾选或删除记录宣称解决。
+- 有效 provider 请求成功完成后，紧接的请求仍能成功；provider 超时、断连、无效凭据、过载和不完整 terminal result 都产生有界、可归因的失败，不导致事件循环卡住、资源泄漏或伪造成功。
+- 对所有当前启用且配置有效的目标/Advisor 路径执行有代表性的端到端检查；外部 provider 自身不可用时，记录 provider 明确返回的错误，并验证其不会造成无关路径失败。mock 测试、readiness、model inventory 或旧成功日志均不单独构成运行路径通过证据。
+- 相关测试套件通过；LiteLLM 开发锁定版和 Compose 运行版的差异在受影响边界上得到验证。最终记录 gateway 5xx 分类、健康/ready 延迟、sidecar 最大并发与清理结果。
+- `README.md`、当前实现和本目标关于可用性、能力与失败行为保持一致。维护性审查仅删除有配置/调用/验收证据证明已失效的代码，不以代码行数或服务数量作为简化目标。
+
+## 当前活动边界
+
+本文件记录已完成的维护性与可靠性目标。`docs/goal/archive/` 内的旧目标仅用于追溯此前需求、决策和验证，不要求继续实现其中的商业就绪、Badlands 兼容或其他功能范围，除非它们被证明是当前可靠性修复必须保留的现有行为。

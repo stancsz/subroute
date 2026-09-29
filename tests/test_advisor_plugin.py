@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+from fastapi import HTTPException
 from litellm.llms.anthropic.experimental_pass_through.messages.interceptors.advisor import (
     AdvisorOrchestrationHandler,
 )
@@ -13,6 +14,115 @@ from subroute.plugins.advisor_plugin import (
 
 def run(plugin: AdvisorPlugin, data: dict, call_type: str = "anthropic_messages"):
     return asyncio.run(plugin.async_pre_call_hook({}, None, data, call_type))
+
+
+def advisor_plugin_error(kind: str) -> Exception:
+    from subroute.handlers.antigravity import (
+        AntigravityBridgeError,
+        AntigravityRequestTooLargeError,
+    )
+    from subroute.handlers.codex_advisor import CodexAdvisorError
+
+    if kind == "runtime":
+        return RuntimeError("provider returned no terminal result")
+    if kind == "timeout":
+        return TimeoutError("provider request timed out")
+    if kind == "value":
+        return ValueError("provider response omitted usage")
+    if kind == "too_large":
+        return AntigravityRequestTooLargeError("bridge request exceeds size limit")
+    if kind == "bridge_429":
+        return AntigravityBridgeError(429, "bridge returned 429")
+    if kind == "codex_401":
+        return CodexAdvisorError(502, "Codex subscription API error 401")
+    if kind == "codex_429":
+        return CodexAdvisorError(429, "Codex subscription API error 429")
+    if kind == "codex_timeout":
+        return TimeoutError("Codex subscription request timed out")
+    raise AssertionError(kind)
+
+
+@pytest.mark.parametrize(
+    "error_kind,status_code,error_message",
+    [
+        ("runtime", 502, "provider returned no terminal result"),
+        ("timeout", 504, "provider request timed out"),
+        ("value", 400, "provider response omitted usage"),
+        ("too_large", 413, "bridge request exceeds size limit"),
+        ("bridge_429", 429, "bridge returned 429"),
+        ("codex_401", 502, "Codex subscription API error 401"),
+        ("codex_429", 429, "Codex subscription API error 429"),
+        ("codex_timeout", 504, "Codex subscription request timed out"),
+    ],
+)
+def test_selected_preconsult_failure_fails_closed_with_correlated_reason(
+    monkeypatch, caplog, error_kind, status_code, error_message
+):
+    from subroute.plugins import advisor_plugin
+
+    messages = [{"role": "user", "content": "review this design"}]
+    data = {
+        "model": "codex-luna",
+        "messages": messages.copy(),
+        "litellm_call_id": "gateway-request-test-123",
+        "metadata": {"gateway_policy": {
+            "active_model": "codex-luna",
+            "mode": "force",
+            "policy_version": 41,
+            "advisor_model": "gemini-subscription",
+            "advisor_reasoning_effort": "low",
+        }},
+    }
+
+    async def fail(*args, **kwargs):
+        raise advisor_plugin_error(error_kind)
+
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", fail)
+
+    with pytest.raises(HTTPException) as caught:
+        run(AdvisorPlugin(), data)
+
+    assert caught.value.status_code == status_code
+    assert caught.value.detail["error"]["type"] == "advisor_consultation_failed"
+    assert caught.value.detail["error"]["message"] == (
+        "Selected advisor failed; base request was not sent"
+    )
+    assert caught.value.detail["error"]["request_id"] == "gateway-request-test-123"
+
+    receipt = data["metadata"]["gateway_advisor"]
+    assert receipt["status"] == "failed"
+    assert receipt["model"] == "gemini-subscription"
+    assert len(receipt["consultation_id"]) == 32
+    assert receipt["reason"] == error_message
+    assert receipt["gateway_request_id"] == "gateway-request-test-123"
+    assert data["messages"] == messages
+    assert f"consultation_id={receipt['consultation_id']}" in caplog.text
+    assert "gateway_request_id=gateway-request-test-123" in caplog.text
+    assert "model=gemini-subscription" in caplog.text
+    assert "base_model=codex-luna" in caplog.text
+    assert f"error={error_message}" in caplog.text
+
+
+def test_advisor_failure_reason_redacts_credentials_and_is_bounded():
+    from subroute.plugins.advisor_plugin import _safe_error_reason
+
+    reason = _safe_error_reason(RuntimeError(
+        'request failed\nAuthorization: Bearer abc.secret/token== '
+        'api_key="sk-proj-abcdefghijklmnopqrstuvwxyz123456" '
+        'access_token=refreshsecret password=hunter2 '
+        'Google key AIzaABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 '
+        + "x" * 400
+    ))
+
+    assert len(reason) == 300
+    assert "request failed" in reason
+    assert "[REDACTED]" in reason
+    assert "abc.secret/token" not in reason
+    assert "sk-proj-" not in reason
+    assert "refreshsecret" not in reason
+    assert "hunter2" not in reason
+    assert "AIza" not in reason
+    assert "\n" not in reason
 
 
 def test_selected_advisor_enables_plain_model_on_messages_route():
@@ -116,6 +226,47 @@ def test_codex_subscription_pair_collects_sol_and_injects_advice(monkeypatch, ef
     assert receipt["reasoning_effort"] == effort
 
 
+@pytest.mark.parametrize("target", ["codex-subscription", "codex-luna", "gemini-subscription"])
+@pytest.mark.parametrize("effort", [None, "high"])
+def test_codex_luna_advisor_preconsults_and_injects_advice(monkeypatch, target, effort):
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    async def fake_collect(model, messages, **kwargs):
+        assert model == "gpt-6-luna"
+        assert kwargs.get("reasoning_effort") == effort
+        assert messages == [{"role": "user", "content": "review this design"}]
+        return "Check the fallback boundary.", Usage(
+            prompt_tokens=13, completion_tokens=8, total_tokens=21
+        )
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fake_collect)
+    data = {
+        "model": target,
+        "messages": [{"role": "user", "content": "review this design"}],
+        "metadata": {"gateway_policy": {
+            "active_model": target,
+            "mode": "force",
+            "policy_version": 9,
+            "advisor_model": "codex-luna-advisor",
+            "advisor_reasoning_effort": effort,
+        }},
+    }
+
+    run(AdvisorPlugin(), data)
+
+    assert data["messages"][-1] == {
+        "role": "developer",
+        "content": "Independent advisor guidance:\nCheck the fallback boundary.",
+    }
+    receipt = data["metadata"]["gateway_advisor"]
+    assert receipt["status"] == "advice_injected"
+    assert receipt["model"] == "codex-luna-advisor"
+    assert receipt["input_tokens"] == 13
+    assert receipt["output_tokens"] == 8
+    assert receipt["reasoning_effort"] == effort
+
+
 @pytest.mark.parametrize("alias,expected,effort", [
     ("gemini-subscription", "gemini-3.8-flash", None),
     ("gemini-subscription-pro", "gemini-3.1-pro-low", "low"),
@@ -126,7 +277,8 @@ def test_preconsult_target_collects_antigravity_advice(monkeypatch, alias, expec
     from litellm.types.utils import Usage
     from subroute.plugins import advisor_plugin
 
-    async def fake_invoke(model, prompt):
+    async def fake_invoke(model, prompt, *, advisor=False):
+        assert advisor is True
         assert model == expected
         assert prompt == "[User]:\nreview this design"
         return "Check the failure handling.", Usage(
@@ -160,7 +312,8 @@ def test_minimax_gemini_pair_injects_advice_before_main_call(monkeypatch):
     from litellm.types.utils import Usage
     from subroute.plugins import advisor_plugin
 
-    async def fake_invoke(model, prompt):
+    async def fake_invoke(model, prompt, *, advisor=False):
+        assert advisor is True
         assert model == "gemini-3.8-flash-medium"
         assert prompt == "[User]:\nreview this design"
         return "Use isolated fixtures and deterministic state.", Usage(
@@ -219,7 +372,8 @@ def test_minimax_gemini_pair_skips_structured_content_without_changing_request(m
     }
 
 
-def test_codex_advisor_is_injected_for_supported_tool_history():
+@pytest.mark.parametrize("advisor_model", ["codex-terra-advisor", "codex-luna-advisor"])
+def test_codex_advisor_is_injected_for_supported_tool_history(advisor_model):
     plugin = AdvisorPlugin()
     existing_tools = [{"name": "read_file", "input_schema": {"type": "object"}}]
     data = {
@@ -235,11 +389,12 @@ def test_codex_advisor_is_injected_for_supported_tool_history():
         "tools": existing_tools.copy(),
     }
 
-    data["metadata"] = {"gateway_policy": {"advisor_model": "codex-terra-advisor"}}
+    data["metadata"] = {"gateway_policy": {"advisor_model": advisor_model}}
     run(plugin, data)
 
     assert data["tools"][0] == existing_tools[0]
     assert data["tools"][1]["type"] == ADVISOR_TOOL_TYPE
+    assert data["tools"][1]["model"] == advisor_model
     assert "gateway_advisor" not in data.get("metadata", {})
 
 
