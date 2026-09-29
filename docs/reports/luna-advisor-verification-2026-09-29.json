@@ -1,0 +1,73 @@
+{
+  "policy": {
+    "active_model": "minimax",
+    "mode": "force",
+    "policy_version": 65,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "max"
+  },
+  "seconds": 16.8,
+  "response": {
+    "id": "070b0a1175c8c0b0f9f2f8e8723f6985",
+    "type": "message",
+    "role": "assistant",
+    "model": "MiniMax-M3",
+    "content": [
+      {
+        "text": "## Race and Fix\n\n**Race:** A can observe a torn pair `(model-X, advisor-Z)` — it captures the old model before suspending, then after B atomically replaces both globals, A reads the new advisor and combines it with the stale model. The pair A actually uses was never simultaneously valid.\n\n**Smallest fix:** Snapshot both globals into locals *before* any `await`, since on a single-threaded async event loop the two reads can't interleave with anything:\n\n```python\nmodel = selected_model\nadvisor = selected_advisor   # no await between these two reads\nawait check_quota()          # safe even if B updates both globals here\n```\n\n(If multiple threads can touch the globals, this isn't enough — you'd need a lock around the pair-read and pair-write, or atomically swap an immutable `(model, advisor)` snapshot.)",
+        "type": "text"
+      }
+    ],
+    "usage": {
+      "input_tokens": 920,
+      "output_tokens": 176,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 128,
+      "service_tier": "standard"
+    },
+    "stop_reason": "end_turn",
+    "base_resp": {
+      "status_code": 0,
+      "status_msg": ""
+    },
+    "_hidden_params": {
+      "additional_headers": {
+        "x-litellm-model-group": "minimax",
+        "x-litellm-attempted-retries": 0,
+        "x-litellm-attempted-fallbacks": 0
+      }
+    }
+  },
+  "advisor_receipts": [
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": null,
+      "seconds": 9.14,
+      "usage": {
+        "completion_tokens": 450,
+        "prompt_tokens": 373,
+        "total_tokens": 823,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": null
+      },
+      "advice": "A can use the mixed pair **(model-X, advisor-Z)**: it captures the model before suspending, then reads the advisor after B has updated both globals. It can also see other mixtures if updates or reads interleave differently.\n\nFor a **single-threaded async event loop**, the smallest fix is to read **both values into locals, with no `await` between the reads**, before the quota check:\n\n```python\nmodel = selected_model\nadvisor = selected_advisor\nawait check_quota()\n```\n\nAsync tasks on the same event loop cannot interleave during those synchronous reads, so A keeps a consistent snapshot even if B updates the globals while A is suspended.\n\nIf the globals can be accessed concurrently from multiple threads, that is not sufficient: use a lock around reading both values and around updating both, or atomically replace/read one immutable `(model, advisor)` snapshot. Reading the advisor before the `await` only works under the single-threaded event-loop assumption."
+    }
+  ],
+  "injections": [
+    {
+      "tool_id": "call_8eb434d9473048f7bd0c0bb7",
+      "tool_name": "advisor",
+      "advice_chars": 965
+    }
+  ],
+  "litellm_version": "1.103.0",
+  "verification": {
+    "live_provider_call": true,
+    "advice_injected": true,
+    "base_completed": true,
+    "configured_effort_verified": false,
+    "scope": "Separate diagnostic process inside the production gateway container, using installed LiteLLM 1.103.0, current saved policy, configured MiniMax and Luna deployments, native advisor orchestration, and observational wrappers. Not a trace of the production HTTP worker.",
+    "note": "Observed Luna reasoning_effort=null despite policy max. This does not establish the exact parameter received by the separate production HTTP worker."
+  }
+}
