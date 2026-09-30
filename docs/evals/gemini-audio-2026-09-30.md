@@ -172,6 +172,44 @@ Live 矩阵经真实 stdio 初始化、发现两工具、production Chat、原 S
 
 Northstar/QA 版本 unknown。数学例子预期需测条件恢复，本次实际仅 2/6，且四项第二次仍拒绝。预注册与逐次 ledger 让失败、额外 27,183 tokens 和提前失败界限可审计，避免试到绿才报告。先量恢复收益、明确真实任务分母，再发布生产策略；保留原未验收项，未修改技能或向外部发帖。
 
+## resume 后第二轮：连续拒绝的源记录审计
+
+上一轮为 progress：实际条件恢复率和失败 usage 新证据改变了下一动作。本轮继续原 95% 与完整目标，未增加次数或缩小任务分母。只读审计 10 个真实拒绝会话的 SQLite `gen_metadata` / `steps` 并关联同一 request_id 的 sidecar 日志：[源记录收据](gemini-recovery-source-audit-2026-09-30.json)。导出仅含 WAV 字节数/哈希、读取数、usage、固定诊断布尔值和关联 ID，不导出原始音频、凭据或内部推理。
+
+8/10 个拒绝的最后一轮生成含全部预期完整 WAV，哈希一致，日志也显示全部预期读取完成。另 2 个为 A/A 的第二次尝试，只有一个附件成功读取和一个 WAV 进入最后生成，随后泛化过滤拒绝；不能把这两次描述为两附件都读完。所有拒绝均发生在至少一个读取之后；原始输入/输出分类仍未建立。SQLite 是不公开 schema 的 protobuf BLOB，不用缺少某个字符串或猜测枚举值来伪造 Google 原始安全类别。
+
+唯一工具错误在 `probe_AB_3` 首次会话：`invalid arguments: missing property 'toolSummary'`，之后两文件仍完整读入并被拒绝。同任务原样复验没有这个错误，却仍拒绝；另外 9 个过滤会话也没有该工具错误。因此不把工具参数问题当作所有过滤的根因，不为它修改 prompt 来假称成功率已修复。CLI 仍为 1.2.11，本轮没有模型调用、生产代码改动或重启；文档和新来源收据是唯一变更，无需重复旧源码回归。主执行者只读复查，非独立评审。
+
+此证据排除了“修掉这一次工具参数错误即可解释全部拒绝”，下一有意义动作是向提供方取得真实 stop reason 或修复支持。官方仓库搜索未发现匹配本案例的已确认解决方案，不能据搜索断言不存在重复 issue。以下准备了可审阅的最小问题报告，尚未向第三方提交；生产配置和完整验收仍未通过。当前为用户 resume 后第二个 goal turn，外部条件重复但 blocked 阈值尚未到，保持 active，后续不能在无改变时重跑相同探针。
+
+### 待提交的上游报告草稿
+
+目标仓库：`google-antigravity/antigravity-cli`。标题：`Headless audio filtering reports SUCCESS and hides original stop reason`。
+
+<!-- upstream-audio-issue-body-start -->
+We use Antigravity CLI **1.2.11**, Gemini **3.8 Flash High**, authenticated Subscription mode, in Linux Docker. Audio is read through native `view_file` in a disposable granted workspace, with a read-only custom agent and `--sandbox`. No API-key replacement or gateway cross-model fallback is used.
+
+Our integration invokes `agy --agent subroute-audio --model gemini-3.8-flash-high --output-format stream-json --input-format stream-json --print-timeout 2m --sandbox`. The input frame is `{"event":"user","message":{"content":"..."}}`; the prompt lists the two absolute WAV paths and asks the agent to read every file before answering.
+
+The reproducible fixtures are locally synthesized speech, not actual credentials: A says "The secret words are velvet orange. The code is 7492."; B says "The secret words are silver river. The code is 5821." Both are 22050 Hz, mono, 16-bit PCM. A SHA-256: `57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3`; B: `df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89`.
+
+Client question: `Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.` Focus: `audible speech differences`. The gateway adds listening/known-duration instructions and native attachment paths. Full integration inputs and outputs are in the linked receipt; the short question alone is not claimed to reproduce the behavior independently.
+
+Observed: headless terminal `SUCCESS` includes `This request was blocked by Gemini's filters.` as the response, without the original input/output block classification. Our gateway now correctly treats that terminal response as a refusal. In a fixed 12-task stress experiment, 6 initial tasks were refused. We made one explicitly recorded, unchanged recheck for each, recovered 2, and 4 remained refused. This is a selected synthetic stress set, not a population music success-rate estimate.
+
+We audited all 10 refusal sessions: 8 last-generation metadata records include every original complete WAV with matching hashes, and bridge logs confirm all expected reads. Two A/A rechecks stopped after reading only one attachment. One first A/B session had a recoverable missing `toolSummary` argument error; its unchanged recheck still refused without that error, as did the other refusal sessions without any tool error. We do not claim which token or input/output safety category caused the refusal.
+
+Example full-read refusal pair: conversation `04925cd8-f9d4-4132-bf27-237dcf7ca4dd`, unchanged recheck `e9501800-20ff-4b6e-8a8c-9ccb0824c2b3`. Both contain the two complete original WAVs in the final generation. [Read-only source audit](https://github.com/stancsz/subroute/blob/main/docs/evals/gemini-recovery-source-audit-2026-09-30.json). [Attempt receipts](https://github.com/stancsz/subroute/blob/29d086310564762bd533ed6bb7e08d7725dea8f2/docs/evals/gemini-recovery-probes-2026-09-30.json).
+
+Expected: an unambiguous machine-readable terminal refusal status/reason, with original input/output stop reason and safety classification when available, rather than `SUCCESS` with generic filter prose. Please investigate whether the synthetic fixtures are expected to be blocked and how clients can distinguish refusal from transient failure. We are not requesting disabled safeguards or changing user input to bypass them.
+
+No user songs, credentials, audio bytes, or internal reasoning are included in this report. Synthetic fixture files can be supplied separately if requested and authorized. This draft has not been filed.
+<!-- upstream-audio-issue-body-end -->
+
+## Skill learning（源记录审计补充）
+
+Northstar/QA 版本 unknown。源审计发现一个工具错误，但同请求无工具错误仍拒绝，且 8 个拒绝含完整音频，避免把偶然关联当成统一根因。预期读取数、完整字节与拒绝终态应一起审计，原始 protobuf 的未知枚举不能猜测。准备现有记录中的最小提供方报告以取得缺失反馈；未经人类授权不对第三方发帖，未修改技能。
+
 ## Skill learning（完成审计补充）
 
 Northstar/QA 版本 unknown。有界恢复预期是找到可推进同一失败标准的下一动作；观察到网关缺陷修复和更多成功任务仍不能消除相同良性请求的提供方拒绝。官方接口核对与保留失败有助于区分本地可修复缺陷和外部阻塞。按照 Northstar 的“checkpoint it as blocked with the precise missing evidence, dependency, or intervention”停止重入同一调查，保留原标准。下一次继续需先验证解除条件已改变；未修改技能或向外部提交问题。

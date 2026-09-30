@@ -1,0 +1,474 @@
+{
+  "scope": "Read-only audit of 10 actual refused Subscription sessions; exports only hashes, counts and fixed diagnostic flags, no credentials, raw audio or hidden reasoning.",
+  "records": [
+    {
+      "case": "probe_AB_3",
+      "attempt": 1,
+      "conversation_id": "04925cd8-f9d4-4132-bf27-237dcf7ca4dd",
+      "request_id": "c9e99efa32c947369d46f6392899ebea",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1045,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 1039,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 2,
+          "stored_bytes": 472558,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            },
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [
+        {
+          "index": 3,
+          "tool_summary_argument_missing": true,
+          "stored_bytes": 106
+        }
+      ],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 2,
+      "bridge_provider_usage": {
+        "input_tokens": 6283,
+        "output_tokens": 617,
+        "thinking_tokens": 460,
+        "cache_read_tokens": 0,
+        "total_tokens": 6900
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_AB_3",
+      "attempt": 2,
+      "conversation_id": "e9501800-20ff-4b6e-8a8c-9ccb0824c2b3",
+      "request_id": "9e24f9414c09463681bdb8a16a34941b",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1044,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 471892,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            },
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 2,
+      "bridge_provider_usage": {
+        "input_tokens": 3740,
+        "output_tokens": 496,
+        "thinking_tokens": 384,
+        "cache_read_tokens": 0,
+        "total_tokens": 4236
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_B_3",
+      "attempt": 1,
+      "conversation_id": "edae0d2d-7ea5-4fca-a29d-d05564d4974a",
+      "request_id": "8d21edf5d5924e3280a13ec91f114b67",
+      "expected_hashes": [
+        "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1043,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 240301,
+          "wav_inputs": [
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 1,
+      "bridge_provider_usage": {
+        "input_tokens": 3409,
+        "output_tokens": 213,
+        "thinking_tokens": 160,
+        "cache_read_tokens": 0,
+        "total_tokens": 3622
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_AA_3",
+      "attempt": 1,
+      "conversation_id": "cf9b1b99-3688-49ef-ae0c-e414e9a7dfb2",
+      "request_id": "998123c36a6e4466ade95b05cba90a17",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1052,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 1048,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 2,
+          "stored_bytes": 475920,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            },
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 2,
+      "bridge_provider_usage": {
+        "input_tokens": 6062,
+        "output_tokens": 606,
+        "thinking_tokens": 496,
+        "cache_read_tokens": 0,
+        "total_tokens": 6668
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_AA_3",
+      "attempt": 2,
+      "conversation_id": "54513caa-5068-4f61-9cb1-8cd3957e360f",
+      "request_id": "bf85ecd709464d589dadff9a37106d5f",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1044,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 245378,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": false,
+      "bridge_completed_reads": 1,
+      "bridge_provider_usage": {
+        "input_tokens": 3600,
+        "output_tokens": 535,
+        "thinking_tokens": 481,
+        "cache_read_tokens": 0,
+        "total_tokens": 4135
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_AA_2",
+      "attempt": 1,
+      "conversation_id": "371ec942-7efa-473e-8ce0-ea99381d3726",
+      "request_id": "aef76cd6fe00426e8825d0f74dacdd16",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1044,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 474225,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            },
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 2,
+      "bridge_provider_usage": {
+        "input_tokens": 3742,
+        "output_tokens": 372,
+        "thinking_tokens": 258,
+        "cache_read_tokens": 0,
+        "total_tokens": 4114
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_AA_2",
+      "attempt": 2,
+      "conversation_id": "1babca41-1cd9-4f96-a53d-9b33b25c1a24",
+      "request_id": "3388f1a8188e42f6966f4f4ada2abdbb",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1042,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 244400,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": false,
+      "bridge_completed_reads": 1,
+      "bridge_provider_usage": {
+        "input_tokens": 3611,
+        "output_tokens": 397,
+        "thinking_tokens": 340,
+        "cache_read_tokens": 0,
+        "total_tokens": 4008
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_B_2",
+      "attempt": 1,
+      "conversation_id": "9a31df68-f1f5-4a05-a7df-75cee2a38990",
+      "request_id": "8c0f0768a9a54f43ba58251cb8ce0750",
+      "expected_hashes": [
+        "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1044,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 240427,
+          "wav_inputs": [
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 1,
+      "bridge_provider_usage": {
+        "input_tokens": 3409,
+        "output_tokens": 242,
+        "thinking_tokens": 189,
+        "cache_read_tokens": 0,
+        "total_tokens": 3651
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_AB_2",
+      "attempt": 1,
+      "conversation_id": "db947c53-d3ff-423e-b1e8-663a82d2777a",
+      "request_id": "0d1b479badd344c8bf07dff92080c63c",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1044,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 1040,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 2,
+          "stored_bytes": 471630,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            },
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 2,
+      "bridge_provider_usage": {
+        "input_tokens": 5931,
+        "output_tokens": 435,
+        "thinking_tokens": 321,
+        "cache_read_tokens": 0,
+        "total_tokens": 6366
+      },
+      "log_conversation_id_matches": true
+    },
+    {
+      "case": "probe_AB_2",
+      "attempt": 2,
+      "conversation_id": "dc595b28-3baf-4f5a-a76c-1329920c6f7c",
+      "request_id": "beee5960ee26431195419c6ca014194a",
+      "expected_hashes": [
+        "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+        "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1045,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 471517,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+              "complete": true
+            },
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+              "complete": true
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ],
+      "tool_errors": [],
+      "last_generation_all_original_wavs_present": true,
+      "bridge_completed_reads": 2,
+      "bridge_provider_usage": {
+        "input_tokens": 3740,
+        "output_tokens": 456,
+        "thinking_tokens": 344,
+        "cache_read_tokens": 0,
+        "total_tokens": 4196
+      },
+      "log_conversation_id_matches": true
+    }
+  ],
+  "summary": {
+    "refused_sessions": 10,
+    "all_original_wavs_present_in_last_generation": 8,
+    "all_requested_reads_completed": 8,
+    "sessions_with_any_tool_error": 1,
+    "raw_google_rejection_classification": "Not established by stored CLI records; absence of a named string in protobuf is not a decoded classification proof."
+  }
+}
