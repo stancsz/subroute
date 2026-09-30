@@ -118,7 +118,31 @@ Live 矩阵经真实 stdio 初始化、发现两工具、production Chat、原 S
 
 [全目录 48 项](gemini-catalog-matrix-2026-09-30.json) 包含 **45 个完整 MP3 入口 complete（43 个不同哈希）、3 个超限合集预期 invalid_input、0 unexpected outcomes**。本批完整 MP3 没有 provider 过滤/传输错误，CLI 报告 349,505 tokens。closeout 独立检查原文件哈希、ffprobe 与 header duration，45 个源文件哈希全一致，最大时长差 0.047021 秒；policy 不变、readiness 200。这不是 45 首不同歌曲或全部未来歌词的保证。prompt manifest 已保存，可用同一显式 live runner 复验。
 
-未满足的原目标：Google Subscription 对良性口令 A/B 仍会间歇拒绝，未暴露原始安全类别/输入或输出 stop reason。公开 changelog 到 1.2.14 没有给出本次音频过滤的完整词表或明确修复，未升级固定 CLI 来碰运气。[官方 changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md)。不能以删除正常词、隐式重试、切 provider 或声明已生产稳定来消除这项实际失败。目标保持 active，完整零拒绝验收未通过；普通歌曲监听运行证据显著扩大，但感知正确性仍缺少盲测与真实 Suno 退化版本验证。
+未满足的原目标：Google Subscription 对良性口令 A/B 仍会间歇拒绝，未暴露原始安全类别/输入或输出 stop reason。公开 changelog 到 1.2.14 没有给出本次音频过滤的完整词表或明确修复，未升级固定 CLI 来碰运气。[官方 changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md)。不能以删除正常词、隐式重试、切 provider 或声明已生产稳定来消除这项实际失败。该轮 checkpoint 保持 active，完整零拒绝验收未通过；普通歌曲监听运行证据显著扩大，但感知正确性仍缺少盲测与真实 Suno 退化版本验证。当前状态由下方有界完成审计更新。
+
+## 有界完成审计：blocked，原目标未完成
+
+本次是同一外部阻塞连续出现的第三个 goal turn。此前 `ba10c93` 修复结构化失败并完成音乐/词语矩阵，`a899bc9` 改善 MP3 元数据、失败 usage 与全目录覆盖；两轮都有工程进展，但合法音频的订阅拒绝未解决。本轮审计当前文件和已有实际失败，检查可用接口，不增加重复调用，也不把更多全绿样本当作原因已修复。
+
+| 用户要求 | 已验证的结果 | 当前判定 |
+| --- | --- | --- |
+| 搜索最全的禁用词/提示词，列清楚 | 官方安全类别/停止原因及 12 类中英文候选已整理；28 次语境和 6 次短语音均完成。未取得完整词表，未建立逐词因果或高频排序 | 部分完成，不能将候选写成已确认禁词 |
+| 在 MCP 处理导致过滤的词 | 保留真实 question/focus/音频；默认音乐任务表达明确；已知拒绝有标准 isError、错误码、关联 ID、可用失败 usage。无静默删词、替换或丢音频 | 失败处理已实现；“删掉触发词即可消除上游过滤”未成立、未实现 |
+| 测试大量提示词和真实音频 | 32 项完整 MP3 任务、28 项语境、全目录 48 个入口及追加对照均有原始收据；全目录 45 文件完成、43 个独立哈希、3 个超限合集本地拒绝 | 已有广泛实际覆盖，不能外推全部未来输入 |
+| consistently 投入生产，不再出现这类错误 | 同一良性 A/B 在最新六次续验中拒绝，随后完全相同请求又完成；网关正确报错并能恢复 | 未通过，真实反例仍存在 |
+| 专业混音师的清晰度、齿音、编曲、人声与品味判断 | 原音频可到达 Gemini；MP3 元数据已补齐。段落定位仍不一致，未完成真实 Suno 退化对照、stem、DSP 或人类盲听验收 | NOT READY，不以传输成功代替专业正确性 |
+
+独立于模型回答，读取 [六次续验收据](gemini-filter-followup-2026-09-30.json) 的第 3 和第 5 项，核对 `arguments` 的 question/focus 以及 `structured_content.inputs` 的两个哈希一致，终态分别为 refused / complete。失败 request_id 为 `55aef385cc0e4848ae6a78a871c07510`，conversation_id 为 `a7c30eaf-ce66-4570-9ca0-e4161670f905`。这是同输入的实际不一致，不是逐词触发证据，也不是统计可靠性估计；旧的实际失败仍保留。
+
+当前 Compose 容器的 `agy --version` 为 **1.2.11**。`agy --help` 与官方 [CLI reference](https://www.antigravity.google/docs/cli/reference/)、[settings](https://www.antigravity.google/docs/settings?tab=cli)、[headless](https://www.antigravity.google/docs/cli/headless/) 中未发现本订阅路径可用的 `safetySettings` 参数或原始 Google 安全分类字段。权限和 sandbox 配置控制本机工具执行，不是模型内容过滤控制。官方 [changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md) 截至 1.2.14 未给出本次过滤的完整词表或明确修复；1.2.14 的截断媒体修复涉及 MP4/MOV/M4A，不能据此声称我们的完整 WAV/MP3 误拒已解决。未盲目升级固定部署或引入自制订阅 transport。
+
+[Gemini API 安全反馈](https://ai.google.dev/gemini-api/docs/safety-settings#safety-feedback) 说明 API 可区分输入 blockReason 和输出 finishReason/safetyRatings；它不是本订阅 CLI 的设置承诺。当前已保存的生成审计和 CLI 泛化拒绝不足以判定本次原始类别。没有证据可以在网关里安全准确地“处理掉所有触发词”；关键词替换还会损坏正常音乐术语和用户任务，且无法控制音频内容和生成输出。
+
+因此原零过滤目标标为 **blocked，未完成**。已修复的网关继续可用，现有测试和失败收据不撤销。阻塞所有者是提供方订阅过滤/反馈边界；有意义的解除条件是提供方公开可关联的原始反馈并修复合法音频误拒或提供受支持控制，或用户明确改变提供方/验收合同。取得反馈本身只能解锁诊断，不直接构成零拒绝或专业质量通过。没有外部状态改变前，不继续相同探针、静默变换或增加无关功能以逃避原验收。本轮仅文档审计，无运行代码变更，未新调用模型、未重启服务，复查由主执行者完成而非独立评审。
+
+## Skill learning（完成审计补充）
+
+Northstar/QA 版本 unknown。有界恢复预期是找到可推进同一失败标准的下一动作；观察到网关缺陷修复和更多成功任务仍不能消除相同良性请求的提供方拒绝。官方接口核对与保留失败有助于区分本地可修复缺陷和外部阻塞。按照 Northstar 的“checkpoint it as blocked with the precise missing evidence, dependency, or intervention”停止重入同一调查，保留原标准。下一次继续需先验证解除条件已改变；未修改技能或向外部提交问题。
 
 ## Skill learning（本轮补充）
 
