@@ -1,0 +1,142 @@
+{
+  "gateway": "http://127.0.0.1:4000",
+  "root": "C:\\Users\\stanc\\Music\\OSN_Captian_Aioz_LBI",
+  "mcp_version": "1.28.1",
+  "cases": [
+    {
+      "index": 0,
+      "case": "UFO_known_duration_0",
+      "tool": "analyze_audio",
+      "arguments": {
+        "asset_path": "test\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3",
+        "question": "精确 LUFS、true peak、EQ 中心频率和 compressor ratio 能确认吗？没有 DSP 测量时请明确不能确认。",
+        "focus": [
+          "动态",
+          "测量限制"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-84ac48b21e73",
+        "inputs": [
+          {
+            "path": "C:\\Users\\stanc\\Music\\OSN_Captian_Aioz_LBI\\test\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3",
+            "sha256": "0937703ea740c1932f41783ed328ae03d7b6ac782317f1c9901ccfc0c75fb39c",
+            "bytes": 5177108,
+            "format": "mp3",
+            "sample_rate": 48000,
+            "channels": 2,
+            "duration_seconds": 171.288,
+            "duration_source": "mpeg_headers",
+            "duration_is_estimate": true
+          }
+        ],
+        "observations": "### 针对核心问题的明确回复\n\n**不能确认。**\n\n在缺乏专用音频分析仪表与数字信号处理（DSP）测量工具（如 EBU R128 / ITU-R BS.1770 响度计、过采样 True Peak 表、高精度实时频谱分析仪及插件参数读取）的前提下，**仅凭听觉感知绝无法确认具体的精确 Integrated/Short-term LUFS 响度、True Peak（真实峰值 dBTP）、各音轨/总线 EQ 的具体中心频率（Hz）及压缩器设置的压缩比（Compressor Ratio）**。\n\n人耳听觉可以感知宏观的响度起伏、频段的大致能量平衡（如中低频丰满或高频亮丽）以及压缩/限制带来的微动态压缩感与抽动感，但任何具体的分贝值、采样插值峰值与 DSP 数值参数必须依靠仪器测量，不可主观臆测。\n\n---\n\n### 音频动态与听感分析（基于附件 1，已知时长 171.288 秒）\n\n> 注：音频时长基于 MPEG 文件头元数据（171.288 秒），由于 MP3 编码器填充特性可能存在细微偏差；以下时间区间标注均为试听临时参考定位，需重新播放确认。\n\n#### 1. 可听现象观察（Audible Observations）\n* **0:00 - 0:21（Intro）**：以原声木吉他拨弦/分解和弦开场，伴随带通滤波质感的人声先行 Hook，整体声能密度较低，声场聚焦在中频，保留了自然的吉他指弹起伏与呼吸空间。\n* **0:21 - 1:04（Verse 1）**：现代 Urban/R&B 鼓组与下潜明显的合成 Bass/808 介入，主歌说唱/旋律进入。整体感知响度产生阶梯式上升，人声音量在密集的打击乐伴奏中保持高度平稳，字句间微动态波动较小。\n* **1:04 - 1:25（Pre-Chorus）**：背景声部加入更多氛围合成器与高频叠水音效，主唱高音区延展，高频瞬态与辅音咬字清晰且被控制在恒定电平范围内。\n* **1:25 - 1:46（Chorus）**：全频段乐器铺满，低频律动与人声合唱层叠，宏观能量感达到阶段性峰值，整体声学密度较高，段落内动态范围相对紧凑。\n* **1:46 - 2:20（Verse 2）**：人声切换为低语调叙事性说唱（约 2:00 前后伴奏配器精简，侧重低音线条），整体感知响度随着鼓组的变奏产生段落式起伏。\n* **2:20 - 2:32（Bridge）**：织体再次精简过渡，鼓组能量回收，动态空间回落。\n* **2:32 - 171.288 秒（Outro / Final Chorus）**：全套节奏与主副歌旋律再次回归并渐弱淡出，直至音频结束。\n\n#### 2. 推测原因（Suspected Causes）\n* **人声微动态恒定**：人声电平在整个编曲起伏中始终居前且清晰稳定，推测在分轨混音中应用了较重的人声动态控制（例如串联压缩、快慢压缩结合或精细的增益包络/自动化）。\n* **段落切换时的冲击感与紧致度**：从 Intro 进入 Verse 以及进入 Chorus 时，鼓组底鼓与 808 进入后声能饱满且未见明显爆音失真，推测总线或分轨加入了总线压缩与砖墙限制器（Brickwall Limiter），以压制瞬态峰值并提高整体有效响度。\n* **频段清晰度与分离度**：人声咬字未被深厚的低频掩蔽，推测在混音中对低频乐器与人声基频交叠区进行了侧链避让或动态 EQ 削减。\n\n---\n\n### 测量局限性与无法评估事项\n\n1. **精确电平与动态指标**：无法获知全曲整体 Integrated LUFS、各段 Short-term LUFS 读数，亦无法判断是否存在跨样值超量（Inter-sample Peak / True Peak clipping）。\n2. **硬件/插件参数**：无法确定压缩器的真实阈值（Threshold）、拐角（Knee）、启动/释放时间（Attack/Release）及具体 Ratio（如 2:1 或 4:1）；无法确定 EQ 的精确中心频率（Hz）及 Q 值。\n3. **空间与速度参数**：根据规范，不估算具体立体声宽度百分比及精确 BPM。\n4. **审美与专业认证**：混音的动态处理偏向现代商业流媒体的高饱满度风格，但主观听感优劣高度依赖个人偏好与监听参考环境，无法给出普遍性品质打分或认证其制作级别。\n",
+        "usage": {
+          "completion_tokens": 3689,
+          "prompt_tokens": 3619,
+          "total_tokens": 7308
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-84ac48b21e73\", \"inputs\": [{\"path\": \"C:\\\\Users\\\\stanc\\\\Music\\\\OSN_Captian_Aioz_LBI\\\\test\\\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3\", \"sha256\": \"0937703ea740c1932f41783ed328ae03d7b6ac782317f1c9901ccfc0c75fb39c\", \"bytes\": 5177108, \"format\": \"mp3\", \"sample_rate\": 48000, \"channels\": 2, \"duration_seconds\": 171.288, \"duration_source\": \"mpeg_headers\", \"duration_is_estimate\": true}], \"observations\": \"### 针对核心问题的明确回复\\n\\n**不能确认。**\\n\\n在缺乏专用音频分析仪表与数字信号处理（DSP）测量工具（如 EBU R128 / ITU-R BS.1770 响度计、过采样 True Peak 表、高精度实时频谱分析仪及插件参数读取）的前提下，**仅凭听觉感知绝无法确认具体的精确 Integrated/Short-term LUFS 响度、True Peak（真实峰值 dBTP）、各音轨/总线 EQ 的具体中心频率（Hz）及压缩器设置的压缩比（Compressor Ratio）**。\\n\\n人耳听觉可以感知宏观的响度起伏、频段的大致能量平衡（如中低频丰满或高频亮丽）以及压缩/限制带来的微动态压缩感与抽动感，但任何具体的分贝值、采样插值峰值与 DSP 数值参数必须依靠仪器测量，不可主观臆测。\\n\\n---\\n\\n### 音频动态与听感分析（基于附件 1，已知时长 171.288 秒）\\n\\n> 注：音频时长基于 MPEG 文件头元数据（171.288 秒），由于 MP3 编码器填充特性可能存在细微偏差；以下时间区间标注均为试听临时参考定位，需重新播放确认。\\n\\n#### 1. 可听现象观察（Audible Observations）\\n* **0:00 - 0:21（Intro）**：以原声木吉他拨弦/分解和弦开场，伴随带通滤波质感的人声先行 Hook，整体声能密度较低，声场聚焦在中频，保留了自然的吉他指弹起伏与呼吸空间。\\n* **0:21 - 1:04（Verse 1）**：现代 Urban/R&B 鼓组与下潜明显的合成 Bass/808 介入，主歌说唱/旋律进入。整体感知响度产生阶梯式上升，人声音量在密集的打击乐伴奏中保持高度平稳，字句间微动态波动较小。\\n* **1:04 - 1:25（Pre-Chorus）**：背景声部加入更多氛围合成器与高频叠水音效，主唱高音区延展，高频瞬态与辅音咬字清晰且被控制在恒定电平范围内。\\n* **1:25 - 1:46（Chorus）**：全频段乐器铺满，低频律动与人声合唱层叠，宏观能量感达到阶段性峰值，整体声学密度较高，段落内动态范围相对紧凑。\\n* **1:46 - 2:20（Verse 2）**：人声切换为低语调叙事性说唱（约 2:00 前后伴奏配器精简，侧重低音线条），整体感知响度随着鼓组的变奏产生段落式起伏。\\n* **2:20 - 2:32（Bridge）**：织体再次精简过渡，鼓组能量回收，动态空间回落。\\n* **2:32 - 171.288 秒（Outro / Final Chorus）**：全套节奏与主副歌旋律再次回归并渐弱淡出，直至音频结束。\\n\\n#### 2. 推测原因（Suspected Causes）\\n* **人声微动态恒定**：人声电平在整个编曲起伏中始终居前且清晰稳定，推测在分轨混音中应用了较重的人声动态控制（例如串联压缩、快慢压缩结合或精细的增益包络/自动化）。\\n* **段落切换时的冲击感与紧致度**：从 Intro 进入 Verse 以及进入 Chorus 时，鼓组底鼓与 808 进入后声能饱满且未见明显爆音失真，推测总线或分轨加入了总线压缩与砖墙限制器（Brickwall Limiter），以压制瞬态峰值并提高整体有效响度。\\n* **频段清晰度与分离度**：人声咬字未被深厚的低频掩蔽，推测在混音中对低频乐器与人声基频交叠区进行了侧链避让或动态 EQ 削减。\\n\\n---\\n\\n### 测量局限性与无法评估事项\\n\\n1. **精确电平与动态指标**：无法获知全曲整体 Integrated LUFS、各段 Short-term LUFS 读数，亦无法判断是否存在跨样值超量（Inter-sample Peak / True Peak clipping）。\\n2. **硬件/插件参数**：无法确定压缩器的真实阈值（Threshold）、拐角（Knee）、启动/释放时间（Attack/Release）及具体 Ratio（如 2:1 或 4:1）；无法确定 EQ 的精确中心频率（Hz）及 Q 值。\\n3. **空间与速度参数**：根据规范，不估算具体立体声宽度百分比及精确 BPM。\\n4. **审美与专业认证**：混音的动态处理偏向现代商业流媒体的高饱满度风格，但主观听感优劣高度依赖个人偏好与监听参考环境，无法给出普遍性品质打分或认证其制作级别。\\n\", \"usage\": {\"completion_tokens\": 3689, \"prompt_tokens\": 3619, \"total_tokens\": 7308}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 29.127,
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 1,
+      "case": "UFO_known_duration_1",
+      "tool": "analyze_audio",
+      "arguments": {
+        "asset_path": "test\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3",
+        "question": "精确 LUFS、true peak、EQ 中心频率和 compressor ratio 能确认吗？没有 DSP 测量时请明确不能确认。",
+        "focus": [
+          "动态",
+          "测量限制"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-1cae55663b36",
+        "inputs": [
+          {
+            "path": "C:\\Users\\stanc\\Music\\OSN_Captian_Aioz_LBI\\test\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3",
+            "sha256": "0937703ea740c1932f41783ed328ae03d7b6ac782317f1c9901ccfc0c75fb39c",
+            "bytes": 5177108,
+            "format": "mp3",
+            "sample_rate": 48000,
+            "channels": 2,
+            "duration_seconds": 171.288,
+            "duration_source": "mpeg_headers",
+            "duration_is_estimate": true
+          }
+        ],
+        "observations": "### 测量限制与核心问题答复\n\n关于精确指标的确认情况：**在没有专用 DSP 测量工具与音频分析插件介入的情况下，完全无法确认精确的 LUFS、True Peak、EQ 中心频率以及压缩器压缩比（Compressor Ratio）。**\n\n具体限制如下：\n1. **精确 LUFS（综合/短期响度）：无法确认。** 响度测量需基于 ITU-R BS.1770 标准的 K 计权滤波与时间窗算法；人耳感知的响度受回放系统增益、环境底噪及心理声学影响，无法逆向推导绝对数值。\n2. **True Peak（真实峰值，dBTP）：无法确认。** 样点间峰值（Inter-sample Peak）需要通过超采样重构信号，仅凭人耳聆听无法检测样点间的超限瞬态。\n3. **EQ 中心频率（Hz 及 Q 值）：无法确认。** 人耳仅能感知宏观频段能量的大致分布（如中频饱满、高频泛音等），无法准确定位具体的陷波/提升中心频点（如 2.5 kHz 或 3 kHz）与滤波带宽。\n4. **压缩器压缩比（Ratio）：无法确认。** 压缩后的包络（起音/释音、拐点、动态范围收敛）能够被察觉，但其受输入电平、阈值（Threshold）、拐点（Knee）与增益衰减量综合影响，无法仅凭听觉反推出设定的精确比率（如 2:1、4:1 等）。\n\n---\n\n### 动态听觉客观观察（Audible Observations）\n*注：音频总时长基于文件元数据提供的约 171.288 秒（MPEG 标头估算，可能包含轻微编码填充）。时间范围均为试听定位，实际回放时建议复核。*\n\n* **0:00 - 0:15（前奏段落）**：感知响度较低，频谱范围明显收缩，人声与伴奏集中在中频，动态处于较为压制、克制的状态。\n* **0:15 - 0:45（副歌/Hook 1）**：伴奏全频段低频与打击乐瞬间切入，瞬态感知与宏观能量明显跃升，整体响度在此处形成第一个饱满的高峰。\n* **0:45 - 1:15（主歌 1 说唱段落）**：低频节奏持续，主唱人声位置靠前且字词电平波动较小，强弱音节与音节尾音的起伏受控，整体宏观动态保持均匀紧凑。\n* **1:30 - 2:00（副歌/Hook 2）**：伴奏织体更厚重，多层和声铺开，整体感知能量达到峰值，高低频瞬态较为饱满且无明显听觉破音失真。\n* **2:00 - 2:28（主歌 2 低音说唱段落）**：编曲低频元素相对收敛，男低音人声近讲感明显，全曲能量在此处产生明显的段落动态对比与下沉。\n* **2:28 - 2:51（过渡段与尾奏）**：高音采样与吉他织体过渡后，Hook 再次回归，能量短暂拉升后自然收尾。\n\n---\n\n### 推测原因（Suspected Causes，独立分析）\n\n* **前奏与副歌之间的能量落差**：推测在前奏音轨或主总线上应用了滤波自动化（如高低通滤波）与电平增益衰减，在 0:15 节点完全释放，以此通过对比拉大主副歌的能量张力。\n* **人声与打击乐平稳紧凑的听感**：推测主唱分轨和鼓组轨道上均施加了动态压缩，控制了微动态（Micro-dynamics），将人声起伏限制在较窄的电平波动区间内，以保证流行/说唱语境下的清晰度与可懂度。\n* **副歌大动态下无明显削顶或抽吸（Pumping）**：推测混音总线或母带阶段使用了砖墙限幅器（Brickwall Limiter）或多段压缩器，对全频瞬态进行了平滑的峰值控制，在提升整体紧凑感的同时避免了明显的非线性削波失真。\n\n---\n\n### 局限性说明（Limitations）\n\n* **无法进行量化分析**：当前评估完全基于听觉感知，不能代替数字音频工作站（DAW）、测度插件及频谱仪的量化分析。\n* **无法推断具体处理链路**：无法确认混音时实际使用的软硬件型号、插件链顺序及具体参数设置。\n* **避免普适审美定论**：关于动态收敛与否的优劣取决于特定的音乐风格取向与客户参考标准，不作普遍化的品质评分。\n",
+        "usage": {
+          "completion_tokens": 3699,
+          "prompt_tokens": 3623,
+          "total_tokens": 7322
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-1cae55663b36\", \"inputs\": [{\"path\": \"C:\\\\Users\\\\stanc\\\\Music\\\\OSN_Captian_Aioz_LBI\\\\test\\\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3\", \"sha256\": \"0937703ea740c1932f41783ed328ae03d7b6ac782317f1c9901ccfc0c75fb39c\", \"bytes\": 5177108, \"format\": \"mp3\", \"sample_rate\": 48000, \"channels\": 2, \"duration_seconds\": 171.288, \"duration_source\": \"mpeg_headers\", \"duration_is_estimate\": true}], \"observations\": \"### 测量限制与核心问题答复\\n\\n关于精确指标的确认情况：**在没有专用 DSP 测量工具与音频分析插件介入的情况下，完全无法确认精确的 LUFS、True Peak、EQ 中心频率以及压缩器压缩比（Compressor Ratio）。**\\n\\n具体限制如下：\\n1. **精确 LUFS（综合/短期响度）：无法确认。** 响度测量需基于 ITU-R BS.1770 标准的 K 计权滤波与时间窗算法；人耳感知的响度受回放系统增益、环境底噪及心理声学影响，无法逆向推导绝对数值。\\n2. **True Peak（真实峰值，dBTP）：无法确认。** 样点间峰值（Inter-sample Peak）需要通过超采样重构信号，仅凭人耳聆听无法检测样点间的超限瞬态。\\n3. **EQ 中心频率（Hz 及 Q 值）：无法确认。** 人耳仅能感知宏观频段能量的大致分布（如中频饱满、高频泛音等），无法准确定位具体的陷波/提升中心频点（如 2.5 kHz 或 3 kHz）与滤波带宽。\\n4. **压缩器压缩比（Ratio）：无法确认。** 压缩后的包络（起音/释音、拐点、动态范围收敛）能够被察觉，但其受输入电平、阈值（Threshold）、拐点（Knee）与增益衰减量综合影响，无法仅凭听觉反推出设定的精确比率（如 2:1、4:1 等）。\\n\\n---\\n\\n### 动态听觉客观观察（Audible Observations）\\n*注：音频总时长基于文件元数据提供的约 171.288 秒（MPEG 标头估算，可能包含轻微编码填充）。时间范围均为试听定位，实际回放时建议复核。*\\n\\n* **0:00 - 0:15（前奏段落）**：感知响度较低，频谱范围明显收缩，人声与伴奏集中在中频，动态处于较为压制、克制的状态。\\n* **0:15 - 0:45（副歌/Hook 1）**：伴奏全频段低频与打击乐瞬间切入，瞬态感知与宏观能量明显跃升，整体响度在此处形成第一个饱满的高峰。\\n* **0:45 - 1:15（主歌 1 说唱段落）**：低频节奏持续，主唱人声位置靠前且字词电平波动较小，强弱音节与音节尾音的起伏受控，整体宏观动态保持均匀紧凑。\\n* **1:30 - 2:00（副歌/Hook 2）**：伴奏织体更厚重，多层和声铺开，整体感知能量达到峰值，高低频瞬态较为饱满且无明显听觉破音失真。\\n* **2:00 - 2:28（主歌 2 低音说唱段落）**：编曲低频元素相对收敛，男低音人声近讲感明显，全曲能量在此处产生明显的段落动态对比与下沉。\\n* **2:28 - 2:51（过渡段与尾奏）**：高音采样与吉他织体过渡后，Hook 再次回归，能量短暂拉升后自然收尾。\\n\\n---\\n\\n### 推测原因（Suspected Causes，独立分析）\\n\\n* **前奏与副歌之间的能量落差**：推测在前奏音轨或主总线上应用了滤波自动化（如高低通滤波）与电平增益衰减，在 0:15 节点完全释放，以此通过对比拉大主副歌的能量张力。\\n* **人声与打击乐平稳紧凑的听感**：推测主唱分轨和鼓组轨道上均施加了动态压缩，控制了微动态（Micro-dynamics），将人声起伏限制在较窄的电平波动区间内，以保证流行/说唱语境下的清晰度与可懂度。\\n* **副歌大动态下无明显削顶或抽吸（Pumping）**：推测混音总线或母带阶段使用了砖墙限幅器（Brickwall Limiter）或多段压缩器，对全频瞬态进行了平滑的峰值控制，在提升整体紧凑感的同时避免了明显的非线性削波失真。\\n\\n---\\n\\n### 局限性说明（Limitations）\\n\\n* **无法进行量化分析**：当前评估完全基于听觉感知，不能代替数字音频工作站（DAW）、测度插件及频谱仪的量化分析。\\n* **无法推断具体处理链路**：无法确认混音时实际使用的软硬件型号、插件链顺序及具体参数设置。\\n* **避免普适审美定论**：关于动态收敛与否的优劣取决于特定的音乐风格取向与客户参考标准，不作普遍化的品质评分。\\n\", \"usage\": {\"completion_tokens\": 3699, \"prompt_tokens\": 3623, \"total_tokens\": 7322}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 21.463,
+      "expected_outcome_matches": true
+    }
+  ],
+  "scope": "Live transport and refusal observations; not calibrated music-quality certification.",
+  "automatic_retry": false,
+  "concurrency": 1,
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "summary": {
+    "calls": 2,
+    "errors": 0,
+    "unexpected_outcomes": 0,
+    "known_provider_tokens": 14630,
+    "provider_calls_with_unknown_usage": 0,
+    "failed_usage": "Included when the bridge reported valid usage; missing usage is unknown, not zero.",
+    "latency_seconds": [
+      21.463,
+      29.127
+    ]
+  }
+}

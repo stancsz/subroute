@@ -1,0 +1,677 @@
+[
+  {
+    "case": "catalog_00",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK-【妳不是妳，我不是我】audio.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_01",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK-【最後一次鐘聲】Music Video.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_02",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK-【水瓶座】audio.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_03",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_LBI利比 - 爛片劇情『打開電視 卻找不到遙控』【Lyrics Video】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_04",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_LBI利比 - 走向我是為了離開我『那些我幻想的生活 變成了泡沫』【動態歌詞】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_05",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_LBI利比 Best Songs Playlist ~ 利比精選合集歌單 ｜ 2025 Best Songs Of LBI｜或許, 跳樓機, 潛意識, 說愛你, 折起的遺憾, 重演梦境.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    },
+    "expected_error": "invalid_input"
+  },
+  {
+    "case": "catalog_06",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_LBI利比最好聽的歌曲 Best songs of LBI利比 ♪ 跳樓機, 或許, 潛意識, 說愛你, 折起的遺憾, 重演梦境 ♪ LBI利比 Playlist 2025.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    },
+    "expected_error": "invalid_input"
+  },
+  {
+    "case": "catalog_07",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_利比《跳楼机》(官方歌词MV)｜LBI - Jumping Machine (Official Lyric Video).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_08",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Playlist Young Captain Best Song.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    },
+    "expected_error": "invalid_input"
+  },
+  {
+    "case": "catalog_09",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "reference.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_10",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 - 你做那音樂可以當飯吃嗎 (MV).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_11",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 - 消失一整天 (MV).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_12",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 -  跟別人要IG (MV).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_13",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 - 他劈腿ㄟ (MV).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_14",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 - 別把我打上岸 (MV).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_15",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz - 小熊『總是莫名的想起 曾經你我的約定，爛在淤泥的回憶 小熊心裡塞滿了你。』【動態歌詞MV】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_16",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz - 放你走吧『這次我就放你走吧 你千萬別回頭啦，我這種不懂珍惜的人 才不值得你愛啊。』【動態歌詞MV】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_17",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz - 证据『我总在创造你不爱我的证据，最后才发现原来你爱我会爱得这么满。』【动态歌词MV】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_18",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz ⧸ 劉思達LOFTHESTAR ⧸ 張天樞Dubhe - 算了吧『霜停在我的眼眸快結成了痂，對著雪人念準備好的情話。』【動態歌詞⧸Vietsub⧸Pinyin Lyrics】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_19",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_20",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\ASEN - 嘻哈脑壳(Official Music Video).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_21",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【凌晨三點 3AM】(audio).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_22",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【到處都是妳的痕跡】audio.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_23",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【妳對我多重要】audio （Prod. EVOMUSIC）.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_24",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【給妳的愛】audio.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_25",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【還是分開了】audio.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_26",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\h3R3 - 忘不掉的你【動態歌詞】「你冰冷的話語就像這傾盆的大雨 將我的溫柔澆滅卻表現得無所謂」♪.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_27",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\h3R3⧸林達浪 - 還是會想你【動態歌詞】「還是會想你 還是會怪你 怪你輕而易舉瀟灑抽離」♪.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_28",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Juice Boy ft. Karencici 《Target》Official Music Video.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_29",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Juice Boy 《一萬公里外的你》Official Music Video.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_30",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\LBI利比 - 小城夏天『橘黃色的日落 吞沒在海平線』【Lyrics Video】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_31",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Ryan B,AY楊佬叁   再也没有 1080P MV 首发.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_32",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Tr33 x BK x Seluu -【你知道你比晚霞好看嗎】Music Video.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_33",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\TYSON YOSHI - Christy (Prod. MADBOII).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_34",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\《一天》 - 鹿晗⧸队长 官方MV.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_35",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\《中國新說唱2020》純享：GALI《70%》反擊抄襲論全場Respect｜愛奇藝.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_36",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\利比《跳楼机》(官方歌词MV)｜LBI - Jumping Machine (Official Lyric Video).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_37",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\队长 YOUNG CAPTAIN – 予你 – OFFICIAL LYRICS MV 官方歌词版.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_38",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\隊長 Young Captain - 樓頂上的小斑鳩『我的確想讓你回來 回來 不要再次離開 離開』【Official Music Video】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_39",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\隊長 YOUNG Captain ⧸ 黃禮格 Hooleeger - Official MV《11》.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_40",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\隊長YoungCaptain - 哪裡都是你【動態歌詞】「你想要的是現在 而不是那遙遠的未來」♪.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_41",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【So Bad】Official MV.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_42",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【Why You Gonna Lie】｜Official MV.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_43",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【Without You】沒了妳｜Official MV.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_44",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【最後一次】The Last Time｜Official MV.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_45",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣OSN & 派偉俊 Patrick Brasca -Hold On (Official Music Video).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_46",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣OSN-Circles (Official Music Video).mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  },
+  {
+    "case": "catalog_47",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "隊長 - 碎碎念『所以別再問那麼多問題 回憶全部都被你給佔據』【動態歌詞 Lyrics】.mp3",
+      "question": "用中文简短说明实际听到的主要人声、编曲、节奏和清晰度。只给观察与判断限制，不输出完整歌词，不猜精确测量值或插件参数。",
+      "focus": [
+        "人声",
+        "编曲",
+        "节奏",
+        "清晰度"
+      ]
+    }
+  }
+]

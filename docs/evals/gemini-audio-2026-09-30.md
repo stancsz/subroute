@@ -100,7 +100,31 @@ Live 矩阵经真实 stdio 初始化、发现两工具、production Chat、原 S
 
 本机 Codex 的现有 MCP 允许根目录已更新到用户提供的音乐目录，保留原 command/env 与 20/180 秒 timeout，`codex mcp get` 已确认。新 server 进程读取新配置与源码；当前会话菜单未热加载。此次仅变更本机 MCP 和文档，现有 HTTP gateway/sidecar 代码未变，无需无效重启正在测试的 Compose 服务。原始 Google 过滤触发原因仍未知，完整候选与官方依据见 [过滤排查](../misc/gemini-content-filter-candidates.md)。
 
-## Skill learning
+## 生产续验：MP3 元数据、失败计量与全目录
+
+本轮前一 goal turn 判定为 progress，不能关闭目标：它修复了 MCP 返回契约并产生实际运行证据，但零过滤保证和感知质量没有通过。本轮从当前源码与 Compose 继续，不重定义这些门槛。
+
+已修复的具体缺口：此前 MCP 只给 WAV 时长，MP3 分析含超出实际时长的时间点；现在 music extra 固定加入纯 Python 的 Mutagen 1.47.0，使用 `MPEGInfo` 从同一份待发送字节读取 MPEG/Xing 时长、声道、采样率，并标 `duration_is_estimate=true`。原始字节不改变、不重新打开文件、不转码；无可读 MPEG 音频流在本地拒绝。已检查本机 LiteLLM 对应 util/provider 路径，未找到可直接复用的 MPEGInfo/MP3 时长解析，本实现使用成熟解析器，不维护自制 MP3 解码。维护成本为一个可选固定依赖，gateway/sidecar 不新增解析依赖或容器；它不构成完整解码、CRC 校验或精确 DSP 测量。[Mutagen MP3 信息](https://mutagen.readthedocs.io/en/latest/api/mp3.html)、[不可变 BytesIO 输入](https://mutagen.readthedocs.io/en/latest/user/filelike.html)。
+
+另一个缺口是拒绝时，private bridge 已返回有效 provider usage，而 LiteLLM 的公开 error message 只保留 detail。查看现有错误封装后，保留原公开协议，用与 request_id 相同的窄诊断标记传输三个已验证的非负整数，MCP 映射为标准 usage。第一次真实拒绝暴露 LiteLLM 把 `No fallback...` 无空格地拼在数字后，词边界正则漏读；按真实错误字符串修复，并回归其拒绝状态、原输入哈希与 usage。无字段时保留 null，不捏造零消耗。退役条件是部署 LiteLLM/CLI 能直接提供适用的结构化失败 usage，届时移除这个文本诊断兼容层。没有按用户正文猜分类或增加模型调用。
+
+回归与部署：本机两个受影响文件 74 passed；固定部署镜像六文件 **237 passed / 3 warnings，24.79 秒**。正则修复后，同镜像音频文件再次 **35 passed / 1 warning，15.89 秒**。自制 250 ms MP3 音调 fixture 是合法可解析文件，只有约 3.8 KB，没有提交用户音频。新增检查覆盖 MP3 头/流差异、不可变快照、真实拼接格式和无效 usage。shared handler 通过 Compose 重启 gateway、gateway-staging、experts 加载；生产/测试策略重启前后相同，readiness 200；源文件 SHA 与运行挂载核对。sidecar 源码未变，无需重建它。复查仍不独立，图形 UI 未变。
+
+新的实际拒绝不能被省略：[原探针 6 次续验](gemini-filter-followup-2026-09-30.json)，5 complete、1 refused。A/B 转写 11.412 秒返回 502 / `provider_content_filter`，request_id `55aef385cc0e4848ae6a78a871c07510`、conversation_id `a7c30eaf-ce66-4570-9ca0-e4161670f905`。日志为 completed_reads=1、3616 input / 483 output / 4099 total tokens，因此 `after_attachment_reads` 只表示至少一个读取完成，不能声称这次两附件都进入了生成。下一次同问法、同原始音频 A/B 又成功，两个后续普通语音调用成功，policy 未变。原 MCP 结果保留 usage=null 的实际失败，closeout 附加明确标注的字符串回放恢复 4099，不把回放包装为新的 live 过滤调用。六次中成功 usage 合计 29,970，加日志确认失败 4,099 为 34,069 reported tokens。
+
+[修正后四次显式试验](gemini-filter-usage-2026-09-30.json) 全部 complete；没有新拒绝，所以不声称修正后的失败计量已有另一次 live 拒绝证明。该检查验证新代码的正常调用和后续可用，故障字符串的修复证据来自真实原错误与回归。
+
+[MP3 时长复验两次](gemini-mp3-metadata-followup-2026-09-30.json)，使用《UFO》同原问题，两次完整分析均采用 171.288 秒元数据、范围未越界，并承认不能确认精确 DSP/插件参数；独立 ffprobe 为 171.258792 秒。两次段落结构/入场起点仍不同，范围合法不证明事件定位准确，专业门槛仍未通过。
+
+[全目录 48 项](gemini-catalog-matrix-2026-09-30.json) 包含 **45 个完整 MP3 入口 complete（43 个不同哈希）、3 个超限合集预期 invalid_input、0 unexpected outcomes**。本批完整 MP3 没有 provider 过滤/传输错误，CLI 报告 349,505 tokens。closeout 独立检查原文件哈希、ffprobe 与 header duration，45 个源文件哈希全一致，最大时长差 0.047021 秒；policy 不变、readiness 200。这不是 45 首不同歌曲或全部未来歌词的保证。prompt manifest 已保存，可用同一显式 live runner 复验。
+
+未满足的原目标：Google Subscription 对良性口令 A/B 仍会间歇拒绝，未暴露原始安全类别/输入或输出 stop reason。公开 changelog 到 1.2.14 没有给出本次音频过滤的完整词表或明确修复，未升级固定 CLI 来碰运气。[官方 changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md)。不能以删除正常词、隐式重试、切 provider 或声明已生产稳定来消除这项实际失败。目标保持 active，完整零拒绝验收未通过；普通歌曲监听运行证据显著扩大，但感知正确性仍缺少盲测与真实 Suno 退化版本验证。
+
+## Skill learning（本轮补充）
+
+Northstar/QA 版本 unknown。真实失败格式暴露了 mock 缺少 `No fallback...` 拼接的问题；已有问题必须用实际公共边界字符串回归，不能只按 bridge 体写测试。全目录 45 文件和独立 ffprobe 检查支持了元数据修复，却不能抵消另一类请求的真实拒绝。保留部分失败与估计标签、把未满足原目标继续留 active，有助于防止把成熟度门槛降低到最近一次全绿。后续应优先做可复核的声音退化盲测，并取得提供方原始拒绝反馈；未改技能或发送外部消息。
+
+## Skill learning（前序记录）
 
 Northstar / Northstar QA 当前本地版本，版本号 unknown。预期 native Gemini 能听音频，观察到模型有能力但 gateway 文本运输没有附件，且 Messages 的 200 隐藏了丢失。盲口令比泛泛询问“听到什么”更能验证传输；真实 MCP 的两入口已复查，并进一步暴露 CLI SUCCESS 包装过滤拒绝的问题。验收应同时检查输入字节、读取完成、终态内容与 provider usage，保留音乐描述失败可防止把转写能力当作专业混音能力。本轮继续修复表明终态校验应由共享协议边界拥有，不能只加在一个输入分支；真实双文件仍拒绝，所以必须区分网关修复与上游问题解决。该教训可用于 [Northstar Issues](https://github.com/stancsz/northstar/issues)，未发送外部消息。
 

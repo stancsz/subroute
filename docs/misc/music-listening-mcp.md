@@ -10,9 +10,9 @@
 
 `python -m subroute.music_mcp --root <音频目录> --gateway-url http://127.0.0.1:4000` 启动标准 stdio MCP，额外依赖用 `pip install -e ".[music]"` 安装。当前已将 `subroute-music` 注册到本机 Codex，文件根目录按用户提供的路径更新为 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI`，仅允许其内部 WAV/MP3。新会话或重启 MCP server 加载该配置；本次通过真实 MCP SDK 完成握手、发现工具和调用，并未宣称当前会话的动态工具菜单已经刷新。
 
-当前参数比下文专业设计简单：`analyze_audio(asset_path, question, focus)`；`compare_audio(a_path, b_path, question, focus)`。最多两个文件、合计 20 MiB。返回 `gemini-listening-v1` structuredContent：原文件哈希、WAV 时长/采样率/声道、实际 provider usage、Gemini 观察与限制。`complete` 指完成此次订阅请求和指定文件读取，不证明其判断正确。
+当前参数比下文专业设计简单：`analyze_audio(asset_path, question, focus)`；`compare_audio(a_path, b_path, question, focus)`。最多两个文件、合计 20 MiB。返回 `gemini-listening-v1` structuredContent：原文件哈希、WAV/MP3 时长/采样率/声道、实际 provider usage、Gemini 观察与限制。WAV 时长来自 PCM 帧数，MP3 使用固定 Mutagen 1.47.0 从将要发送的同一份字节解析 MPEG/Xing 头，并注明 `duration_source=mpeg_headers` / `duration_is_estimate=true`，编码 padding 等可能造成小偏差。这是元数据检查，不能认证文件完整解码或混音质量。无可读 MP3 音频流在本地拒绝；裸 HTTP 音频入口仍只检查 MP3 头，不宣称同等级解码验证。`complete` 指完成此次订阅请求和指定文件读取，不证明其判断正确。
 
-question 最多 8,000 字符，focus 最多 16 项、每项 128 字符；超限明确拒绝，不截断。过滤拒绝返回标准 MCP `CallToolResult`：`isError=true`、`status=refused`、`error.code=provider_content_filter`，保留文件哈希和可用的 phase/request_id/conversation_id。其他错误为 `status=error`，明确 `invalid_input`、`gateway_timeout`、`gateway_unavailable`、`gateway_error` 或 `invalid_response`，HTTP 错误包含 http_status。失败 usage 为 null，不能当成零费用；提供方可用 usage 仍在对应 bridge 日志。没有自动重试或改词/删词。
+question 最多 8,000 字符，focus 最多 16 项、每项 128 字符；超限明确拒绝，不截断。过滤拒绝返回标准 MCP `CallToolResult`：`isError=true`、`status=refused`、`error.code=provider_content_filter`，保留文件哈希和可用的 phase/request_id/conversation_id。其他错误为 `status=error`，明确 `invalid_input`、`gateway_timeout`、`gateway_unavailable`、`gateway_error` 或 `invalid_response`，HTTP 错误包含 http_status。过滤失败也保留 bridge 提供的有效 usage；缺失时为 null，不能当成零费用。`after_attachment_reads` 指至少一个文件已读，不表示所有附件都读完；完整读取是成功条件。没有自动重试或改词/删词。
 
 默认提示词让歌词和语音作为数据，只做音乐评论时不要求完整转写；明确的转写请求仍保留。正常的 attack/release、killer/trap 等术语不会屏蔽。官方类别、候选词、测试与语义边界见 [过滤排查](gemini-content-filter-candidates.md)。这些改动不能控制 Google Subscription 的原始过滤阈值。
 
@@ -57,6 +57,8 @@ flowchart TD
 | 用户与盲听评审 | 定义审美、确认实际改善、接受交付 | 用模型自己的好评分替代听感验收 |
 
 当前使用已安装的标准 MCP SDK 1.28.1，由可选 music extra 固定；一个本地 stdio 进程复用既有网关和订阅，不新增协议网关、数据库、队列服务或模型注册框架。现有 Gateway、PostgreSQL、staging 和 Compose 角色保持原职责。DAW 接口和下文专业契约仍属后续增量。
+
+Mutagen 1.47.0 只由可选 music extra 拥有，用于已观察的 MP3 时长缺失和无音频流输入问题；它不增加本地推理、重采样或处理音频。现有环境可用 `uv pip install --python .venv/Scripts/python.exe mcp==1.28.1 mutagen==1.47.0` 安装这两个固定工具依赖，保持已部署 LiteLLM 的版本边界。
 
 当前 MCP 的用途是让 caller 提交原始音频并获得现有 Gemini 的听觉观察；维护负担是 SDK 固定版本、音频边界和失败回收。下面保留专业阶段的测量与处理设计；没有为这些未来能力引入依赖、权重或 GPU 任务。
 

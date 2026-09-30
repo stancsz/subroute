@@ -73,7 +73,11 @@ async def run(args):
             "unexpected_outcomes": sum(not row["expected_outcome_matches"] for row in rows),
             "known_provider_tokens": sum((row.get("structured_content") or {}).get("usage", {}).get("total_tokens", 0)
                 for row in rows if (row.get("structured_content") or {}).get("usage")),
-            "failed_usage": "Unknown here; inspect correlated bridge logs. Do not count missing usage as zero.",
+            "provider_calls_with_unknown_usage": sum(
+                not (row.get("structured_content") or {}).get("usage")
+                and (row.get("structured_content") or {}).get("error", {}).get("code") != "invalid_input"
+                for row in rows),
+            "failed_usage": "Included when the bridge reported valid usage; missing usage is unknown, not zero.",
             "latency_seconds": sorted(row["elapsed_seconds"] for row in rows)}
         report["cases"].sort(key=lambda row: row["index"])
         save()

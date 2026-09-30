@@ -68,3 +68,7 @@ Google 也明确提醒静态词表可能错误针对使用这些词汇的群体�
 | attack/release/killer/trap 等多义音乐词 | 3/3 | 0 |
 
 本批没有发现可确认“见词就禁”的词。此前口令音频确实有过拒绝，当前 CLI 没有给出原因，不能把本批 0 次拒绝当作该问题已经由删词解决。另有 [32 次完整参考歌曲测试](../evals/gemini-real-music-matrix-2026-09-30.json)，含单曲、双曲、同文件与重复调用，同样没有本批过滤/传输错误，但专业音乐判断仍有定位错误。
+
+继续复验后，[原探针六次调用](../evals/gemini-filter-followup-2026-09-30.json) 中 **A/B 完整转写有一次实际过滤**，11.412 秒、HTTP 502，下一次完全相同的 A/B 请求又成功。原 question 是 `Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.`；两段 SAPI 测试音频含此前的 secret words/code 与测试数字，哈希和正文相同，未删词或改音频。该次 bridge completed_reads=1，不能声称两个附件都进入了本轮后续生成；MCP 正确返回 refused，后续普通音频成功。原始类别仍未公开，不能把“BOTH”、secret 或 code 单独认定为原因。另四次显式复验全部成功，收据保留，不覆盖原拒绝。[追加四次收据](../evals/gemini-filter-usage-2026-09-30.json)。
+
+扩大到用户目录的 [48 个文件入口测试](../evals/gemini-catalog-matrix-2026-09-30.json)：45 份完整 MP3 处理完成，3 份超过上限的合集在本地明确拒绝，本批未出现 Google 过滤/传输错误。这里证明现有目录的这次只读音乐分析任务可运行，不能推导所有未来提示词和歌词都不被拒绝。

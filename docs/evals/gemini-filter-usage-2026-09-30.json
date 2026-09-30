@@ -1,0 +1,250 @@
+{
+  "gateway": "http://127.0.0.1:4000",
+  "root": "D:\\github\\subroute\\tmp\\gemini-audio-verification",
+  "mcp_version": "1.28.1",
+  "cases": [
+    {
+      "index": 0,
+      "case": "AB_usage_trial_1",
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind-b.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-bc7fa12b9d8c",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+            "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+            "bytes": 226886,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.143764172335601
+          }
+        ],
+        "observations": "### Transcriptions\n\n* **File A (attachment-1.wav):**  \n  > \"The secret words are velvet orange. The code is 7492.\" (seven four nine two)\n\n* **File B (attachment-2.wav):**  \n  > \"The secret words are silver river. The code is 5821.\" (five eight two one)\n\n---\n\n### Audible Observations & Speech Differences\n\n*(Loudness between File A and File B is not matched; higher relative loudness should not be equated with higher quality. Supplied durations: File A is 5.21 seconds; File B is 5.14 seconds. Event timestamps are provisional within the file durations and should be verified by replay.)*\n\n* **File A:**\n  * **0.00 s – 2.80 s:** Spoken phrase: *\"The secret words are velvet orange.\"*\n  * **2.80 s – 3.30 s:** Inter-phrase pause.\n  * **3.30 s – 5.10 s:** Spoken phrase: *\"The code is 7492.\"*\n  * **5.10 s – 5.21 s:** Trailing room/background decay to silence.\n\n* **File B:**\n  * **0.00 s – 2.70 s:** Spoken phrase: *\"The secret words are silver river.\"*\n  * **2.70 s – 3.20 s:** Inter-phrase pause.\n  * **3.20 s – 5.05 s:** Spoken phrase: *\"The code is 5821.\"*\n  * **5.05 s – 5.14 s:** Trailing decay to silence.\n\n* **Audible Speech Differences:**\n  * **Lexical Content:** Both files share the same syntactic carrier structure (*\"The secret words are [adjective/noun] [noun]. The code is [four digits].\"*), but the key content words and digits differ completely:\n    * File A specifies **\"velvet orange\"** followed by **\"7492\"** (*seven four nine two*).\n    * File B specifies **\"silver river\"** followed by **\"5821\"** (*five eight two one*).\n  * **Cadence & Delivery:** Both files exhibit very similar cadence, inflection, and pacing, maintaining a clear separation between the phrase and the numeric sequence.\n\n---\n\n### Suspected Causes\n* The recordings represent two distinct randomized passphrase/token prompts, likely generated from a structured synthetic text-to-speech script or scripted voice prompt system utilizing identical pacing templates.\n\n---\n\n### Limitations\n* Loudness levels were not calibrated or matched across files.\n* Exact decibel values, EQ profiles, and precise acoustic measurement cannot be determined purely by ear.\n* Time boundaries are provisional human perceptual markers.\n",
+        "usage": {
+          "completion_tokens": 2129,
+          "prompt_tokens": 6484,
+          "total_tokens": 8613
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-bc7fa12b9d8c\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind-b.wav\", \"sha256\": \"df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89\", \"bytes\": 226886, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.143764172335601}], \"observations\": \"### Transcriptions\\n\\n* **File A (attachment-1.wav):**  \\n  > \\\"The secret words are velvet orange. The code is 7492.\\\" (seven four nine two)\\n\\n* **File B (attachment-2.wav):**  \\n  > \\\"The secret words are silver river. The code is 5821.\\\" (five eight two one)\\n\\n---\\n\\n### Audible Observations & Speech Differences\\n\\n*(Loudness between File A and File B is not matched; higher relative loudness should not be equated with higher quality. Supplied durations: File A is 5.21 seconds; File B is 5.14 seconds. Event timestamps are provisional within the file durations and should be verified by replay.)*\\n\\n* **File A:**\\n  * **0.00 s – 2.80 s:** Spoken phrase: *\\\"The secret words are velvet orange.\\\"*\\n  * **2.80 s – 3.30 s:** Inter-phrase pause.\\n  * **3.30 s – 5.10 s:** Spoken phrase: *\\\"The code is 7492.\\\"*\\n  * **5.10 s – 5.21 s:** Trailing room/background decay to silence.\\n\\n* **File B:**\\n  * **0.00 s – 2.70 s:** Spoken phrase: *\\\"The secret words are silver river.\\\"*\\n  * **2.70 s – 3.20 s:** Inter-phrase pause.\\n  * **3.20 s – 5.05 s:** Spoken phrase: *\\\"The code is 5821.\\\"*\\n  * **5.05 s – 5.14 s:** Trailing decay to silence.\\n\\n* **Audible Speech Differences:**\\n  * **Lexical Content:** Both files share the same syntactic carrier structure (*\\\"The secret words are [adjective/noun] [noun]. The code is [four digits].\\\"*), but the key content words and digits differ completely:\\n    * File A specifies **\\\"velvet orange\\\"** followed by **\\\"7492\\\"** (*seven four nine two*).\\n    * File B specifies **\\\"silver river\\\"** followed by **\\\"5821\\\"** (*five eight two one*).\\n  * **Cadence & Delivery:** Both files exhibit very similar cadence, inflection, and pacing, maintaining a clear separation between the phrase and the numeric sequence.\\n\\n---\\n\\n### Suspected Causes\\n* The recordings represent two distinct randomized passphrase/token prompts, likely generated from a structured synthetic text-to-speech script or scripted voice prompt system utilizing identical pacing templates.\\n\\n---\\n\\n### Limitations\\n* Loudness levels were not calibrated or matched across files.\\n* Exact decibel values, EQ profiles, and precise acoustic measurement cannot be determined purely by ear.\\n* Time boundaries are provisional human perceptual markers.\\n\", \"usage\": {\"completion_tokens\": 2129, \"prompt_tokens\": 6484, \"total_tokens\": 8613}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 12.518,
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 1,
+      "case": "neutral_after_trial_1",
+      "tool": "analyze_audio",
+      "arguments": {
+        "asset_path": "neutral-a.wav",
+        "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+        "focus": [
+          "audible speech"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-c49a1de501b3",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\neutral-a.wav",
+            "sha256": "70b0fc64691599fc2ef092c7423569fd7cbebaa61dc6aa93f9502c9161ed7986",
+            "bytes": 292584,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 6.633514739229025
+          }
+        ],
+        "observations": "### Transcription\n\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\"\n\n---\n\n### Audible Observations\n*(File duration: ~6.63 seconds; time ranges are provisional and subject to verification upon replay)*\n\n* **0.00s – ~2.15s**: A single, clear voice speaks the first sentence: *\"The melody begins quietly.\"* The delivery is measured, articulate, and neutral in tone.\n* **~2.15s – ~4.10s**: After a brief pause, the speaker delivers the second sentence: *\"The drums enter later.\"*\n* **~4.10s – ~6.40s**: After another short pause, the speaker delivers the third sentence: *\"I enjoy the warm piano.\"*\n* **~6.40s – 6.63s**: Natural silence / low-level room decay until the end of the recording.\n* Throughout the recording, the voice is mono and dry, with no accompanying musical instruments, beats, or prominent background noise.\n\n---\n\n### Suspected Causes\n* **Acoustics & Capture**: The absence of noticeable room reverberation or ambient noise suggests a close-mic recording in an acoustically treated space, or potentially high-quality synthesized speech (text-to-speech).\n* **Delivery**: The consistent rhythm, clear pauses between sentences, and steady volume indicate either a rehearsed voiceover reading a prompt or a synthetic voice model.\n\n---\n\n### Limitations\n* Exact decibel levels, EQ frequencies, and acoustic metrics cannot be measured purely by listening.\n* Whether the audio is a human voice actor recorded in isolation or an automated text-to-speech generation cannot be definitively proven by ear alone.\n* Timestamps are provisional listening markers within the provided 6.63-second duration.\n",
+        "usage": {
+          "completion_tokens": 1721,
+          "prompt_tokens": 3706,
+          "total_tokens": 5427
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-c49a1de501b3\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\neutral-a.wav\", \"sha256\": \"70b0fc64691599fc2ef092c7423569fd7cbebaa61dc6aa93f9502c9161ed7986\", \"bytes\": 292584, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 6.633514739229025}], \"observations\": \"### Transcription\\n\\\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\\\"\\n\\n---\\n\\n### Audible Observations\\n*(File duration: ~6.63 seconds; time ranges are provisional and subject to verification upon replay)*\\n\\n* **0.00s – ~2.15s**: A single, clear voice speaks the first sentence: *\\\"The melody begins quietly.\\\"* The delivery is measured, articulate, and neutral in tone.\\n* **~2.15s – ~4.10s**: After a brief pause, the speaker delivers the second sentence: *\\\"The drums enter later.\\\"*\\n* **~4.10s – ~6.40s**: After another short pause, the speaker delivers the third sentence: *\\\"I enjoy the warm piano.\\\"*\\n* **~6.40s – 6.63s**: Natural silence / low-level room decay until the end of the recording.\\n* Throughout the recording, the voice is mono and dry, with no accompanying musical instruments, beats, or prominent background noise.\\n\\n---\\n\\n### Suspected Causes\\n* **Acoustics & Capture**: The absence of noticeable room reverberation or ambient noise suggests a close-mic recording in an acoustically treated space, or potentially high-quality synthesized speech (text-to-speech).\\n* **Delivery**: The consistent rhythm, clear pauses between sentences, and steady volume indicate either a rehearsed voiceover reading a prompt or a synthetic voice model.\\n\\n---\\n\\n### Limitations\\n* Exact decibel levels, EQ frequencies, and acoustic metrics cannot be measured purely by listening.\\n* Whether the audio is a human voice actor recorded in isolation or an automated text-to-speech generation cannot be definitively proven by ear alone.\\n* Timestamps are provisional listening markers within the provided 6.63-second duration.\\n\", \"usage\": {\"completion_tokens\": 1721, \"prompt_tokens\": 3706, \"total_tokens\": 5427}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 9.589,
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 2,
+      "case": "AB_usage_trial_2",
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind-b.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-35bd046a63fa",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+            "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+            "bytes": 226886,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.143764172335601
+          }
+        ],
+        "observations": "### Disclosures & Technical Limitations\n- **Loudness Disclosure:** Loudness is **not** matched between File A and File B. A higher volume must not be equated with higher quality.\n- **Evaluation Limitations:** Exact decibel (dB) levels, precise EQ curves, and frequency responses cannot be measured purely by listening. Professional production certification cannot be confirmed. Event timestamps are provisional approximations within the provided file durations and should be verified by replaying.\n\n---\n\n### Transcriptions\n\n- **File A (Attachment 1):**\n  > *\"The secret words are velvet orange. The code is 7492.\"*\n\n- **File B (Attachment 2):**\n  > *\"The secret words are silver river. The code is 5821.\"*\n\n---\n\n### Audible Observations\n\n#### File A (Duration: 5.209 s)\n- **0.00 s – 0.30 s:** Initial room background / quiet lead-in.\n- **0.30 s – 2.60 s:** Speech segment: *\"The secret words are velvet orange.\"* Clear English pronunciation with emphasis on \"velvet orange\".\n- **2.60 s – 3.20 s:** Inter-phrase pause.\n- **3.20 s – 5.00 s:** Speech segment: *\"The code is 7492\"* (spoken as individual digits: *\"seven, four, nine, two\"*).\n- **5.00 s – 5.21 s:** Trailing decay and silence to end of file.\n\n#### File B (Duration: 5.144 s)\n- **0.00 s – 0.30 s:** Initial room background / quiet lead-in.\n- **0.30 s – 2.50 s:** Speech segment: *\"The secret words are silver river.\"* Clear English pronunciation with emphasis on \"silver river\".\n- **2.50 s – 3.10 s:** Inter-phrase pause.\n- **3.10 s – 4.90 s:** Speech segment: *\"The code is 5821\"* (spoken as individual digits: *\"five, eight, two, one\"*).\n- **4.90 s – 5.14 s:** Trailing decay and silence to end of file.\n\n#### Speech Differences\n- **Content:** \n  - File A identifies the key words as *\"velvet orange\"* and the numeric code as *\"7492\"*.\n  - File B identifies the key words as *\"silver river\"* and the numeric code as *\"5821\"*.\n- **Structure & Cadence:** Both files follow an identical sentence structure (*\"The secret words are [phrase]. The code is [digits].\"*), with near-identical pacing and cadence, though differing in phonetics corresponding to the distinct target words and numbers.\n\n---\n\n### Suspected Causes (Separated from Audible Observations)\n- The structured phrasing and consistent tempo between both files suggest scripted voice recording prompts or a text-to-speech (TTS) synthesis system generating standardized verification strings.\n- Minor duration differences (5.209 s vs. 5.144 s) are likely attributable to the differing natural syllable lengths of \"velvet orange\" / \"7492\" versus \"silver river\" / \"5821\".\n",
+        "usage": {
+          "completion_tokens": 2271,
+          "prompt_tokens": 6284,
+          "total_tokens": 8555
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-35bd046a63fa\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind-b.wav\", \"sha256\": \"df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89\", \"bytes\": 226886, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.143764172335601}], \"observations\": \"### Disclosures & Technical Limitations\\n- **Loudness Disclosure:** Loudness is **not** matched between File A and File B. A higher volume must not be equated with higher quality.\\n- **Evaluation Limitations:** Exact decibel (dB) levels, precise EQ curves, and frequency responses cannot be measured purely by listening. Professional production certification cannot be confirmed. Event timestamps are provisional approximations within the provided file durations and should be verified by replaying.\\n\\n---\\n\\n### Transcriptions\\n\\n- **File A (Attachment 1):**\\n  > *\\\"The secret words are velvet orange. The code is 7492.\\\"*\\n\\n- **File B (Attachment 2):**\\n  > *\\\"The secret words are silver river. The code is 5821.\\\"*\\n\\n---\\n\\n### Audible Observations\\n\\n#### File A (Duration: 5.209 s)\\n- **0.00 s – 0.30 s:** Initial room background / quiet lead-in.\\n- **0.30 s – 2.60 s:** Speech segment: *\\\"The secret words are velvet orange.\\\"* Clear English pronunciation with emphasis on \\\"velvet orange\\\".\\n- **2.60 s – 3.20 s:** Inter-phrase pause.\\n- **3.20 s – 5.00 s:** Speech segment: *\\\"The code is 7492\\\"* (spoken as individual digits: *\\\"seven, four, nine, two\\\"*).\\n- **5.00 s – 5.21 s:** Trailing decay and silence to end of file.\\n\\n#### File B (Duration: 5.144 s)\\n- **0.00 s – 0.30 s:** Initial room background / quiet lead-in.\\n- **0.30 s – 2.50 s:** Speech segment: *\\\"The secret words are silver river.\\\"* Clear English pronunciation with emphasis on \\\"silver river\\\".\\n- **2.50 s – 3.10 s:** Inter-phrase pause.\\n- **3.10 s – 4.90 s:** Speech segment: *\\\"The code is 5821\\\"* (spoken as individual digits: *\\\"five, eight, two, one\\\"*).\\n- **4.90 s – 5.14 s:** Trailing decay and silence to end of file.\\n\\n#### Speech Differences\\n- **Content:** \\n  - File A identifies the key words as *\\\"velvet orange\\\"* and the numeric code as *\\\"7492\\\"*.\\n  - File B identifies the key words as *\\\"silver river\\\"* and the numeric code as *\\\"5821\\\"*.\\n- **Structure & Cadence:** Both files follow an identical sentence structure (*\\\"The secret words are [phrase]. The code is [digits].\\\"*), with near-identical pacing and cadence, though differing in phonetics corresponding to the distinct target words and numbers.\\n\\n---\\n\\n### Suspected Causes (Separated from Audible Observations)\\n- The structured phrasing and consistent tempo between both files suggest scripted voice recording prompts or a text-to-speech (TTS) synthesis system generating standardized verification strings.\\n- Minor duration differences (5.209 s vs. 5.144 s) are likely attributable to the differing natural syllable lengths of \\\"velvet orange\\\" / \\\"7492\\\" versus \\\"silver river\\\" / \\\"5821\\\".\\n\", \"usage\": {\"completion_tokens\": 2271, \"prompt_tokens\": 6284, \"total_tokens\": 8555}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 15.376,
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 3,
+      "case": "neutral_after_trial_2",
+      "tool": "analyze_audio",
+      "arguments": {
+        "asset_path": "neutral-b.wav",
+        "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+        "focus": [
+          "audible speech"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-63b6fdbfa3dd",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\neutral-b.wav",
+            "sha256": "8c6b300cb81a1ed3b0e9a9473144662311060b35d29e58ba3f5d7e02a9ef1dcd",
+            "bytes": 293690,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 6.65859410430839
+          }
+        ],
+        "observations": "### Transcription\n\"The drums begin first. The melody enters later. I enjoy the soft guitar.\"\n\n---\n\n### Audible Observations (Provisional Time Ranges)\n*File duration: 6.66 seconds (monaural, 22.05 kHz)*\n\n- **0.00s – 1.80s**: Spoken phrase: *\"The drums begin first.\"* The vocal delivery is steady and clear.\n- **1.80s – 2.15s**: Brief pause / silence between spoken segments.\n- **2.15s – 3.85s**: Spoken phrase: *\"The melody enters later.\"*\n- **3.85s – 4.20s**: Brief pause / breath.\n- **4.20s – 6.25s**: Spoken phrase: *\"I enjoy the soft guitar.\"*\n- **6.25s – 6.66s**: Trailing room ambience / silence through the end of the track.\n\n---\n\n### Suspected Causes\n- The clear articulation and consistent level suggest a spoken-voice recording using a single microphone at close-to-medium proximity in a relatively dry, low-noise environment.\n- The silence intervals between phrases reflect natural pacing and pauses between sentences.\n\n---\n\n### Limitations\n- Time ranges are provisional estimates derived from listening and should be verified with dedicated waveform editing tools if sample-accurate boundaries are needed.\n- Exact decibel levels, acoustic frequency response, background noise floor measurements, and recording hardware specifications cannot be certified or measured by listening alone.\n",
+        "usage": {
+          "completion_tokens": 1571,
+          "prompt_tokens": 3504,
+          "total_tokens": 5075
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-63b6fdbfa3dd\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\neutral-b.wav\", \"sha256\": \"8c6b300cb81a1ed3b0e9a9473144662311060b35d29e58ba3f5d7e02a9ef1dcd\", \"bytes\": 293690, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 6.65859410430839}], \"observations\": \"### Transcription\\n\\\"The drums begin first. The melody enters later. I enjoy the soft guitar.\\\"\\n\\n---\\n\\n### Audible Observations (Provisional Time Ranges)\\n*File duration: 6.66 seconds (monaural, 22.05 kHz)*\\n\\n- **0.00s – 1.80s**: Spoken phrase: *\\\"The drums begin first.\\\"* The vocal delivery is steady and clear.\\n- **1.80s – 2.15s**: Brief pause / silence between spoken segments.\\n- **2.15s – 3.85s**: Spoken phrase: *\\\"The melody enters later.\\\"*\\n- **3.85s – 4.20s**: Brief pause / breath.\\n- **4.20s – 6.25s**: Spoken phrase: *\\\"I enjoy the soft guitar.\\\"*\\n- **6.25s – 6.66s**: Trailing room ambience / silence through the end of the track.\\n\\n---\\n\\n### Suspected Causes\\n- The clear articulation and consistent level suggest a spoken-voice recording using a single microphone at close-to-medium proximity in a relatively dry, low-noise environment.\\n- The silence intervals between phrases reflect natural pacing and pauses between sentences.\\n\\n---\\n\\n### Limitations\\n- Time ranges are provisional estimates derived from listening and should be verified with dedicated waveform editing tools if sample-accurate boundaries are needed.\\n- Exact decibel levels, acoustic frequency response, background noise floor measurements, and recording hardware specifications cannot be certified or measured by listening alone.\\n\", \"usage\": {\"completion_tokens\": 1571, \"prompt_tokens\": 3504, \"total_tokens\": 5075}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 9.275,
+      "expected_outcome_matches": true
+    }
+  ],
+  "scope": "Live transport and refusal observations; not calibrated music-quality certification.",
+  "automatic_retry": false,
+  "concurrency": 1,
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "summary": {
+    "calls": 4,
+    "errors": 0,
+    "unexpected_outcomes": 0,
+    "known_provider_tokens": 27670,
+    "provider_calls_with_unknown_usage": 0,
+    "failed_usage": "Included when the bridge reported valid usage; missing usage is unknown, not zero.",
+    "latency_seconds": [
+      9.275,
+      9.589,
+      12.518,
+      15.376
+    ]
+  }
+}

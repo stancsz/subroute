@@ -208,6 +208,42 @@ def test_mcp_provider_refusal_is_a_tool_error_without_retry(tmp_path, monkeypatc
     assert len(calls) == 1
 
 
+def test_mp3_metadata_uses_the_exact_attachment_snapshot(tmp_path, monkeypatch):
+    # Original 250 ms tone encoded by ffmpeg/libmp3lame at 44.1 kHz mono 96k.
+    source = Path(__file__).parent / "fixtures/music-tone.mp3"
+    raw = source.read_bytes()
+    path = tmp_path / "tone.mp3"
+    path.write_bytes(raw)
+    attachment, receipt = read_asset(tmp_path, "tone.mp3")
+    assert base64.b64decode(attachment["data"]) == raw
+    assert receipt["sample_rate"] == 44100 and receipt["channels"] == 1
+    assert 0.25 <= receipt["duration_seconds"] < 0.32  # Encoder padding is retained.
+    assert receipt["duration_source"] == "mpeg_headers" and receipt["duration_is_estimate"]
+
+
+def test_id3_prefix_without_audio_rejected_before_provider_work(tmp_path, monkeypatch):
+    (tmp_path / "fake.mp3").write_bytes(b"ID3" + b"\x00" * 100)
+    def forbidden(**kwargs):
+        pytest.fail("unreadable MP3 must not reach the provider")
+    monkeypatch.setattr(httpx, "AsyncClient", forbidden)
+    result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
+        "asset_path": "fake.mp3", "question": "Listen", "focus": ["clarity"]}))
+    assert result.isError and result.structuredContent["error"]["code"] == "invalid_input"
+
+
+def test_refused_usage_survives_the_public_error_message(tmp_path, monkeypatch):
+    (tmp_path / "sample.wav").write_bytes(decode_audio(sample()))
+    client_type = httpx.AsyncClient
+    def respond(req):
+        return httpx.Response(502, json={"error": {"message":
+            "provider_content_filter phase=after_attachment_reads request_id=abc conversation_id=def provider_usage=10,2,15No fallback model group found"}})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
+    result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
+        "asset_path": "sample.wav", "question": "Listen", "focus": ["clarity"]}))
+    assert result.isError and result.structuredContent["status"] == "refused"
+    assert result.structuredContent["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 15}
+
+
 @pytest.mark.parametrize("outcome,code", [
     ("timeout", "gateway_timeout"), ("disconnect", "gateway_unavailable"),
     ("invalid_json", "invalid_response"), ("empty", "invalid_response"),

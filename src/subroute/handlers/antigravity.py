@@ -188,6 +188,14 @@ async def invoke_agy(
                 detail = detail[:300]
                 if not detail:
                     detail = "bridge returned an empty error response"
+                # LiteLLM's public error envelope retains the message but does not
+                # expose our private bridge fields. Preserve only validated usage
+                # alongside the existing diagnostic IDs; do not add a public protocol.
+                if isinstance(error_payload, dict) and error_payload.get("code") == "provider_content_filter":
+                    refused_usage = error_payload.get("provider_usage")
+                    keys = ("input_tokens", "output_tokens", "total_tokens")
+                    if isinstance(refused_usage, dict) and all(type(refused_usage.get(key)) is int and refused_usage[key] >= 0 for key in keys):
+                        detail += " provider_usage=" + ",".join(str(refused_usage[key]) for key in keys)
                 raise AntigravityBridgeError(
                     response.status_code,
                     f"Antigravity bridge request_id={bridge_request_id} returned {response.status_code}: {detail}",

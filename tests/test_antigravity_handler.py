@@ -470,3 +470,25 @@ def test_bridge_failure_carries_transport_request_id(monkeypatch):
     }
     assert captured["request_id"] not in json.dumps(captured["payload"])
     assert f"request_id={captured['request_id']}" in str(caught.value)
+
+
+@pytest.mark.parametrize("usage,expected", [
+    ({"input_tokens": 10, "output_tokens": 2, "total_tokens": 15}, "provider_usage=10,2,15"),
+    ({"input_tokens": True, "output_tokens": 2, "total_tokens": 15}, None),
+    ({"input_tokens": -1, "output_tokens": 2, "total_tokens": 15}, None),
+    (None, None),
+])
+def test_filter_error_preserves_only_validated_provider_usage(monkeypatch, usage, expected):
+    client_type = httpx.AsyncClient
+    def respond(req):
+        return httpx.Response(502, json={"detail": "provider_content_filter phase=after_attachment_reads conversation_id=fixture",
+                                      "code": "provider_content_filter", "provider_usage": usage})
+    monkeypatch.setenv("ANTIGRAVITY_BRIDGE_URL", "http://fixture")
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
+    with pytest.raises(antigravity.AntigravityBridgeError) as caught:
+        asyncio.run(antigravity.invoke_agy("gemini-3.8-flash", "listen"))
+    assert caught.value.status_code == 502
+    if expected:
+        assert expected in str(caught.value)
+    else:
+        assert "provider_usage=" not in str(caught.value)
