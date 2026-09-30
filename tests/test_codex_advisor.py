@@ -25,7 +25,7 @@ def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=Non
     client_type = httpx.AsyncClient
     monkeypatch.setattr(advisor, "read_codex_credentials", lambda: ("fixture", "fixture"))
     monkeypatch.setattr(advisor.httpx, "AsyncClient", lambda **kw: client_type(transport=transport, **kw))
-    return asyncio.run(advisor.call_codex_streaming_collect("terra", [{"role": "user", "content": "hello"}], reasoning_effort=effort))
+    return asyncio.run(advisor.call_codex_streaming_collect("luna", [{"role": "user", "content": "hello"}], reasoning_effort=effort))
 
 
 DELTA = {"type": "response.output_text.delta", "delta": "partial"}
@@ -59,7 +59,7 @@ def test_missing_usage_is_not_fabricated(monkeypatch):
         collect(monkeypatch, [DELTA, {"type": "response.completed", "response": {"status": "completed"}}])
 
 
-def test_reserve_advisor_alias_uses_luna_reserve_model(monkeypatch):
+def test_luna_advisor_alias_uses_current_luna_model(monkeypatch):
     sent = {}
 
     def respond(request):
@@ -82,10 +82,10 @@ def test_reserve_advisor_alias_uses_luna_reserve_model(monkeypatch):
     )
 
     text, usage = asyncio.run(advisor.call_codex_streaming_collect(
-        "gpt-reserve", [{"role": "user", "content": "hello"}]
+        "luna", [{"role": "user", "content": "hello"}]
     ))
 
-    assert sent["model"] == "gpt-5.6-luna"
+    assert sent["model"] == "gpt-6-luna"
     assert sent["stream"] is True
     assert text == "partial"
     assert usage.total_tokens == 3
@@ -197,7 +197,7 @@ def test_malformed_images_are_rejected_without_loss(part):
 
 
 @pytest.mark.parametrize("through_litellm", [False, True])
-@pytest.mark.parametrize("model_name", ["gpt-6-sol", "gpt-6.1-sol"])
+@pytest.mark.parametrize("model_name", ["gpt-6-luna", "gpt-6-sol", "gpt-6-astra", "gpt-6.1-sol"])
 def test_custom_advisor_passes_pixels_and_reasoning_to_existing_upstream(monkeypatch, through_litellm, model_name):
     sent = []
 
@@ -246,13 +246,17 @@ def test_custom_advisor_passes_pixels_and_reasoning_to_existing_upstream(monkeyp
     assert response.usage.total_tokens == 26
 
 
-def test_dedicated_experts_exposes_only_versioned_sol61_without_fallback():
+def test_dedicated_experts_allows_all_current_advisors_without_fallback():
     config = yaml.safe_load((Path(__file__).parents[1] / "config/litellm.experts.yaml").read_text())
-    models = config["model_list"]
-    assert len(models) == 1
-    assert models[0]["model_name"] == "codex-gpt-6.1-sol-advisor"
-    assert models[0]["litellm_params"]["model"] == "codex-advisor/gpt-6.1-sol"
-    assert "vision" in models[0]["model_info"]["capabilities"]
+    models = {item["model_name"]: item for item in config["model_list"]}
+    assert set(models) == {
+        "codex-luna-advisor", "codex-sol-advisor", "codex-astra-advisor",
+        "codex-gpt-6.1-sol-advisor",
+    }
+    for item in models.values():
+        assert "vision" in item["model_info"]["capabilities"]
+        assert item["litellm_params"]["model"].startswith("codex-advisor/gpt-6")
+    assert models["codex-luna-advisor"]["litellm_params"]["reasoning_effort"] == "high"
     assert config["router_settings"]["num_retries"] == 0
     assert config["router_settings"]["fallbacks"] == []
 

@@ -19,7 +19,7 @@ The former **Luna Advisor Escalation** skill has moved to the central [Northstar
 
 Subroute still owns the `experts` service, provider authentication and gateway runtime. Moving the skill does not move or deploy those services. Historical advisor evaluations below describe the Subroute revisions at which they were recorded.
 
-The dedicated `experts` endpoint exposes only `codex-gpt-6.1-sol-advisor`, mapped to GPT-6.1 Sol, and accepts user images for screenshot-backed advice. Astra and older Sol aliases are removed from this endpoint; there is no retry or model fallback. Northstar's caller proactively attaches images with repeatable `--image` arguments; optional Advisor-directed Pi source reading remains caller orchestration, not backend tool execution. See [image-input verification and limits](docs/evals/advisor-image-input-2026-09-30.md).
+The dedicated `experts` endpoint exposes GPT-6 Luna, GPT-6 Sol, GPT-6 Astra and GPT-6.1 Sol through their Advisor aliases, and accepts user images for screenshot-backed advice. Luna defaults to high reasoning effort; callers can select another configured model or effort. There is no retry or model fallback. Northstar's caller proactively attaches images with repeatable `--image` arguments; optional Advisor-directed Pi source reading remains caller orchestration, not backend tool execution. See [image-input verification and limits](docs/evals/advisor-image-input-2026-09-30.md).
 
 ## The problem
 
@@ -88,6 +88,8 @@ docker compose up -d gateway-staging
 ```
 
 ## Routing, without surprises
+
+The production desk is set to **OpenRouter MiniMax M3**, **GPT-6 Luna Advisor**, and **high Advisor reasoning effort**. All OpenAI Advisor routes use GPT-6 or newer: Luna, Sol, Astra and GPT-6.1 Sol. These are selectable models, not a model lock. New routing state defaults to OpenRouter and Luna/high. `ACTIVE_MODEL` and `ADVISOR_MODEL` override initialization; persisted state takes precedence on subsequent starts, including explicitly disabled advisors and saved effort. Production retains its saved `force` mode; staging retains its own policy.
 
 - **`alias`** is the default. It resolves `current` and `default` using the saved route. `auto` always uses the prioritized provider chain.
 - **`force`** applies the selected route to known model requests except explicit `auto` requests and image generation.

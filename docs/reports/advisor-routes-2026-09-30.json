@@ -1,0 +1,123 @@
+{
+  "utc": "2026-09-30T16:09:16.628714+00:00",
+  "checks": [
+    {
+      "port": 4000,
+      "readiness": {
+        "status": "healthy",
+        "db": "connected"
+      }
+    },
+    {
+      "port": 4005,
+      "readiness": {
+        "status": "healthy",
+        "db": "connected"
+      }
+    },
+    {
+      "port": 4040,
+      "readiness": {
+        "status": "healthy",
+        "db": "Not connected"
+      }
+    },
+    {
+      "alias": "codex-luna-advisor",
+      "status": 200,
+      "response_model": "codex-luna-advisor",
+      "seconds": 1.91,
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 15,
+        "total_tokens": 24
+      },
+      "content": "ADVISOR_ROUTE_OK"
+    },
+    {
+      "alias": "codex-sol-advisor",
+      "status": 200,
+      "response_model": "codex-sol-advisor",
+      "seconds": 2.2,
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 15,
+        "total_tokens": 24
+      },
+      "content": "ADVISOR_ROUTE_OK"
+    },
+    {
+      "alias": "codex-astra-advisor",
+      "status": 200,
+      "response_model": "codex-astra-advisor",
+      "seconds": 2.4,
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 15,
+        "total_tokens": 24
+      },
+      "content": "ADVISOR_ROUTE_OK"
+    },
+    {
+      "alias": "codex-gpt-6.1-sol-advisor",
+      "status": 200,
+      "response_model": "codex-gpt-6.1-sol-advisor",
+      "seconds": 2.82,
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 15,
+        "total_tokens": 24
+      },
+      "content": "ADVISOR_ROUTE_OK"
+    },
+    {
+      "production_pair": true,
+      "status": 200,
+      "seconds": 23.11,
+      "response": {
+        "id": "gen-1790784588-bJf1sLyaQZNjdc57jJVb",
+        "type": "message",
+        "role": "assistant",
+        "model": "current",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 397,
+          "output_tokens": 74,
+          "cache_read_input_tokens": 128
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "**17 \u00d7 19 = 323**"
+          }
+        ],
+        "stop_reason": "end_turn",
+        "stop_details": null
+      }
+    }
+  ],
+  "production": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 74,
+    "advisor_model": "codex-luna-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "staging": {
+    "active_model": "codex-luna",
+    "mode": "force",
+    "policy_version": 476,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": "high",
+    "advisor_reasoning_effort": null
+  },
+  "verification_scope": {
+    "offline_regression": "194 passed on locked host environment",
+    "deployed_litellm": "1.103.0",
+    "deployed_mock_dispatch": "All four configured models reached exact upstream model IDs; Luna defaults to high and explicit low overrides it. No provider calls in this check.",
+    "live_advisor_calls": "Four real dedicated expert completions, each HTTP 200, terminal stop, provider usage and ADVISOR_ROUTE_OK.",
+    "production_messages": "Saved MiniMax/Luna-high policy returned 323 and end_turn. Final native orchestration response does not separately expose the advisor invocation, so it is not counted as a correlated advisor consultation receipt.",
+    "staging_policy": "Preserved exactly, including policy_version 476."
+  }
+}

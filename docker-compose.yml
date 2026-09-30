@@ -56,7 +56,7 @@ services:
       # when client bearer-token auth is wanted.
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
-      - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-terra-advisor}
+      - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-luna-advisor}
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
@@ -91,7 +91,7 @@ services:
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
-      - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-terra-advisor}
+      - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-luna-advisor}
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}

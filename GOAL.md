@@ -4,7 +4,9 @@
 **优先级：最高（目标已完成）**
 **更新日期：2026-09-29**
 
-**2026-09-30 后续限定：Advisor 只用 GPT-6.1 Sol。** 这项要求取代下方图片增量最初的 Sol/Astra 专用目录。Northstar caller 唯一 `sol` 选项发送 `codex-gpt-6.1-sol-advisor`；4040 `experts` 只暴露该版本别名并映射实际 `gpt-6.1-sol`，没有模型回退或隐藏重试。共享 worker gateway 的其他模型保持原有范围。72 项离线回归通过；真实 6.1 截图和图片→Advisor-directed Pi→精确源码证据→最终反馈均完成；旧 Sol/Astra 名称在 4040 返回 HTTP 400。仅重启 experts，readiness healthy。旧模型实测和论文对比保留为历史，不冒充 6.1 证据。见同一 [评估的版本限定记录](docs/evals/advisor-image-input-2026-09-30.md#gpt-61-sol-only-follow-up)。主执行者检查并接受独立 READY 复核；按已有 Docker 服务授权发布这六个相关文件，提交、远端 SHA 和最终 health 由 Git 记录与交付说明确认。
+**2026-09-30 最新用户澄清：取消 Advisor 固定 GPT-6.1 的限制。** 默认 production Routing Desk 使用 OpenRouter MiniMax M3、OpenAI GPT-6 Luna Advisor 和 high reasoning effort；OpenAI Advisor 可选路由全部更新为 GPT-6 或更新版本，包含 GPT-6 Luna、GPT-6 Sol、GPT-6 Astra、GPT-6.1 Sol。共享 gateway 与专用 `experts` 均保留这些选择，旧 GPT-5.6 Terra Advisor deployment 移除。默认值不限制用户后续更换模型或 effort。下方 GPT-6.1-only 记录是被本次澄清取代的历史要求和证据。
+
+**2026-09-30 历史限定，已被上方用户澄清取代：Advisor 只用 GPT-6.1 Sol。** 这项要求取代下方图片增量最初的 Sol/Astra 专用目录。Northstar caller 唯一 `sol` 选项发送 `codex-gpt-6.1-sol-advisor`；4040 `experts` 只暴露该版本别名并映射实际 `gpt-6.1-sol`，没有模型回退或隐藏重试。共享 worker gateway 的其他模型保持原有范围。72 项离线回归通过；真实 6.1 截图和图片→Advisor-directed Pi→精确源码证据→最终反馈均完成；旧 Sol/Astra 名称在 4040 返回 HTTP 400。仅重启 experts，readiness healthy。旧模型实测和论文对比保留为历史，不冒充 6.1 证据。见同一 [评估的版本限定记录](docs/evals/advisor-image-input-2026-09-30.md#gpt-61-sol-only-follow-up)。主执行者检查并接受独立 READY 复核；按已有 Docker 服务授权发布这六个相关文件，提交、远端 SHA 和最终 health 由 Git 记录与交付说明确认。
 
 **2026-09-30 用户要求的 Advisor 图片输入增量：** Northstar caller 必须主动传实际图片给 Advisor，并允许它通过 caller 派自己的 source reader。专用 Subscription `experts` 适配器现保留 user image_url/input_image 像素输入、detail、文本和工具历史顺序；范围只含已有输入转换、Sol/Astra vision 元数据和相应回归。69 项离线回归通过，真实 screenshot、四图系统卡及一次 image→Advisor-directed Pi→最终反馈已完成；此前三次 reader 失败仍由 Northstar 保留。仅重启专用 experts，未改 production/staging 策略或安装全局技能。结果、发布状态和边界见 [Advisor 图片输入评估](docs/evals/advisor-image-input-2026-09-30.md)。这项明确授权增量不改写下方历史可靠性目标。
 

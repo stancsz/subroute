@@ -372,7 +372,7 @@ def test_minimax_gemini_pair_skips_structured_content_without_changing_request(m
     }
 
 
-@pytest.mark.parametrize("advisor_model", ["codex-terra-advisor", "codex-luna-advisor"])
+@pytest.mark.parametrize("advisor_model", ["codex-gpt-6.1-sol-advisor", "codex-luna-advisor"])
 def test_codex_advisor_is_injected_for_supported_tool_history(advisor_model):
     plugin = AdvisorPlugin()
     existing_tools = [{"name": "read_file", "input_schema": {"type": "object"}}]
@@ -398,7 +398,7 @@ def test_codex_advisor_is_injected_for_supported_tool_history(advisor_model):
     assert "gateway_advisor" not in data.get("metadata", {})
 
 
-@pytest.mark.parametrize("advisor_model", ["gemini-subscription", "codex-terra-advisor"])
+@pytest.mark.parametrize("advisor_model", ["gemini-subscription", "codex-gpt-6.1-sol-advisor"])
 def test_unsupported_tool_history_skips_only_advisor(advisor_model):
     plugin = AdvisorPlugin()
     original_tool = {"name": "read_file", "input_schema": {"type": "object"}}

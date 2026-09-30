@@ -25,7 +25,7 @@ from subroute.handlers.codex_advisor import CodexAdvisorError
 ADVISOR_TOOL_TYPE = "advisor_20260301"
 SUPPORTED_CALL_TYPES = frozenset({"anthropic_messages", "aanthropic_messages"})
 TOOL_HISTORY_ADVISORS = frozenset({
-    "codex-terra-advisor",
+    "codex-gpt-6.1-sol-advisor",
     "codex-sol-advisor",
     "codex-astra-advisor",
     "codex-luna-advisor",
@@ -34,7 +34,7 @@ CODEX_SUBSCRIPTION_MODELS = frozenset({
     "codex-subscription", "codex-astra", "codex-terra", "codex-luna", "codex-reserve",
 })
 ADVISOR_MODEL_NAMES = {
-    "codex-terra-advisor": "gpt-5.6-terra",
+    "codex-gpt-6.1-sol-advisor": "gpt-6.1-sol",
     "codex-sol-advisor": "gpt-6-sol",
     "codex-astra-advisor": "gpt-6-astra",
     "codex-luna-advisor": "gpt-6-luna",

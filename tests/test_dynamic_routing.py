@@ -32,9 +32,9 @@ def make_control_plane(tmp_path: Path) -> RoutingControlPlane:
   - model_name: gemini-subscription
     model_info: {selectable: false, advisor_selectable: true}
     litellm_params: {model: antigravity/gemini}
-  - model_name: codex-terra-advisor
+  - model_name: codex-gpt-6.1-sol-advisor
     model_info: {selectable: false, advisor_selectable: true}
-    litellm_params: {model: codex-advisor/terra}
+    litellm_params: {model: codex-advisor/gpt-6.1-sol}
   - model_name: codex-sol-advisor
     model_info: {selectable: false, advisor_selectable: true}
     litellm_params: {model: codex-advisor/sol}
@@ -42,7 +42,7 @@ def make_control_plane(tmp_path: Path) -> RoutingControlPlane:
     model_info: {selectable: false, advisor_selectable: true}
     litellm_params: {model: codex-advisor/astra}
   - model_name: codex-luna-advisor
-    model_info: {selectable: false, advisor_selectable: true}
+    model_info: {selectable: false, advisor_selectable: true, reasoning_efforts: [low, medium, high, xhigh, max]}
     litellm_params: {model: codex-advisor/luna}
 """,
         encoding="utf-8",
@@ -61,7 +61,7 @@ def test_candidates_filter_virtual_and_non_selectable_models(tmp_path: Path):
         "minimax",
         "desktop",
         "gemini-subscription",
-        "codex-terra-advisor",
+        "codex-gpt-6.1-sol-advisor",
         "codex-sol-advisor",
         "codex-astra-advisor",
         "codex-luna-advisor",
@@ -82,8 +82,8 @@ def test_alias_mode_resolves_current_but_preserves_explicit_models(tmp_path: Pat
         "gateway_reasoning_effort": None,
         "gateway_policy": {
             "active_model": "minimax", "mode": "alias", "policy_version": 1,
-            "advisor_model": "gemini-subscription",
-        "reasoning_effort": None, "advisor_reasoning_effort": None,
+            "advisor_model": "codex-luna-advisor",
+        "reasoning_effort": None, "advisor_reasoning_effort": "high",
         },
         "routing": {
             "requested_model": "current",
@@ -161,7 +161,7 @@ def test_routing_precedes_advisor_injection_for_plain_target(tmp_path: Path):
     # Capture the intended advisor in the same policy snapshot as the target.
     # Changing the persisted policy after the router hook would leave this
     # request on its original snapshot and could invoke a live Gemini advisor.
-    control.update_advisor("codex-terra-advisor")
+    control.update_advisor("codex-gpt-6.1-sol-advisor")
     router = DynamicRoutingPlugin(control)
     advisor = AdvisorPlugin()
     data = {"model": "current", "messages": [{"role": "user", "content": "help"}]}
@@ -171,17 +171,36 @@ def test_routing_precedes_advisor_injection_for_plain_target(tmp_path: Path):
 
     assert data["model"] == "minimax"
     assert data["tools"][0]["type"] == ADVISOR_TOOL_TYPE
-    assert data["tools"][0]["model"] == "codex-terra-advisor"
+    assert data["tools"][0]["model"] == "codex-gpt-6.1-sol-advisor"
 
 
 def test_persisted_advisor_wins_over_startup_environment(tmp_path, monkeypatch):
-    monkeypatch.setenv("ADVISOR_MODEL", "codex-terra-advisor")
+    monkeypatch.setenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
     control = make_control_plane(tmp_path)
-    assert control.snapshot().advisor_model == "codex-terra-advisor"
+    assert control.snapshot().advisor_model == "codex-gpt-6.1-sol-advisor"
     control.update_advisor("codex-sol-advisor")
     monkeypatch.setenv("ADVISOR_MODEL", "gemini-subscription")
     restarted = RoutingControlPlane(control.config_path, control.state_path)
     assert restarted.snapshot().advisor_model == "codex-sol-advisor"
+
+
+def test_default_desk_uses_openrouter_and_luna_high_without_locking_selection(tmp_path, monkeypatch):
+    monkeypatch.delenv("ACTIVE_MODEL", raising=False)
+    monkeypatch.delenv("ADVISOR_MODEL", raising=False)
+    config_path = Path(__file__).parents[1] / "config/litellm.yaml"
+    state_path = tmp_path / "state.json"
+    control = RoutingControlPlane(config_path, state_path)
+    assert control.snapshot().active_model == "openrouter"
+    assert control.snapshot().advisor_model == "codex-luna-advisor"
+    assert control.snapshot().advisor_reasoning_effort == "high"
+    for model in (
+        "codex-sol-advisor", "codex-astra-advisor", "codex-gpt-6.1-sol-advisor",
+        "codex-luna-advisor",
+    ):
+        control.update_advisor(model, reasoning_effort="medium")
+        restarted = RoutingControlPlane(config_path, state_path)
+        assert restarted.snapshot().advisor_model == model
+        assert restarted.snapshot().advisor_reasoning_effort == "medium"
 
 
 def test_advisor_is_optional_and_requests_skip_injection(tmp_path: Path):
@@ -209,7 +228,7 @@ def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
 
     control = make_control_plane(tmp_path)
     control.update("minimax", "alias")
-    control.update_advisor("codex-terra-advisor")
+    control.update_advisor("codex-gpt-6.1-sol-advisor")
     proxy = ProxyLogging(user_api_key_cache=DualCache())
     monkeypatch.setattr(litellm, "callbacks", [DynamicRoutingPlugin(control), AdvisorPlugin()])
     result = asyncio.run(proxy.pre_call_hook(
@@ -218,7 +237,7 @@ def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
         call_type="anthropic_messages",
     ))
     assert result["model"] == "minimax"
-    assert result["tools"][0]["model"] == "codex-terra-advisor"
+    assert result["tools"][0]["model"] == "codex-gpt-6.1-sol-advisor"
     assert result["metadata"]["gateway_policy"]["policy_version"] == control.snapshot().policy_version
 
 
@@ -231,8 +250,8 @@ def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
         "active_model": "desktop",
         "mode": "force",
         "policy_version": 2,
-        "advisor_model": "gemini-subscription",
-        "reasoning_effort": None, "advisor_reasoning_effort": None,
+        "advisor_model": "codex-luna-advisor",
+        "reasoning_effort": None, "advisor_reasoning_effort": "high",
     }
     assert not list(tmp_path.glob("*.tmp"))
     with pytest.raises(ValueError, match="not selectable"):
@@ -266,8 +285,8 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         "active_model": "desktop",
         "mode": "force",
         "policy_version": 2,
-        "advisor_model": "gemini-subscription",
-        "reasoning_effort": None, "advisor_reasoning_effort": None,
+        "advisor_model": "codex-luna-advisor",
+        "reasoning_effort": None, "advisor_reasoning_effort": "high",
     }
     assert client.get("/api/active-model").json() == response.json()
     options = client.get("/api/routing-options")
@@ -276,11 +295,11 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     assert {item["model_id"] for item in options.json()["models"]} == {"minimax", "desktop"}
     advisor = client.post(
         "/api/advisor-model",
-        json={"advisor_model": "codex-terra-advisor"},
+        json={"advisor_model": "codex-gpt-6.1-sol-advisor"},
         headers={"origin": "http://testserver"},
     )
     assert advisor.status_code == 200
-    assert advisor.json()["advisor_model"] == "codex-terra-advisor"
+    assert advisor.json()["advisor_model"] == "codex-gpt-6.1-sol-advisor"
     luna_advisor = client.post(
         "/api/advisor-model",
         json={"advisor_model": "codex-luna-advisor"},

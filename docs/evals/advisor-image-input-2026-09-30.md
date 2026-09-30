@@ -35,3 +35,11 @@ Learning: pin and test the upstream model as well as the public alias, reject re
 ## Learning
 
 Generic framework image support does not prove a custom provider preserves images. Inspect the actual rejecting boundary, retain original pixels/roles, exercise real LiteLLM dispatch, then verify a pixel-dependent provider answer. Keep source-reader failures distinct from image transport and from final acceptance. Stronger model advice and transport correctness do not waive owner approval or independent QA.
+
+## Current model selection after owner clarification
+
+The subsequent owner clarification supersedes the GPT-6.1-only restriction above. Both gateway Advisor catalogs now expose GPT-6 Luna, GPT-6 Sol, GPT-6 Astra and GPT-6.1 Sol; GPT-5.6 Terra Advisor is removed. Production uses OpenRouter MiniMax M3 with Luna/high. Callers retain explicit model and effort selection. The version-restricted results above remain historical evidence.
+
+Verification for the clarified catalog: **194 related offline regressions passed**. Production, staging and experts were recreated with Compose and all three readiness checks passed. Production retained MiniMax/Luna/high at policy v74; staging retained its prior policy v476. Four real port-4040 requests returned `ADVISOR_ROUTE_OK`, terminal `stop`, and provider usage, one for each configured OpenAI Advisor. A production Messages request under the saved policy returned 323 and `end_turn`; its final response does not separately expose the native advisor invocation, so this is request-completion evidence rather than a correlated advisor consultation receipt.
+
+A separate mocked dispatch check inside the deployed LiteLLM 1.103.0 container confirms the exact four upstream model IDs, Luna's high default, and an explicit low-effort override. This check spends no provider calls and is not live-provider evidence. The catalog update adds no service, dependency, transport or store. It removes the accidental single-model catalog restriction and the obsolete 5.6 Advisor route while preserving image conversion, explicit selection and zero retries/fallbacks. See [raw runtime receipt](../reports/advisor-routes-2026-09-30.json).

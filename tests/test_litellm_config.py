@@ -179,7 +179,7 @@ def test_subscription_channels_stay_behind_litellm():
     assert by_name["codex-reserve"]["model_info"]["display_name"] == (
         "GPT-5.6 Luna (reserve-capable)"
     )
-    assert by_name["codex-terra-advisor"]["model_info"]["advisor_selectable"] is True
+    assert by_name["codex-gpt-6.1-sol-advisor"]["litellm_params"]["model"] == "codex-advisor/gpt-6.1-sol"
     assert by_name["codex-sol-advisor"]["litellm_params"]["model"] == (
         "codex-advisor/gpt-6-sol"
     )
@@ -245,6 +245,8 @@ def test_gateway_defaults_to_loopback_no_auth_but_supports_an_explicit_master_ke
 
 
 def test_experts_port_exposes_only_bounded_advisor_aliases():
+    from subroute.plugins.advisor_plugin import ADVISOR_MODEL_NAMES, TOOL_HISTORY_ADVISORS
+
     services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
     experts = services["experts"]
     expert_models = experts_config()["model_list"]
@@ -256,12 +258,28 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     ]
     assert "depends_on" not in experts
     assert {model["model_name"] for model in expert_models} == {
-        "codex-sol-advisor", "codex-astra-advisor",
+        "codex-sol-advisor", "codex-astra-advisor", "codex-luna-advisor",
+        "codex-gpt-6.1-sol-advisor",
     }
     assert all(model["model_info"]["selectable"] is False for model in expert_models)
     assert {
         model["litellm_params"]["model"] for model in expert_models
-    } == {"codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra"}
+    } == {
+        "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
+        "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
+    }
     assert experts_config()["router_settings"] == {"num_retries": 0, "fallbacks": []}
     assert "callbacks" not in experts_config()["litellm_settings"]
     assert experts_config()["general_settings"]["master_key"] == "os.environ/EXPERTS_API_KEY"
+    gateway_advisors = {
+        item["model_name"]: item["litellm_params"]["model"]
+        for item in config()["model_list"]
+        if item["litellm_params"]["model"].startswith("codex-advisor/")
+    }
+    assert gateway_advisors == {
+        item["model_name"]: item["litellm_params"]["model"] for item in expert_models
+    }
+    assert gateway_advisors == {
+        alias: f"codex-advisor/{model}" for alias, model in ADVISOR_MODEL_NAMES.items()
+    }
+    assert set(gateway_advisors) == TOOL_HISTORY_ADVISORS

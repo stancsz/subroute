@@ -34,7 +34,7 @@ class RoutingState:
     active_model: str
     mode: RoutingMode = "alias"
     policy_version: int = 1
-    advisor_model: str | None = "gemini-subscription"
+    advisor_model: str | None = "codex-luna-advisor"
     reasoning_effort: str | None = None
     advisor_reasoning_effort: str | None = None
 
@@ -122,9 +122,14 @@ class RoutingControlPlane:
 
     def _load_or_create_state(self) -> RoutingState:
         if not self.state_path.exists():
-            initial_model = os.getenv("ACTIVE_MODEL", self.choices[0].model_id)
+            initial_model = os.getenv("ACTIVE_MODEL", "openrouter" if "openrouter" in self.allowed_models else self.choices[0].model_id)
             initial_model = RETIRED_MODEL_ALIASES.get(initial_model, initial_model)
-            state = RoutingState(active_model=initial_model, advisor_model=os.getenv("ADVISOR_MODEL", "gemini-subscription"))
+            advisor_model = os.getenv("ADVISOR_MODEL", "codex-luna-advisor")
+            state = RoutingState(
+                active_model=initial_model,
+                advisor_model=advisor_model,
+                advisor_reasoning_effort="high" if advisor_model == "codex-luna-advisor" else None,
+            )
             self._validate(state)
             self._write_atomic(state)
             return state
@@ -133,7 +138,7 @@ class RoutingControlPlane:
             active_model=raw["active_model"],
             mode=raw.get("mode", "alias"),
             policy_version=int(raw.get("policy_version", 1)),
-            advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "gemini-subscription")),
+            advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-luna-advisor")),
             reasoning_effort=raw.get("reasoning_effort"),
             advisor_reasoning_effort=raw.get("advisor_reasoning_effort"),
         )

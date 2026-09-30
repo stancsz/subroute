@@ -1,4 +1,4 @@
-"""In-process LiteLLM CustomLLM provider for OpenAI Codex Subscription (e.g. Terra) as an Advisor."""
+"""In-process LiteLLM CustomLLM provider for OpenAI Codex Subscription as an Advisor."""
 
 from __future__ import annotations
 
@@ -22,15 +22,12 @@ from subroute.handlers.codex_messages import normalize_messages
 
 MODELS = {
     "gpt-6.1-sol": "gpt-6.1-sol",
-    "gpt-5.6-terra": "gpt-5.6-terra",
-    "terra": "gpt-5.6-terra",
     "gpt-6-sol": "gpt-6-sol",
     "sol": "gpt-6-sol",
     "gpt-6-astra": "gpt-6-astra",
     "astra": "gpt-6-astra",
     "gpt-6-luna": "gpt-6-luna",
     "luna": "gpt-6-luna",
-    "gpt-reserve": "gpt-5.6-luna",
 }
 
 
@@ -335,7 +332,7 @@ class CodexAdvisorLLM(CustomLLM):
     """Bridge for Codex subscription with text advice and user image inputs."""
 
     async def acompletion(self, *args: Any, **kwargs: Any) -> ModelResponse:
-        model = str(kwargs.get("model") or (args[0] if args else "gpt-5.6-terra"))
+        model = str(kwargs.get("model") or (args[0] if args else "gpt-6-luna"))
         if "/" in model:
             model = model.split("/", 1)[1]
         messages = kwargs.get("messages") or (args[1] if len(args) > 1 else [])

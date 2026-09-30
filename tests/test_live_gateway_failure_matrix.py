@@ -428,7 +428,7 @@ def test_09_all_remaining_subscription_aliases_live_success(live_gateway: LiveGa
         text = "".join(block.get("text", "") for block in payload.get("content", []))
         assert f"SUBROUTE-{target.upper()}-OK" in text, text
 
-    for advisor in ("codex-terra-advisor", "codex-astra-advisor", "codex-luna-advisor"):
+    for advisor in ("codex-gpt-6.1-sol-advisor", "codex-astra-advisor", "codex-luna-advisor"):
         live_gateway.set_policy(
             target="codex-luna",
             advisor=advisor,
