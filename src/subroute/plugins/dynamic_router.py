@@ -280,6 +280,25 @@ class DynamicRoutingPlugin(CustomLogger):
         if call_type in {"aresponses", "responses"}:
             data.setdefault("litellm_metadata", {})
         from subroute.plugins.image_intent import image_request_context
+        from subroute.audio import audio_route
+
+        try:
+            has_audio = audio_route(data, call_type)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        if has_audio:
+            if requested_model not in self.control_plane.allowed_models | VIRTUAL_ALIASES:
+                raise HTTPException(404, detail="unknown model")
+            _, metadata = get_or_create_metadata_bucket(data)
+            state = self.control_plane.snapshot()
+            metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
+            metadata["gateway_reasoning_effort"] = None
+            metadata["routing"] = {
+                "requested_model": requested_model, "resolved_model": "gemini-subscription",
+                "mode": "audio_input", "policy_version": state.policy_version,
+            }
+            data["model"] = "gemini-subscription"
+            return data
 
         try:
             image_context = image_request_context(data, call_type)

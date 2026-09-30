@@ -19,9 +19,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+try:
+    from subroute.audio import AUDIO_REQUEST_BYTES, MAX_AUDIO_BYTES, MAX_AUDIO_FILES, decode_audio
+except ModuleNotFoundError:
+    from audio_validation import AUDIO_REQUEST_BYTES, MAX_AUDIO_BYTES, MAX_AUDIO_FILES, decode_audio
+
 logger = logging.getLogger(__name__)
 AGY_ADVISOR_AGENT = "subroute-advisor"
 AGY_TARGET_AGENT = "subroute-target"
+AGY_AUDIO_AGENT = "subroute-audio"
 MAX_REQUEST_BYTES = 1_000_000
 REQUEST_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 MAX_CONCURRENT_CLI_REQUESTS = 4
@@ -34,6 +40,14 @@ _CLI_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_CLI_REQUESTS)
 
 class ClientDisconnected(Exception):
     """The caller left before the CLI produced a terminal result."""
+
+
+class AudioRefused(RuntimeError):
+    def __init__(self, result: dict[str, Any], completed_reads: int):
+        self.result = result
+        self.completed_reads = completed_reads
+        phase = "after_attachment_reads" if completed_reads else "before_attachment_reads"
+        super().__init__(f"audio_analysis_refused phase={phase} conversation_id={result.get('conversation_id', 'unknown')}")
 
 
 def _terminate_and_reap(process: subprocess.Popen[str]) -> None:
@@ -69,6 +83,7 @@ def _run_agy(
     *,
     timeout: float = CLI_TIMEOUT_SECONDS,
     client_disconnected: Any = None,
+    cwd: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run one bounded CLI process and always kill/reap it on timeout or disconnect."""
     process = subprocess.Popen(
@@ -78,6 +93,7 @@ def _run_agy(
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=os.name == "posix",
+        **({"cwd": cwd} if cwd is not None else {}),
     )
     deadline = time.monotonic() + timeout
     input_text: str | None = prompt
@@ -112,11 +128,12 @@ def _agy_command(
     *,
     json_schema_path: str | None = None,
     advisor: bool = False,
+    audio: bool = False,
 ) -> list[str]:
     """Run AGY as a constrained text or structured-output target, not a workspace agent."""
     command = [
         "agy",
-        "--agent", AGY_ADVISOR_AGENT if advisor else AGY_TARGET_AGENT,
+        "--agent", AGY_AUDIO_AGENT if audio else (AGY_ADVISOR_AGENT if advisor else AGY_TARGET_AGENT),
         "--model", model,
         "--output-format", "stream-json",
         "--input-format", "stream-json",
@@ -171,6 +188,32 @@ def _provider_usage(stdout: str) -> dict[str, int]:
     if isinstance(raw, dict) and all(type(raw.get(key)) is int and raw[key] >= 0 for key in keys):
         return {key: raw[key] for key in keys}
     raise RuntimeError("Antigravity returned no valid provider usage")
+
+
+def _audio_reads(stdout: str, paths: list[str]) -> None:
+    """A terminal text answer alone is insufficient: every supplied file must be read."""
+    result = _terminal_result(stdout)
+    read = set()
+    for line in stdout.splitlines():
+        try:
+            update = json.loads(line).get("step_update", {})
+        except (ValueError, AttributeError):
+            continue
+        if update.get("step_type") != "tool":
+            continue
+        tool = update.get("tool_name")
+        if tool == "finish":
+            continue
+        path = (update.get("tool_info", {}).get("parameters") or {}).get("AbsolutePath")
+        if tool != "view_file" or path not in paths:
+            raise RuntimeError("Audio run attempted an unexpected tool or file")
+        if update.get("state") == "DONE":
+            read.add(path)
+    response = result.get("response", "")
+    if isinstance(response, str) and response.startswith("This request was blocked by Gemini's filters."):
+        raise AudioRefused(result, len(read))
+    if read != set(paths):
+        raise RuntimeError("Audio run did not complete reads of every attachment")
 
 
 def _runtime_status() -> dict[str, Any]:
@@ -259,14 +302,24 @@ class Handler(BaseHTTPRequestHandler):
         request_id = self._request_id() or "untracked"
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 1 <= length <= MAX_REQUEST_BYTES:
-                raise ValueError(f"request body must be between 1 and {MAX_REQUEST_BYTES} bytes")
+            if not 1 <= length <= AUDIO_REQUEST_BYTES:
+                raise ValueError(f"request body must be between 1 and {AUDIO_REQUEST_BYTES} bytes")
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload, dict):
                 raise ValueError("request body must be an object")
             model, prompt = payload["model"], payload["prompt"]
             json_schema = payload.get("json_schema")
             advisor = payload.get("advisor", False)
+            attachments = payload.get("attachments", [])
+            if not isinstance(attachments, list) or len(attachments) > MAX_AUDIO_FILES:
+                raise ValueError("audio supports at most two attachments")
+            audio_bytes = [decode_audio(item) for item in attachments]
+            if sum(map(len, audio_bytes)) > MAX_AUDIO_BYTES:
+                raise ValueError("audio attachments exceed 20 MiB combined")
+            if not attachments and length > MAX_REQUEST_BYTES:
+                raise ValueError(f"text request body exceeds {MAX_REQUEST_BYTES} bytes")
+            if attachments and (advisor or json_schema is not None):
+                raise ValueError("audio does not support advisor or schema-constrained client tools")
             if not isinstance(advisor, bool):
                 raise ValueError("advisor must be a boolean")
             if not isinstance(model, str) or not isinstance(prompt, str) or not prompt.strip():
@@ -281,18 +334,39 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             try:
-                with tempfile.TemporaryDirectory(prefix="subroute-agy-") as temp_dir:
+                # Audio lives in its own disposable workspace, never a client
+                # path. The CLI reads the exact decoded bytes without DSP.
+                with tempfile.TemporaryDirectory(prefix="subroute-agy-", **({"dir": str(Path(__file__).parent)} if attachments else {})) as temp_dir:
                     schema_path = None
                     if json_schema is not None:
                         schema_path = str(Path(temp_dir) / "schema.json")
                         Path(schema_path).write_text(
                             json.dumps(json_schema, separators=(",", ":")), encoding="utf-8"
                         )
+                    paths = []
+                    if attachments:
+                        agent = Path(temp_dir) / ".agents/agents/subroute-audio/agent.md"
+                        agent.parent.mkdir(parents=True)
+                        agent.write_text((Path(__file__).parent / "audio-agent.md").read_text(), encoding="utf-8")
+                        for index, (item, raw) in enumerate(zip(attachments, audio_bytes), 1):
+                            path = Path(temp_dir) / f"attachment-{index}.{item['format']}"
+                            path.write_bytes(raw)
+                            paths.append(str(path))
+                        prompt = (
+                            "First use view_file to read every audio attachment listed below. "
+                            "Only these files may be read. Do not execute any other tool or command. "
+                            "If audio is unavailable, explicitly report that limitation.\n"
+                            + "\n".join(f"Audio attachment {i}: {p}" for i, p in enumerate(paths, 1))
+                            + "\n\nClient request:\n" + prompt
+                        )
                     completed = _run_agy(
-                        _agy_command(model, json_schema_path=schema_path, **({"advisor": True} if advisor else {})),
+                        _agy_command(model, json_schema_path=schema_path, **({"advisor": True} if advisor else {}), **({"audio": True} if attachments else {})),
                         _prompt_input(prompt),
                         client_disconnected=self._client_disconnected,
+                        **({"cwd": temp_dir} if attachments else {}),
                     )
+                    if attachments:
+                        _audio_reads(completed.stdout, paths)
             finally:
                 _CLI_SLOTS.release()
             if completed.returncode != 0:
@@ -331,6 +405,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.GATEWAY_TIMEOUT, {"detail": "Antigravity timed out"})
         except ClientDisconnected:
             logger.info("Antigravity CLI cancelled after client disconnect request_id=%s model=%r", request_id, model)
+        except AudioRefused as exc:
+            logger.warning("AGY audio refused request_id=%s model=%r error=%s completed_reads=%s provider_usage=%s",
+                           request_id, model, str(exc), exc.completed_reads, exc.result.get("usage"))
+            self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc), "provider_usage": exc.result.get("usage")})
         except RuntimeError as exc:
             logger.warning("AGY request failed request_id=%s model=%r error=%s", request_id, model, str(exc)[:300])
             self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc)})
@@ -340,4 +418,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    # Gateway agents are read-only. AGY 1.2.11 primary-agent tool lists are
+    # broader than the profile frontmatter, so enforce permissions as well.
+    settings_path = Path.home() / ".gemini/antigravity-cli/settings.json"
+    settings = json.loads(settings_path.read_text())
+    permissions = settings.setdefault("permissions", {})
+    denied = permissions.setdefault("deny", [])
+    for rule in ("write_file(*)", "command(*)", "unsandboxed(*)", "read_url(*)", "execute_url(*)", "mcp(*)", "read_file(/root)"):
+        if rule not in denied:
+            denied.append(rule)
+    settings_path.write_text(json.dumps(settings), encoding="utf-8")
     ThreadingHTTPServer(("0.0.0.0", 4015), Handler).serve_forever()

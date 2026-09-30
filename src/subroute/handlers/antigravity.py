@@ -17,6 +17,7 @@ from litellm.llms.custom_llm import CustomLLMError
 from litellm.types.utils import GenericStreamingChunk, ModelResponse, Usage
 from referencing import Registry
 from referencing.exceptions import Unresolvable
+from subroute.audio import AUDIO_REQUEST_BYTES, MAX_AUDIO_BYTES, MAX_AUDIO_FILES, decode_audio
 
 
 MODELS = {
@@ -73,7 +74,7 @@ def model_with_effort(model: str, effort: str | None) -> str:
     return selected
 
 
-def _content_text(content: Any) -> str:
+def _content_text(content: Any, attachments: list | None = None) -> str:
     if isinstance(content, str):
         return content
     if not isinstance(content, list):
@@ -85,6 +86,13 @@ def _content_text(content: Any) -> str:
         block_type = block.get("type")
         if block_type == "text" and isinstance(block.get("text"), str):
             parts.append(block["text"])
+        elif block_type == "input_audio" and attachments is not None:
+            if set(block) != {"type", "input_audio"}:
+                raise ValueError("input_audio block contains unsupported fields")
+            audio = block["input_audio"]
+            decode_audio(audio)
+            attachments.append(audio)
+            parts.append(f"[Audio attachment {len(attachments)}]")
         elif block_type == "tool_use":
             parts.append(
                 f"[Tool call {block.get('name', '')} id={block.get('id', '')}]: "
@@ -99,14 +107,14 @@ def _content_text(content: Any) -> str:
     return "\n".join(parts)
 
 
-def prompt_from_messages(messages: list[dict[str, Any]]) -> str:
+def prompt_from_messages(messages: list[dict[str, Any]], attachments: list | None = None) -> str:
     parts: list[str] = []
     for message in messages:
         role = str(message.get("role", "user"))
         raw_content = message.get("content", "")
         if raw_content is None and role == "assistant" and message.get("tool_calls"):
             raw_content = ""
-        content = _content_text(raw_content)
+        content = _content_text(raw_content, attachments if role == "user" else None)
         if role == "tool":
             role = f"Tool result {message.get('name') or message.get('tool_call_id') or ''}".strip()
         parts.append(f"[{role.capitalize()}]:\n{content}")
@@ -135,6 +143,7 @@ async def invoke_agy(
     *,
     json_schema: dict[str, Any] | None = None,
     advisor: bool = False,
+    attachments: list[dict] | None = None,
 ) -> tuple[str, Usage]:
     target = MODELS.get(model)
     if target is None:
@@ -142,14 +151,21 @@ async def invoke_agy(
     bridge_url = os.getenv("ANTIGRAVITY_BRIDGE_URL")
     if bridge_url:
         payload = {"model": target, "prompt": prompt, "json_schema": json_schema}
+        if attachments:
+            if advisor or len(attachments) > MAX_AUDIO_FILES:
+                raise ValueError("audio target supports at most two attachments and no advisor")
+            if sum(len(decode_audio(item)) for item in attachments) > MAX_AUDIO_BYTES:
+                raise ValueError("audio attachments exceed 20 MiB combined")
+            payload["attachments"] = attachments
         if advisor:
             payload["advisor"] = True
         payload_size = len(
             json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         )
-        if payload_size > BRIDGE_MAX_REQUEST_BYTES:
+        limit = AUDIO_REQUEST_BYTES if attachments else BRIDGE_MAX_REQUEST_BYTES
+        if payload_size > limit:
             raise AntigravityRequestTooLargeError(
-                f"Antigravity bridge request exceeds {BRIDGE_MAX_REQUEST_BYTES} bytes"
+                f"Antigravity bridge request exceeds {limit} bytes"
             )
         bridge_request_id = uuid.uuid4().hex
         try:
@@ -418,7 +434,10 @@ class AntigravityLLM(CustomLLM):
         try:
             tools, forced_kind = AntigravityLLM._tools(optional_params)
             model = model_with_effort(model, optional_params.get("reasoning_effort"))
-            prompt = prompt_from_messages(messages)
+            attachments: list[dict] = []
+            prompt = prompt_from_messages(messages, attachments)
+            if attachments and tools:
+                raise ValueError("audio does not support schema-constrained client tools")
             schema = AntigravityLLM._tool_schema(tools, forced_kind) if tools else None
             if tools:
                 prompt = AntigravityLLM._tool_prompt(prompt, tools, forced_kind)
@@ -426,6 +445,7 @@ class AntigravityLLM(CustomLLM):
                 model,
                 prompt,
                 json_schema=schema,
+                **({"attachments": attachments} if attachments else {}),
             )
             if not tools:
                 return content, usage, []

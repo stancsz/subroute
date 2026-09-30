@@ -108,6 +108,19 @@ Docker Compose, but currently share the Antigravity sidecar's credential,
 configuration, and cache volumes. Static source/configuration remain shared
 and require review before a production restart.
 
+## Gemini music-listening integration
+
+The [music-listening MCP](music-listening-mcp.md) now provides two read-only
+stdio tools, `analyze_audio` and `compare_audio`, through the existing Gemini
+Subscription. Explicit Chat audio input overrides saved routing and disables
+the advisor for that request. The existing sidecar writes original bytes into
+a disposable workspace and uses native `view_file`; it checks completed reads
+and rejects the CLI's false-success filter refusal. Messages/Responses audio
+is rejected before LiteLLM can discard it. Limits are two files and 20 MiB
+combined. No new service, database, model or API-key route is added. This sends
+audio to Google, and listening observations are not professional mixing proof.
+The caller owns MCP execution; existing DAW controls own future edits/renders.
+
 ## Evidence boundary
 
 Config tests prove only the intended ownership boundary. LiteLLM startup proves

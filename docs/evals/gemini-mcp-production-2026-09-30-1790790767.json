@@ -1,0 +1,129 @@
+{
+  "gateway": "http://127.0.0.1:4000",
+  "client_mcp": "1.28.1",
+  "cases": [
+    {
+      "tool": "analyze_audio",
+      "elapsed_seconds": 22.183,
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-ffa0ab8f24d3",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\music-a.wav",
+            "sha256": "afef45cbafe31c057335ae5e6734ed39851276652405f03813368bd45a588bdf",
+            "bytes": 2880044,
+            "format": "wav",
+            "sample_rate": 48000,
+            "channels": 2,
+            "duration_seconds": 15.0
+          }
+        ],
+        "observations": "### 基本信息与声明\n* **音频对象**：音频附件 1（Attachment 1）\n* **元数据已知参数**：时长 15.0 秒，采样率 48000 Hz，双声道（立体声）\n* **说明**：本次分析仅包含单个附件，不涉及跨文件响度对比；本评估仅基于听觉感知，不提供主观质量打分，亦不虚构精确测量数据。\n\n---\n\n### 实际听觉观察（Audible Observations）\n\n#### 1. 时间轴阶段观察\n* **0:00 - 0:02**：底鼓、军鼓/拍手声与闭镲打击节奏切入，伴随圆润的低频合成贝斯，迅速确立稳定的基础节拍骨架。\n* **0:02 - 0:08**：主旋律声部加入，呈现一段具有轻快弹拨质感的中高频重复旋律乐句，带有空间扩散感，与底层的打击乐与低频形成层次呼应。\n* **0:08 - 15.0 秒**：弹拨主旋律、贝斯声线与鼓组节拍保持连贯循环推进，节奏型保持一致，直至 15.0 秒音频结束。\n\n#### 2. 聚焦维度表现\n* **人声（Vocal）**：\n  * **全程（0:00 - 15.0 秒）明确没有人声**。未听到任何人类歌唱、朗诵、念白或人声切片（Vocal Chop）。\n* **节奏（Rhythm）**：\n  * 整体呈现中速、稳健的现代电子/流行/嘻哈风格 4/4 拍律动。\n  * 强弱拍分布清晰，底鼓在重拍下潜有力，军鼓/拍手声稳定落在次强拍，高频闭镲均匀细碎地划分节奏细分颗粒。\n* **旋律（Melody）**：\n  * 核心旋律为一段短小、洗脑的循环短句，音域主要集中在中高频段，线条起伏轻盈、舒展。\n* **音色（Timbre）**：\n  * **打击乐**：底鼓音色结实且低频饱满；军鼓/拍手音色清脆、瞬态明显；闭镲金属质感紧凑收敛。\n  * **低频**：深沉、平滑的电子合成贝斯（类似 808/合成器低音音色），与底鼓共同支撑底盘。\n  * **旋律乐器**：明亮、清润的弹拨音色（带有电吉他拨弦或合成器 Pluck 的声学特性），尾韵带有柔和的空间扩散。\n* **清晰度（Clarity）**：\n  * 各乐器音轨层次分明，低频的贝斯/底鼓与中高频的弹拨旋律在听觉上无明显浑浊堆叠或掩蔽，起振瞬态与打击点清晰干净。\n\n---\n\n### 推测原因（Suspected Causes，与听觉观察分离）\n* **主旋律的空间泛音**：弹拨乐音尾音柔和扩散，推测在混音通道上加载了混响（Reverb）与适度的短延迟（Delay）效果器。\n* **低频与鼓点的贴合度**：底鼓击打与贝斯低频互不打架，推测打击乐与低频声轨间可能经过了瞬态塑形或侧链动态处理（Sidechain）。\n* **段落结构完整度**：音频在 15.0 秒处直接截断，推测该音频为音乐工程中导出的 2~4 小节循环片段（Loop）或背景音乐样片。\n\n---\n\n### 局限性与无法评估事项（Limitations）\n* 无法通过纯听觉测量确切的 BPM（速度数值）、精确的分贝电平（dBFS/LUFS）或具体的均衡（EQ）频点数值。\n* 无法提供声场宽度（Stereo Width）或相位相关性的精确物理度量。\n* 无法认证该音频是否符合工业母带发布标准，亦无法判定乐段的版权归属或独创性。\n* 音乐风格偏好因人而异，不予提供普适性的品质打分。\n",
+        "usage": {
+          "completion_tokens": 3597,
+          "prompt_tokens": 3748,
+          "total_tokens": 7345
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-ffa0ab8f24d3\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\music-a.wav\",\n      \"sha256\": \"afef45cbafe31c057335ae5e6734ed39851276652405f03813368bd45a588bdf\",\n      \"bytes\": 2880044,\n      \"format\": \"wav\",\n      \"sample_rate\": 48000,\n      \"channels\": 2,\n      \"duration_seconds\": 15.0\n    }\n  ],\n  \"observations\": \"### 基本信息与声明\\n* **音频对象**：音频附件 1（Attachment 1）\\n* **元数据已知参数**：时长 15.0 秒，采样率 48000 Hz，双声道（立体声）\\n* **说明**：本次分析仅包含单个附件，不涉及跨文件响度对比；本评估仅基于听觉感知，不提供主观质量打分，亦不虚构精确测量数据。\\n\\n---\\n\\n### 实际听觉观察（Audible Observations）\\n\\n#### 1. 时间轴阶段观察\\n* **0:00 - 0:02**：底鼓、军鼓/拍手声与闭镲打击节奏切入，伴随圆润的低频合成贝斯，迅速确立稳定的基础节拍骨架。\\n* **0:02 - 0:08**：主旋律声部加入，呈现一段具有轻快弹拨质感的中高频重复旋律乐句，带有空间扩散感，与底层的打击乐与低频形成层次呼应。\\n* **0:08 - 15.0 秒**：弹拨主旋律、贝斯声线与鼓组节拍保持连贯循环推进，节奏型保持一致，直至 15.0 秒音频结束。\\n\\n#### 2. 聚焦维度表现\\n* **人声（Vocal）**：\\n  * **全程（0:00 - 15.0 秒）明确没有人声**。未听到任何人类歌唱、朗诵、念白或人声切片（Vocal Chop）。\\n* **节奏（Rhythm）**：\\n  * 整体呈现中速、稳健的现代电子/流行/嘻哈风格 4/4 拍律动。\\n  * 强弱拍分布清晰，底鼓在重拍下潜有力，军鼓/拍手声稳定落在次强拍，高频闭镲均匀细碎地划分节奏细分颗粒。\\n* **旋律（Melody）**：\\n  * 核心旋律为一段短小、洗脑的循环短句，音域主要集中在中高频段，线条起伏轻盈、舒展。\\n* **音色（Timbre）**：\\n  * **打击乐**：底鼓音色结实且低频饱满；军鼓/拍手音色清脆、瞬态明显；闭镲金属质感紧凑收敛。\\n  * **低频**：深沉、平滑的电子合成贝斯（类似 808/合成器低音音色），与底鼓共同支撑底盘。\\n  * **旋律乐器**：明亮、清润的弹拨音色（带有电吉他拨弦或合成器 Pluck 的声学特性），尾韵带有柔和的空间扩散。\\n* **清晰度（Clarity）**：\\n  * 各乐器音轨层次分明，低频的贝斯/底鼓与中高频的弹拨旋律在听觉上无明显浑浊堆叠或掩蔽，起振瞬态与打击点清晰干净。\\n\\n---\\n\\n### 推测原因（Suspected Causes，与听觉观察分离）\\n* **主旋律的空间泛音**：弹拨乐音尾音柔和扩散，推测在混音通道上加载了混响（Reverb）与适度的短延迟（Delay）效果器。\\n* **低频与鼓点的贴合度**：底鼓击打与贝斯低频互不打架，推测打击乐与低频声轨间可能经过了瞬态塑形或侧链动态处理（Sidechain）。\\n* **段落结构完整度**：音频在 15.0 秒处直接截断，推测该音频为音乐工程中导出的 2~4 小节循环片段（Loop）或背景音乐样片。\\n\\n---\\n\\n### 局限性与无法评估事项（Limitations）\\n* 无法通过纯听觉测量确切的 BPM（速度数值）、精确的分贝电平（dBFS/LUFS）或具体的均衡（EQ）频点数值。\\n* 无法提供声场宽度（Stereo Width）或相位相关性的精确物理度量。\\n* 无法认证该音频是否符合工业母带发布标准，亦无法判定乐段的版权归属或独创性。\\n* 音乐风格偏好因人而异，不予提供普适性的品质打分。\\n\",\n  \"usage\": {\n    \"completion_tokens\": 3597,\n    \"prompt_tokens\": 3748,\n    \"total_tokens\": 7345\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "tool": "compare_audio",
+      "elapsed_seconds": 19.716,
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-43be28c92fd5",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\music-a.wav",
+            "sha256": "afef45cbafe31c057335ae5e6734ed39851276652405f03813368bd45a588bdf",
+            "bytes": 2880044,
+            "format": "wav",
+            "sample_rate": 48000,
+            "channels": 2,
+            "duration_seconds": 15.0
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\music-b.wav",
+            "sha256": "679ddb15cc4796369cd899ddb11915fca9acf7a69365137fe017ef857a8e29da",
+            "bytes": 2880044,
+            "format": "wav",
+            "sample_rate": 48000,
+            "channels": 2,
+            "duration_seconds": 15.0
+          }
+        ],
+        "observations": "### 前提说明与响度披露\n- **音频时长**：音频 A（attachment-1.wav）与音频 B（attachment-2.wav）的已知文件时长均为 15.0 秒。\n- **响度披露**：两段音频之间未进行响度匹配（Loudness is not matched）。听觉上感受到的响度差异不代表制作质量或音质的高低，更响并不代表更好。\n\n---\n\n### 实际听觉观察（Audible Observations）\n\n#### 1. 节奏与打击乐（时间范围：00:00 - 00:15）\n- **相同点**：A 与 B 的音乐节拍、底鼓（Kick）、军鼓/击掌（Snare/Clap）及踩镲（Hi-hat）的敲击律动与排列方式完全一致。\n- **差异**：\n  - **A**：打击乐瞬态（Transient）清晰有力，底鼓低频扎实干净，踩镲敲击清脆利落。\n  - **B**：打击乐的起音与衰减被杂音和毛刺包裹，底鼓触发时伴有明显的粗糙感，打击乐整体瞬态边缘变软且带有砂质颗粒感。\n\n#### 2. 旋律与和声（时间范围：00:00 - 00:15）\n- **相同点**：A 与 B 的旋律线条、音高走向、和弦结构与声部配器在曲式上完全一致。\n- **差异**：\n  - **A**：合成器旋律及铺底和弦音色平滑、饱满，音符的延音清晰可见，各声部层次分明。\n  - **B**：旋律线条音色偏向干涩与沙哑，音符周围泛音带有杂质感，旋律的表现力与延音受到背景杂音的干扰。\n\n#### 3. 噪声与失真（时间范围：00:00 - 00:15）\n- **A**：\n  - 全程背景干净，未听到明显的持续性底噪、白噪或磁带嘶嘶声（Hiss）。\n  - 没有可感知的音频削波（Clipping）或过载失真，动态表现自然。\n- **B**：\n  - 全程（00:00 - 00:15）伴随有明显的持续高频底噪/嘶嘶声（Noise Floor 显著偏高）。\n  - 在大动态的打击乐发声及合成器发声时，能明显听到谐波失真、过载毛边与饱和破音质感。\n\n#### 4. 清晰度与分离度（时间范围：00:00 - 00:15）\n- **A**：清晰度与透明度高。低频、中频与高频的界限分明，前景乐器（主旋律与打击乐）与背景铺底具有良好的层次分离度。\n- **B**：清晰度显著下降。由于噪声覆盖与失真带来的频段挤压，整体听感较为混沌，乐器之间的分离度减弱，细节模糊。\n\n---\n\n### 推测原因（Suspected Causes，与听觉观察严格区分）\n- 音频 B 可能经过了饱和/过载（Distortion/Saturation/Overdrive）处理，或在渲染/重采样过程中发生了增益过载与削波失真。\n- 音频 B 可能添加了模拟硬件建模插件（如磁带模拟 Tape Machine、黑胶效果 Vinyl Emulation），或人为叠加了底噪/粉噪采样，以营造复古/Lo-fi 质感。\n- 音频 A 可能为原始未经高强度色彩渲染的数字混音母带。\n\n---\n\n### 评估局限性与无法判定的事项（Limitations）\n1. **无法通过听觉测量精确参数**：无法确定具体的 EQ 频率、分贝值（dB）、总谐波失真率（THD）或插件参数设置。\n2. **不对具体节拍与声场宽度作数字测量**：不估计具体的 BPM 数值及精确的立体声宽度度量。\n3. **审美偏好不设绝对评分**：音色的“干净透明”与“复古/粗粝/Lo-fi 染色”属于不同制作风格与主观审美取向，无法判定哪一种音色风格绝对优越。\n4. **无法认证工业标准或版权**：无法仅通过试听证明音频是否达到商业母带制作标准，亦无法进行版权比对与确权证明。\n",
+        "usage": {
+          "completion_tokens": 2997,
+          "prompt_tokens": 3688,
+          "total_tokens": 6685
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-43be28c92fd5\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\music-a.wav\",\n      \"sha256\": \"afef45cbafe31c057335ae5e6734ed39851276652405f03813368bd45a588bdf\",\n      \"bytes\": 2880044,\n      \"format\": \"wav\",\n      \"sample_rate\": 48000,\n      \"channels\": 2,\n      \"duration_seconds\": 15.0\n    },\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\music-b.wav\",\n      \"sha256\": \"679ddb15cc4796369cd899ddb11915fca9acf7a69365137fe017ef857a8e29da\",\n      \"bytes\": 2880044,\n      \"format\": \"wav\",\n      \"sample_rate\": 48000,\n      \"channels\": 2,\n      \"duration_seconds\": 15.0\n    }\n  ],\n  \"observations\": \"### 前提说明与响度披露\\n- **音频时长**：音频 A（attachment-1.wav）与音频 B（attachment-2.wav）的已知文件时长均为 15.0 秒。\\n- **响度披露**：两段音频之间未进行响度匹配（Loudness is not matched）。听觉上感受到的响度差异不代表制作质量或音质的高低，更响并不代表更好。\\n\\n---\\n\\n### 实际听觉观察（Audible Observations）\\n\\n#### 1. 节奏与打击乐（时间范围：00:00 - 00:15）\\n- **相同点**：A 与 B 的音乐节拍、底鼓（Kick）、军鼓/击掌（Snare/Clap）及踩镲（Hi-hat）的敲击律动与排列方式完全一致。\\n- **差异**：\\n  - **A**：打击乐瞬态（Transient）清晰有力，底鼓低频扎实干净，踩镲敲击清脆利落。\\n  - **B**：打击乐的起音与衰减被杂音和毛刺包裹，底鼓触发时伴有明显的粗糙感，打击乐整体瞬态边缘变软且带有砂质颗粒感。\\n\\n#### 2. 旋律与和声（时间范围：00:00 - 00:15）\\n- **相同点**：A 与 B 的旋律线条、音高走向、和弦结构与声部配器在曲式上完全一致。\\n- **差异**：\\n  - **A**：合成器旋律及铺底和弦音色平滑、饱满，音符的延音清晰可见，各声部层次分明。\\n  - **B**：旋律线条音色偏向干涩与沙哑，音符周围泛音带有杂质感，旋律的表现力与延音受到背景杂音的干扰。\\n\\n#### 3. 噪声与失真（时间范围：00:00 - 00:15）\\n- **A**：\\n  - 全程背景干净，未听到明显的持续性底噪、白噪或磁带嘶嘶声（Hiss）。\\n  - 没有可感知的音频削波（Clipping）或过载失真，动态表现自然。\\n- **B**：\\n  - 全程（00:00 - 00:15）伴随有明显的持续高频底噪/嘶嘶声（Noise Floor 显著偏高）。\\n  - 在大动态的打击乐发声及合成器发声时，能明显听到谐波失真、过载毛边与饱和破音质感。\\n\\n#### 4. 清晰度与分离度（时间范围：00:00 - 00:15）\\n- **A**：清晰度与透明度高。低频、中频与高频的界限分明，前景乐器（主旋律与打击乐）与背景铺底具有良好的层次分离度。\\n- **B**：清晰度显著下降。由于噪声覆盖与失真带来的频段挤压，整体听感较为混沌，乐器之间的分离度减弱，细节模糊。\\n\\n---\\n\\n### 推测原因（Suspected Causes，与听觉观察严格区分）\\n- 音频 B 可能经过了饱和/过载（Distortion/Saturation/Overdrive）处理，或在渲染/重采样过程中发生了增益过载与削波失真。\\n- 音频 B 可能添加了模拟硬件建模插件（如磁带模拟 Tape Machine、黑胶效果 Vinyl Emulation），或人为叠加了底噪/粉噪采样，以营造复古/Lo-fi 质感。\\n- 音频 A 可能为原始未经高强度色彩渲染的数字混音母带。\\n\\n---\\n\\n### 评估局限性与无法判定的事项（Limitations）\\n1. **无法通过听觉测量精确参数**：无法确定具体的 EQ 频率、分贝值（dB）、总谐波失真率（THD）或插件参数设置。\\n2. **不对具体节拍与声场宽度作数字测量**：不估计具体的 BPM 数值及精确的立体声宽度度量。\\n3. **审美偏好不设绝对评分**：音色的“干净透明”与“复古/粗粝/Lo-fi 染色”属于不同制作风格与主观审美取向，无法判定哪一种音色风格绝对优越。\\n4. **无法认证工业标准或版权**：无法仅通过试听证明音频是否达到商业母带制作标准，亦无法进行版权比对与确权证明。\\n\",\n  \"usage\": {\n    \"completion_tokens\": 2997,\n    \"prompt_tokens\": 3688,\n    \"total_tokens\": 6685\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    }
+  ],
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "messages_audio_rejection": {
+    "status": 400,
+    "body": {
+      "type": "error",
+      "error": {
+        "type": "invalid_request_error",
+        "message": "Audio requires /v1/chat/completions input_audio; Messages/Responses audio is unsupported"
+      }
+    }
+  },
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "inputs": [
+    {
+      "name": "music-a.wav",
+      "sha256": "afef45cbafe31c057335ae5e6734ed39851276652405f03813368bd45a588bdf"
+    },
+    {
+      "name": "music-b.wav",
+      "sha256": "679ddb15cc4796369cd899ddb11915fca9acf7a69365137fe017ef857a8e29da"
+    }
+  ]
+}

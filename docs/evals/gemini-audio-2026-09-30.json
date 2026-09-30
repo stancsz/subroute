@@ -1,0 +1,122 @@
+{
+  "date_utc": "2026-09-30T17:23:46.512628+00:00",
+  "route": "Gemini Subscription via actual Subroute staging and Antigravity",
+  "base_url": "http://127.0.0.1:4005",
+  "audio": {
+    "file_bytes": 64044,
+    "sha256": "c8591e75a9d2f72b7b0b465bff90a9969a611d2494240bacec1139c53f60e946",
+    "format": "PCM WAV",
+    "sample_rate": 16000,
+    "channels": 1,
+    "duration_seconds": 2,
+    "generation": "four sine notes; a synthetic transport probe, not professional music evaluation"
+  },
+  "staging_before": {
+    "active_model": "codex-luna",
+    "mode": "force",
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": "high",
+    "advisor_reasoning_effort": null
+  },
+  "production_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "cases": [
+    {
+      "label": "chat-input-audio",
+      "endpoint": "/v1/chat/completions",
+      "call_id": "fe01aaaf22e14018b063e942edb40c5c",
+      "request_bytes": 85672,
+      "http_status": 400,
+      "elapsed_seconds": 0.438,
+      "response": {
+        "error": {
+          "message": "litellm.BadRequestError: AntigravityException - Antigravity subscription does not support 'input_audio' content blocksNo fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadRequestError: AntigravityException - Antigravity subscription does not support 'input_audio' content blocksNo fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "400"
+        }
+      }
+    },
+    {
+      "label": "messages-audio",
+      "endpoint": "/v1/messages",
+      "call_id": "93d4fb3e8d814b1ab5a7ae9af6f25d78",
+      "request_bytes": 85689,
+      "http_status": 200,
+      "elapsed_seconds": 12.799,
+      "response": {
+        "id": "chatcmpl-agy-d502fbc2b39e",
+        "type": "message",
+        "role": "assistant",
+        "model": "gemini-subscription",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 628,
+          "output_tokens": 265
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "I cannot access the audio because there is no audio file attached to your request. Please attach or provide the audio file, and I will be happy to describe it for you.\n"
+          }
+        ],
+        "stop_reason": "end_turn",
+        "stop_details": null
+      }
+    }
+  ],
+  "staging_probe_policy": {
+    "active_model": "gemini-subscription",
+    "mode": "alias",
+    "advisor_model": null,
+    "reasoning_effort": "low",
+    "advisor_reasoning_effort": null
+  },
+  "text_control": {
+    "expected_marker": "GEMINI_TEXT_CONTROL_a0815eb4",
+    "http_status": 200,
+    "elapsed_seconds": 7.555,
+    "response": {
+      "id": "chatcmpl-agy-0abb4af7c5ce",
+      "created": 1790789047,
+      "model": "gemini-subscription",
+      "object": "chat.completion",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "GEMINI_TEXT_CONTROL_a0815eb4\n",
+            "role": "assistant"
+          }
+        }
+      ],
+      "usage": {
+        "completion_tokens": 135,
+        "prompt_tokens": 635,
+        "total_tokens": 770
+      }
+    }
+  },
+  "staging_after": {
+    "active_model": "codex-luna",
+    "mode": "force",
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": "high",
+    "advisor_reasoning_effort": null
+  },
+  "production_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "staging_policy_restored": true,
+  "production_policy_unchanged": true
+}

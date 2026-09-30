@@ -1,0 +1,7 @@
+*
+!sidecars/
+!sidecars/antigravity/
+!sidecars/antigravity/**
+!src/
+!src/subroute/
+!src/subroute/audio.py

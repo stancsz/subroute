@@ -31,7 +31,7 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources \
     && rm -f /tmp/agy.tar.gz /tmp/antigravity \
     && if [ "${TARGETARCH}" = "$(dpkg --print-architecture)" ]; then /root/.local/bin/agy --help >/dev/null; fi
 
-COPY entrypoint.sh /tmp/entrypoint.sh
+COPY sidecars/antigravity/entrypoint.sh /tmp/entrypoint.sh
 RUN sed -i 's/\r$//' /tmp/entrypoint.sh \
     && install -D -m 0755 /tmp/entrypoint.sh /out/entrypoint.sh
 
@@ -42,8 +42,10 @@ ENV PATH=/root/.local/bin:${PATH}
 WORKDIR /app
 COPY --from=build /root/.local/bin/agy /root/.local/bin/agy
 COPY --from=build /out/entrypoint.sh /app/entrypoint.sh
-COPY bridge.py /app/bridge.py
-COPY advisor-agent.md /app/.agents/agents/subroute-advisor/agent.md
-COPY target-agent.md /app/.agents/agents/subroute-target/agent.md
+COPY sidecars/antigravity/bridge.py /app/bridge.py
+COPY src/subroute/audio.py /app/audio_validation.py
+COPY sidecars/antigravity/audio-agent.md /app/audio-agent.md
+COPY sidecars/antigravity/advisor-agent.md /app/.agents/agents/subroute-advisor/agent.md
+COPY sidecars/antigravity/target-agent.md /app/.agents/agents/subroute-target/agent.md
 EXPOSE 4015
 CMD ["/app/entrypoint.sh"]

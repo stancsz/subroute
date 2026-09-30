@@ -4,6 +4,8 @@
 **优先级：最高（目标已完成）**
 **更新日期：2026-09-29**
 
+**2026-09-30 用户要求的 Gemini 音频与 MCP 增量，传输 MVP complete：** 复用现有 Gemini Subscription 和 Antigravity sidecar，`analyze_audio` / `compare_audio` 已经真实 stdio MCP → gateway → 订阅请求验证并注册。本机固定 MCP 1.28.1；部署镜像的 212 项受影响回归通过。盲口令正确识别，两个音乐附件都读取并指出已知噪声/失真差异；非法输入、Messages 丢附件、缺少读取、上游拒绝、超时与取消有明确失败/清理。两次偶发失败的原始生成记录包含完整音频，根因链为订阅过滤拒绝被 CLI SUCCESS 包装后旧网关误报成功；现返回可关联错误，不做隐藏重试。具体 Google 过滤触发条件未知。音乐观察仍有时长/BPM/声场和编曲描述错误，专业混音 UNVERIFIED，不改写下方历史目标。见 [完整评估与根因](docs/evals/gemini-audio-2026-09-30.md)。
+
 **2026-09-30 最新用户澄清：取消 Advisor 固定 GPT-6.1 的限制。** 默认 production Routing Desk 使用 OpenRouter MiniMax M3、OpenAI GPT-6 Luna Advisor 和 high reasoning effort；OpenAI Advisor 可选路由全部更新为 GPT-6 或更新版本，包含 GPT-6 Luna、GPT-6 Sol、GPT-6 Astra、GPT-6.1 Sol。共享 gateway 与专用 `experts` 均保留这些选择，旧 GPT-5.6 Terra Advisor deployment 移除。默认值不限制用户后续更换模型或 effort。下方 GPT-6.1-only 记录是被本次澄清取代的历史要求和证据。
 
 **2026-09-30 历史限定，已被上方用户澄清取代：Advisor 只用 GPT-6.1 Sol。** 这项要求取代下方图片增量最初的 Sol/Astra 专用目录。Northstar caller 唯一 `sol` 选项发送 `codex-gpt-6.1-sol-advisor`；4040 `experts` 只暴露该版本别名并映射实际 `gpt-6.1-sol`，没有模型回退或隐藏重试。共享 worker gateway 的其他模型保持原有范围。72 项离线回归通过；真实 6.1 截图和图片→Advisor-directed Pi→精确源码证据→最终反馈均完成；旧 Sol/Astra 名称在 4040 返回 HTTP 400。仅重启 experts，readiness healthy。旧模型实测和论文对比保留为历史，不冒充 6.1 证据。见同一 [评估的版本限定记录](docs/evals/advisor-image-input-2026-09-30.md#gpt-61-sol-only-follow-up)。主执行者检查并接受独立 READY 复核；按已有 Docker 服务授权发布这六个相关文件，提交、远端 SHA 和最终 health 由 Git 记录与交付说明确认。

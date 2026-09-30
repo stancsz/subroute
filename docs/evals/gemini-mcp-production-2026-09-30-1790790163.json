@@ -1,0 +1,83 @@
+{
+  "gateway": "http://127.0.0.1:4000",
+  "client_mcp": "1.28.1",
+  "cases": [
+    {
+      "tool": "analyze_audio",
+      "elapsed_seconds": 15.129,
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-19ef6bd767a9",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          }
+        ],
+        "observations": "### Transcription\n\"The secret words are velvet orange. The code is 7492.\" (spoken as: \"seven four nine two\")\n\n---\n\n### Audible Observations\n* **0:00 – ~0:03**: A single clear speaking voice states: *\"The secret words are velvet orange.\"*\n* **~0:03 – ~0:06**: The same voice continues and states: *\"The code is 7492\"* (pronounced *\"seven four nine two\"*), followed by quiet decay to the end of the clip.\n\n---\n\n### Suspected Causes\n* The voice is captured cleanly with minimal ambient room reflection or background noise, consistent with a clean vocal recording or synthetic text-to-speech output.\n\n---\n\n### Limitations & Things That Cannot Be Assessed\n* **Comparison**: Only one audio file (Attachment 1) was provided, so comparative analysis or loudness matching across multiple files is not applicable.\n* **Technical Measurements**: Exact decibel levels (dBFS, LUFS) and precise EQ frequency values cannot be determined or verified solely by ear.\n* **Production Certification**: It is not possible to certify professional mastering quality or verify acoustic recording environment details solely through playback.\n",
+        "usage": {
+          "completion_tokens": 1503,
+          "prompt_tokens": 3220,
+          "total_tokens": 4723
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-19ef6bd767a9\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\",\n      \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\",\n      \"bytes\": 229748,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 5.208662131519274\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The secret words are velvet orange. The code is 7492.\\\" (spoken as: \\\"seven four nine two\\\")\\n\\n---\\n\\n### Audible Observations\\n* **0:00 – ~0:03**: A single clear speaking voice states: *\\\"The secret words are velvet orange.\\\"*\\n* **~0:03 – ~0:06**: The same voice continues and states: *\\\"The code is 7492\\\"* (pronounced *\\\"seven four nine two\\\"*), followed by quiet decay to the end of the clip.\\n\\n---\\n\\n### Suspected Causes\\n* The voice is captured cleanly with minimal ambient room reflection or background noise, consistent with a clean vocal recording or synthetic text-to-speech output.\\n\\n---\\n\\n### Limitations & Things That Cannot Be Assessed\\n* **Comparison**: Only one audio file (Attachment 1) was provided, so comparative analysis or loudness matching across multiple files is not applicable.\\n* **Technical Measurements**: Exact decibel levels (dBFS, LUFS) and precise EQ frequency values cannot be determined or verified solely by ear.\\n* **Production Certification**: It is not possible to certify professional mastering quality or verify acoustic recording environment details solely through playback.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1503,\n    \"prompt_tokens\": 3220,\n    \"total_tokens\": 4723\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "tool": "compare_audio",
+      "elapsed_seconds": 16.472,
+      "is_error": true,
+      "structured_content": null,
+      "text": [
+        "Error executing tool compare_audio: Server error '502 Bad Gateway' for url 'http://127.0.0.1:4000/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/502"
+      ]
+    }
+  ],
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "inputs": [
+    {
+      "name": "blind.wav",
+      "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+    },
+    {
+      "name": "blind-b.wav",
+      "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+    }
+  ]
+}

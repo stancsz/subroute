@@ -1,0 +1,203 @@
+{
+  "scope": "Read-only audit of actual CLI generation metadata; no credentials, raw audio or hidden reasoning exported",
+  "records": [
+    {
+      "conversation_id": "eb8becf2-5c01-4b2e-a006-2c8b41f9bb9b",
+      "steps": [
+        [
+          0,
+          14,
+          3,
+          null
+        ],
+        [
+          1,
+          15,
+          3,
+          null
+        ],
+        [
+          2,
+          132,
+          3,
+          null
+        ],
+        [
+          3,
+          15,
+          3,
+          null
+        ],
+        [
+          4,
+          132,
+          3,
+          null
+        ],
+        [
+          5,
+          15,
+          3,
+          null
+        ]
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1044,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 1039,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 2,
+          "stored_bytes": 472056,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+            },
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ]
+    },
+    {
+      "conversation_id": "e231eae2-63c7-4627-b045-bf090b0042f4",
+      "steps": [
+        [
+          0,
+          14,
+          3,
+          null
+        ],
+        [
+          1,
+          15,
+          3,
+          null
+        ],
+        [
+          2,
+          132,
+          3,
+          null
+        ],
+        [
+          3,
+          15,
+          3,
+          null
+        ],
+        [
+          4,
+          132,
+          3,
+          null
+        ],
+        [
+          5,
+          15,
+          3,
+          null
+        ]
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1044,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 1040,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 2,
+          "stored_bytes": 471788,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+            },
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+            }
+          ],
+          "contains_cli_filter_refusal": true
+        }
+      ]
+    },
+    {
+      "conversation_id": "8d47165b-3f84-4f06-9fd6-6b3b8a2f41bd",
+      "steps": [
+        [
+          0,
+          14,
+          3,
+          null
+        ],
+        [
+          1,
+          15,
+          3,
+          null
+        ],
+        [
+          2,
+          132,
+          3,
+          null
+        ],
+        [
+          3,
+          132,
+          3,
+          null
+        ],
+        [
+          4,
+          15,
+          3,
+          null
+        ]
+      ],
+      "generations": [
+        {
+          "index": 0,
+          "stored_bytes": 1053,
+          "wav_inputs": [],
+          "contains_cli_filter_refusal": false
+        },
+        {
+          "index": 1,
+          "stored_bytes": 476299,
+          "wav_inputs": [
+            {
+              "bytes": 229748,
+              "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+            },
+            {
+              "bytes": 226886,
+              "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+            }
+          ],
+          "contains_cli_filter_refusal": false
+        }
+      ]
+    }
+  ]
+}

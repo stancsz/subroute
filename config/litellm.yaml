@@ -71,7 +71,7 @@ model_list:
       source_id: gemini-subscription
       access: Subscription
       reasoning_efforts: [low, medium, high]
-      capabilities: [text, tools, buffered-sse]
+      capabilities: [text, audio, tools, buffered-sse]
       advisor_selectable: true
     litellm_params:
       model: antigravity/gemini-3.8-flash

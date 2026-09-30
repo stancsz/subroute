@@ -121,7 +121,9 @@ services:
     command: ["--config", "/app/config/litellm.experts.yaml", "--port", "4040", "--host", "0.0.0.0", "--telemetry", "False"]
 
   antigravity:
-    build: ./sidecars/antigravity
+    build:
+      context: .
+      dockerfile: sidecars/antigravity/Dockerfile
     restart: unless-stopped
     environment:
       - GEMINI_FORCE_FILE_STORAGE=true

@@ -1,0 +1,129 @@
+{
+  "gateway": "http://127.0.0.1:4005",
+  "client_mcp": "1.28.1",
+  "cases": [
+    {
+      "tool": "analyze_audio",
+      "elapsed_seconds": 15.459,
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-a581a8d7f288",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          }
+        ],
+        "observations": "### Transcription\n\"The secret words are velvet orange. The code is 7492.\"\n\n---\n\n### Audible Observations\n* **0:00 – End of clip**: A spoken voice clearly articulates two sentences: *\"The secret words are velvet orange. The code is 7492.\"* (spoken as *seven four nine two*). The delivery is even, paced, and free of significant background noise or distortion.\n\n### Suspected Causes\n* The speech sounds like a clean vocal recording or synthesized voice reading a verification code/phrase in an acoustically controlled or dry environment.\n\n### Limitations\n* Exact acoustic metrics (such as precise dB levels, frequency response, or millisecond-level time boundaries) cannot be measured through listening alone.\n* Only Attachment 1 was provided; therefore, comparative analysis against a second file (Attachment 2 / B) is not applicable.\n* No audio processing tools were executed on the file.\n",
+        "usage": {
+          "completion_tokens": 1443,
+          "prompt_tokens": 3507,
+          "total_tokens": 4950
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-a581a8d7f288\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\",\n      \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\",\n      \"bytes\": 229748,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 5.208662131519274\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The secret words are velvet orange. The code is 7492.\\\"\\n\\n---\\n\\n### Audible Observations\\n* **0:00 – End of clip**: A spoken voice clearly articulates two sentences: *\\\"The secret words are velvet orange. The code is 7492.\\\"* (spoken as *seven four nine two*). The delivery is even, paced, and free of significant background noise or distortion.\\n\\n### Suspected Causes\\n* The speech sounds like a clean vocal recording or synthesized voice reading a verification code/phrase in an acoustically controlled or dry environment.\\n\\n### Limitations\\n* Exact acoustic metrics (such as precise dB levels, frequency response, or millisecond-level time boundaries) cannot be measured through listening alone.\\n* Only Attachment 1 was provided; therefore, comparative analysis against a second file (Attachment 2 / B) is not applicable.\\n* No audio processing tools were executed on the file.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1443,\n    \"prompt_tokens\": 3507,\n    \"total_tokens\": 4950\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "tool": "compare_audio",
+      "elapsed_seconds": 7.506,
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-754b44690545",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+            "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+            "bytes": 226886,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.143764172335601
+          }
+        ],
+        "observations": "This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can [send feedback](https://ai.google.dev/gemini-api/docs/troubleshooting#file-bug) or read more about [our policies here](https://policies.google.com/terms/generative-ai/use-policy).\n",
+        "usage": {
+          "completion_tokens": 539,
+          "prompt_tokens": 5295,
+          "total_tokens": 5834
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-754b44690545\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\",\n      \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\",\n      \"bytes\": 229748,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 5.208662131519274\n    },\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind-b.wav\",\n      \"sha256\": \"df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89\",\n      \"bytes\": 226886,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 5.143764172335601\n    }\n  ],\n  \"observations\": \"This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can [send feedback](https://ai.google.dev/gemini-api/docs/troubleshooting#file-bug) or read more about [our policies here](https://policies.google.com/terms/generative-ai/use-policy).\\n\",\n  \"usage\": {\n    \"completion_tokens\": 539,\n    \"prompt_tokens\": 5295,\n    \"total_tokens\": 5834\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    }
+  ],
+  "policy_before": {
+    "active_model": "codex-luna",
+    "mode": "force",
+    "policy_version": 480,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": "high",
+    "advisor_reasoning_effort": null
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "messages_audio_rejection": {
+    "status": 400,
+    "body": {
+      "type": "error",
+      "error": {
+        "type": "invalid_request_error",
+        "message": "Audio requires /v1/chat/completions input_audio; Messages/Responses audio is unsupported"
+      }
+    }
+  },
+  "policy_after": {
+    "active_model": "codex-luna",
+    "mode": "force",
+    "policy_version": 480,
+    "advisor_model": "gemini-subscription",
+    "reasoning_effort": "high",
+    "advisor_reasoning_effort": null
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "inputs": [
+    {
+      "name": "blind.wav",
+      "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+    },
+    {
+      "name": "blind-b.wav",
+      "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+    }
+  ]
+}
