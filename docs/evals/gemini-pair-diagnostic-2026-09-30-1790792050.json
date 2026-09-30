@@ -1,0 +1,67 @@
+{
+  "scope": "Two diagnostic live calls, no retries; this small comparison is not a causal proof",
+  "gateway": "http://127.0.0.1:4000",
+  "cases": [
+    {
+      "tool": "analyze_audio",
+      "arguments": {
+        "asset_path": "blind-b.wav",
+        "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+        "focus": [
+          "audible speech"
+        ]
+      },
+      "elapsed_seconds": 10.887,
+      "is_error": true,
+      "structured_content": null,
+      "text": [
+        "Error executing tool analyze_audio: Gateway HTTP 502: litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=39632b422cd24cfeb1c2cd289d103cc1 returned 502: provider_content_filter phase=after_attachment_reads conversation_id=0ff62e36-3502-4ab0-b284-dfee25f4c74fNo fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=39632b422cd24cfe"
+      ]
+    },
+    {
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "elapsed_seconds": 15.157,
+      "is_error": true,
+      "structured_content": null,
+      "text": [
+        "Error executing tool compare_audio: Gateway HTTP 502: litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=fd2530fb1c0e42fcaa7165723c1d60ec returned 502: provider_content_filter phase=after_attachment_reads conversation_id=35e482cd-508e-435d-b01e-3726b309b3e7No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=fd2530fb1c0e42fc"
+      ]
+    }
+  ],
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "inputs": [
+    {
+      "name": "blind.wav",
+      "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3"
+    },
+    {
+      "name": "blind-b.wav",
+      "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89"
+    }
+  ]
+}

@@ -56,6 +56,16 @@ Google 原始安全分类、blockedReason/finishReason 和触发特征没有在�
 
 复查结论：**共享终态的假成功缺陷已修复并部署；Google 的双文件过滤拒绝仍实际发生，未解决**。这是部分修复，不能宣称偶发错误全部消失。CLI 帮助、当前 headless 协议和官方 changelog 未提供本通路可用的原始分类或过滤控制；继续解决上游拒绝需要提供方暴露原始 stop reason/修复拒绝行为，或经用户决定改变提供方策略。本轮保留订阅与输入合同，没有用重试、切模型或删附件掩盖它。单次复验通过只能证明该次通路正常，不能推断提供方以后不会过滤。
 
+## “为什么两个文件触发过滤”的追加对照
+
+用户追问触发原因后，在相同 production route、Gemini 3.8 Flash High、已部署补丁和 MCP 提问下，新增四次诊断调用，没有重试、改写已有文件或切模型。前两次用原有探针：B 单文件拒绝（10.887 秒，失败 provider usage=3,507），A+A 两个附件拒绝（15.157 秒，失败 usage=3,953）；都在读取完成之后收到过滤诊断。[原探针对照收据](gemini-pair-diagnostic-2026-09-30-1790792050.json)。这直接否定“只有双文件才能触发”的判断。
+
+后两次用相同 Windows SAPI 合成方式、22,050 Hz / mono / 16-bit PCM WAV 的普通语音：A 为“The melody begins quietly. The drums enter later. I enjoy the warm piano.”，B 为“The drums begin first. The melody enters later. I enjoy the soft guitar.”。保持单文件和双文件原有转写 question/focus，单文件成功（25.651 秒，4,838 tokens），双文件成功并正确给出两段转写（31.690 秒，8,832 tokens）。[普通语音对照收据](gemini-pair-diagnostic-2026-09-30-1790792201.json)。两组 policy 均未变、readiness 200；这些是新造测试音频，不是用户歌曲或隐藏的生产请求变换。
+
+**现有证据不支持“双附件数量限制”，也不支持“两段歌曲比较被禁止”。** 原探针音频含 `secret words`、`code` 和数字，而普通语音与此前合成音乐双文件都成功。因此值得进一步验证原探针内容/生成文字误判与订阅过滤不稳定两种解释，不能据这四次小样本认定某个词的因果作用。文件时长、自然生成结果、工具读取顺序及请求时间也没有全部固定。
+
+[Google 安全反馈文档](https://ai.google.dev/gemini-api/docs/safety-settings#safety-feedback) 区分 promptFeedback.blockReason（输入阻断）与 Candidate.finishReason / safetyRatings（输出阻断）；这是 Gemini API 的说明，不能据此假设订阅 CLI 采用同一设置。当前 CLI 只给泛化的过滤拒绝，没有暴露本次输入/输出分类或原始安全评分，具体触发条件仍 UNKNOWN。本轮没有源码改动，因此不重复部署或运行源码回归。
+
 ## Skill learning
 
 Northstar / Northstar QA 当前本地版本，版本号 unknown。预期 native Gemini 能听音频，观察到模型有能力但 gateway 文本运输没有附件，且 Messages 的 200 隐藏了丢失。盲口令比泛泛询问“听到什么”更能验证传输；真实 MCP 的两入口已复查，并进一步暴露 CLI SUCCESS 包装过滤拒绝的问题。验收应同时检查输入字节、读取完成、终态内容与 provider usage，保留音乐描述失败可防止把转写能力当作专业混音能力。本轮继续修复表明终态校验应由共享协议边界拥有，不能只加在一个输入分支；真实双文件仍拒绝，所以必须区分网关修复与上游问题解决。该教训可用于 [Northstar Issues](https://github.com/stancsz/northstar/issues)，未发送外部消息。

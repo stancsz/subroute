@@ -1,0 +1,131 @@
+{
+  "scope": "Two diagnostic live calls, no retries; this small comparison is not a causal proof",
+  "sample_kind": "neutral speech",
+  "gateway": "http://127.0.0.1:4000",
+  "cases": [
+    {
+      "tool": "analyze_audio",
+      "arguments": {
+        "asset_path": "neutral-a.wav",
+        "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+        "focus": [
+          "audible speech"
+        ]
+      },
+      "elapsed_seconds": 25.651,
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-ac1d60d135c0",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\neutral-a.wav",
+            "sha256": "70b0fc64691599fc2ef092c7423569fd7cbebaa61dc6aa93f9502c9161ed7986",
+            "bytes": 292584,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 6.633514739229025
+          }
+        ],
+        "observations": "### Transcription\n\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\"\n\n---\n\n### Audible Observations (Attachment 1)\n*Total duration (supplied metadata): ~6.63 seconds (mono, 22,050 Hz)*\n\n- **0.00s – ~1.95s**: A clear, neutral voice articulates the first phrase: *\"The melody begins quietly.\"*\n- **~1.95s – ~2.50s**: Silence / pause between sentences.\n- **~2.50s – ~4.15s**: The voice articulates the second phrase: *\"The drums enter later.\"*\n- **~4.15s – ~4.70s**: Silence / pause between sentences.\n- **~4.70s – ~6.40s**: The voice articulates the third phrase: *\"I enjoy the warm piano.\"*\n- **~6.40s – 6.63s**: Silence through the end of the recording.\n\n---\n\n### Suspected Causes\n- The consistent cadence, even dynamics, and clear phonetic transitions are characteristic of digital text-to-speech (TTS) synthesis or a controlled studio vocal recording.\n- The absence of noticeable ambient reverb or room reflections suggests direct-to-digital generation or close-mic recording in an acoustically treated space.\n\n---\n\n### Limitations\n- **File count**: Only Attachment 1 was provided for review; no second file (Attachment 2) was present to conduct a comparative analysis.\n- **Technical measurements**: Exact decibel (dB) levels, frequency response curves, and precise signal-to-noise ratios cannot be measured by hearing alone.\n- **Loudness calibration**: Perceptual volume is uncalibrated and not loudness-matched to any external standard.\n",
+        "usage": {
+          "completion_tokens": 1485,
+          "prompt_tokens": 3353,
+          "total_tokens": 4838
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-ac1d60d135c0\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\neutral-a.wav\",\n      \"sha256\": \"70b0fc64691599fc2ef092c7423569fd7cbebaa61dc6aa93f9502c9161ed7986\",\n      \"bytes\": 292584,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 6.633514739229025\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\\\"\\n\\n---\\n\\n### Audible Observations (Attachment 1)\\n*Total duration (supplied metadata): ~6.63 seconds (mono, 22,050 Hz)*\\n\\n- **0.00s – ~1.95s**: A clear, neutral voice articulates the first phrase: *\\\"The melody begins quietly.\\\"*\\n- **~1.95s – ~2.50s**: Silence / pause between sentences.\\n- **~2.50s – ~4.15s**: The voice articulates the second phrase: *\\\"The drums enter later.\\\"*\\n- **~4.15s – ~4.70s**: Silence / pause between sentences.\\n- **~4.70s – ~6.40s**: The voice articulates the third phrase: *\\\"I enjoy the warm piano.\\\"*\\n- **~6.40s – 6.63s**: Silence through the end of the recording.\\n\\n---\\n\\n### Suspected Causes\\n- The consistent cadence, even dynamics, and clear phonetic transitions are characteristic of digital text-to-speech (TTS) synthesis or a controlled studio vocal recording.\\n- The absence of noticeable ambient reverb or room reflections suggests direct-to-digital generation or close-mic recording in an acoustically treated space.\\n\\n---\\n\\n### Limitations\\n- **File count**: Only Attachment 1 was provided for review; no second file (Attachment 2) was present to conduct a comparative analysis.\\n- **Technical measurements**: Exact decibel (dB) levels, frequency response curves, and precise signal-to-noise ratios cannot be measured by hearing alone.\\n- **Loudness calibration**: Perceptual volume is uncalibrated and not loudness-matched to any external standard.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1485,\n    \"prompt_tokens\": 3353,\n    \"total_tokens\": 4838\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "neutral-a.wav",
+        "b_path": "neutral-b.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "elapsed_seconds": 31.69,
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-6f977b919873",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\neutral-a.wav",
+            "sha256": "70b0fc64691599fc2ef092c7423569fd7cbebaa61dc6aa93f9502c9161ed7986",
+            "bytes": 292584,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 6.633514739229025
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\neutral-b.wav",
+            "sha256": "8c6b300cb81a1ed3b0e9a9473144662311060b35d29e58ba3f5d7e02a9ef1dcd",
+            "bytes": 293690,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 6.65859410430839
+          }
+        ],
+        "observations": "thought\nLet's analyze what we have:\nFile A (attachment-1.wav):\nMetadata: duration_seconds = 6.633514739229025 (~6.63 s), mono, 22050 Hz.\nSpoken words:\n\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\"\n\nFile B (attachment-2.wav):\nMetadata: duration_seconds = 6.65859410430839 (~6.66 s), mono, 22050 Hz.\nSpoken words:\n\"The drums begin first. The melody enters later. I enjoy the soft guitar.\"\n\nLet's double-check timing and audible observations:\nFile A:\n~0.0s - 2.1s: \"The melody begins quietly.\"\n~2.1s - 4.1s: \"The drums enter later.\"\n~4.1s - 6.5s: \"I enjoy the warm piano.\"\nOverall duration: 6.63 seconds.\n\nFile B:\n~0.0s - 2.0s: \"The drums begin first.\"\n~2.0s - 4.0s: \"The melody enters later.\"\n~4.0s - 6.4s: \"I enjoy the soft guitar.\"\nOverall duration: 6.66 seconds.\n\nRequirements check:\n- Labels A (attachment 1) and B (attachment 2).\n- Report audible observations with time ranges.\n- Suspected causes separately.\n- Limitations or things cannot assess (e.g. loudness is NOT matched; disclose this and do not equate louder with better; cannot measure exact EQ/dB levels by ear, cannot determine stereo width or exact BPM, cannot certify professional mixing quality or subjective artistic merit).\n- Use supplied WAV duration rather than guessing it (File A: 6.6335 seconds / ~6.63 s; File B: 6.6586 seconds / ~6.66 s).\n- Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.\n- Return only final analysis, without internal planning.\n- Reply in the language of the question (English).\n\nLet's organize the response clearly:\n1. Disclosures & Limitations:\n   - Loudness is not matched between files; perceived loudness differences do not imply quality.\n   - Exact decibel levels, precise EQ curves, and exact BPM cannot be measured perceptually. Both files are mono (1 channel, 22050 Hz), so stereo width is not applicable.\n   - Universal quality or artistic preferences are subjective.\n   - Durations are based on supplied metadata: File A is 6.6335 seconds, File B is 6.6586 seconds.\n\n2. Transcriptions:\n   - File A (Attachment 1):\n     \"The melody begins quietly. The drums enter later. I enjoy the warm piano.\"\n   - File B (Attachment 2):\n     \"The drums begin first. The melody enters later. I enjoy the soft guitar.\"\n\n3. Audible Observations (with time ranges):\n   - File A (~0.00s - 6.63s):\n     - 0.00s – ~2.10s: Speaker utters \"The melody begins quietly.\" Clear speech articulation.\n     - ~2.10s – ~4.15s: Speaker utters \"The drums enter later.\"\n     - ~4.15s – ~6.50s: Speaker utters \"I enjoy the warm piano.\"\n   - File B (~0.00s - 6.66s):\n     - 0.00s – ~2.05s: Speaker utters \"The drums begin first.\"\n     - ~2.05s – ~4.05s: Speaker utters \"The melody enters later.\"\n     - ~4.05s – ~6.45s: Speaker utters \"I enjoy the soft guitar.\"\n   - Specific speech differences:\n     - Sentence 1: File A says \"The melody begins quietly\" vs. File B \"The drums begin first\".\n     - Sentence 2: File A says \"The drums enter later\" vs. File B \"The melody enters later\".\n     - Sentence 3: File A says \"I enjoy the warm piano\" vs. File B \"I enjoy the soft guitar\".\n\n4. Suspected Causes (Separately):\n   - The differences in phonemes, word choices, and lexical order reflect two distinct script readings / synthesized text prompts designed to contrast subject and predicate descriptions (melody vs. drums, quietly vs. first, warm piano vs. soft guitar).\n   - Pitch, pacing, and cadence variations correspond directly to natural differences in syllabic lengths of the alternating words.\n\nEverything is covered precisely according to all constraints.### Transcriptions\n\n* **File A (Attachment 1):**  \n  > \"The melody begins quietly. The drums enter later. I enjoy the warm piano.\"\n\n* **File B (Attachment 2):**  \n  > \"The drums begin first. The melody enters later. I enjoy the soft guitar.\"\n\n---\n\n### Audible Observations\n\n**Metadata & General Sound Field:**\n* **Duration:** File A is 6.6335 seconds; File B is 6.6586 seconds (from supplied metadata). Both files are single-channel (mono) at a 22,050 Hz sampling rate.\n* **Loudness Disclosure:** Loudness is not matched between the two recordings; higher or lower perceived volume does not indicate superior or inferior quality.\n\n**Audible Speech & Timing Observations:**\n* **File A (Attachment 1):**\n  * **0.00s – ~2.10s:** Clear vocal delivery of the phrase *\"The melody begins quietly.\"*\n  * **~2.10s – ~4.15s:** Vocal delivery of the phrase *\"The drums enter later.\"*\n  * **~4.15s – ~6.50s:** Vocal delivery of the phrase *\"I enjoy the warm piano.\"* Tail tapers into silence leading up to the 6.63s mark.\n* **File B (Attachment 2):**\n  * **0.00s – ~2.05s:** Vocal delivery of the phrase *\"The drums begin first.\"*\n  * **~2.05s – ~4.05s:** Vocal delivery of the phrase *\"The melody enters later.\"*\n  * **~4.05s – ~6.45s:** Vocal delivery of the phrase *\"I enjoy the soft guitar.\"* Tail tapers into silence leading up to the 6.66s mark.\n\n**Key Audible Speech Differences:**\n* **First Sentence:** File A introduces the subject as *\"The melody\"* paired with *\"quietly\"*, whereas File B opens with *\"The drums\"* paired with *\"first\"*.\n* **Second Sentence:** The subjects are inverted: File A states *\"The drums enter later\"*, whereas File B states *\"The melody enters later\"*.\n* **Third Sentence:** While both files begin with *\"I enjoy the\"*, File A concludes with *\"warm piano\"* while File B concludes with *\"soft guitar\"*.\n\n---\n\n### Suspected Causes\n\n* **Script / Text-to-Speech Prompt Differences:** The audible divergence in words stems directly from two distinct textual prompts/scripts with deliberately inverted and substituted phrasing (melody vs. drums; quietly vs. first; warm piano vs. soft guitar).\n* **Timing & Cadence Variations:** Minor differences in timing intervals and inflection between the two files reflect the varying syllable counts and consonant structures of the substituted words.\n\n---\n\n### Limitations\n\n* Perceptual evaluation cannot determine exact decibel (dB) levels, precise frequency/EQ response, or objective SNR.\n* Both files are mono, meaning stereo width and panning cannot be assessed.\n* Exact musical tempo/BPM cannot be derived as these are spoken-word recordings without a defined musical beat grid.\n* No assessment of universal aesthetic quality or professional mixing certification is made.\n",
+        "usage": {
+          "completion_tokens": 2426,
+          "prompt_tokens": 6406,
+          "total_tokens": 8832
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-6f977b919873\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\neutral-a.wav\",\n      \"sha256\": \"70b0fc64691599fc2ef092c7423569fd7cbebaa61dc6aa93f9502c9161ed7986\",\n      \"bytes\": 292584,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 6.633514739229025\n    },\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\neutral-b.wav\",\n      \"sha256\": \"8c6b300cb81a1ed3b0e9a9473144662311060b35d29e58ba3f5d7e02a9ef1dcd\",\n      \"bytes\": 293690,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 6.65859410430839\n    }\n  ],\n  \"observations\": \"thought\\nLet's analyze what we have:\\nFile A (attachment-1.wav):\\nMetadata: duration_seconds = 6.633514739229025 (~6.63 s), mono, 22050 Hz.\\nSpoken words:\\n\\\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\\\"\\n\\nFile B (attachment-2.wav):\\nMetadata: duration_seconds = 6.65859410430839 (~6.66 s), mono, 22050 Hz.\\nSpoken words:\\n\\\"The drums begin first. The melody enters later. I enjoy the soft guitar.\\\"\\n\\nLet's double-check timing and audible observations:\\nFile A:\\n~0.0s - 2.1s: \\\"The melody begins quietly.\\\"\\n~2.1s - 4.1s: \\\"The drums enter later.\\\"\\n~4.1s - 6.5s: \\\"I enjoy the warm piano.\\\"\\nOverall duration: 6.63 seconds.\\n\\nFile B:\\n~0.0s - 2.0s: \\\"The drums begin first.\\\"\\n~2.0s - 4.0s: \\\"The melody enters later.\\\"\\n~4.0s - 6.4s: \\\"I enjoy the soft guitar.\\\"\\nOverall duration: 6.66 seconds.\\n\\nRequirements check:\\n- Labels A (attachment 1) and B (attachment 2).\\n- Report audible observations with time ranges.\\n- Suspected causes separately.\\n- Limitations or things cannot assess (e.g. loudness is NOT matched; disclose this and do not equate louder with better; cannot measure exact EQ/dB levels by ear, cannot determine stereo width or exact BPM, cannot certify professional mixing quality or subjective artistic merit).\\n- Use supplied WAV duration rather than guessing it (File A: 6.6335 seconds / ~6.63 s; File B: 6.6586 seconds / ~6.66 s).\\n- Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.\\n- Return only final analysis, without internal planning.\\n- Reply in the language of the question (English).\\n\\nLet's organize the response clearly:\\n1. Disclosures & Limitations:\\n   - Loudness is not matched between files; perceived loudness differences do not imply quality.\\n   - Exact decibel levels, precise EQ curves, and exact BPM cannot be measured perceptually. Both files are mono (1 channel, 22050 Hz), so stereo width is not applicable.\\n   - Universal quality or artistic preferences are subjective.\\n   - Durations are based on supplied metadata: File A is 6.6335 seconds, File B is 6.6586 seconds.\\n\\n2. Transcriptions:\\n   - File A (Attachment 1):\\n     \\\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\\\"\\n   - File B (Attachment 2):\\n     \\\"The drums begin first. The melody enters later. I enjoy the soft guitar.\\\"\\n\\n3. Audible Observations (with time ranges):\\n   - File A (~0.00s - 6.63s):\\n     - 0.00s – ~2.10s: Speaker utters \\\"The melody begins quietly.\\\" Clear speech articulation.\\n     - ~2.10s – ~4.15s: Speaker utters \\\"The drums enter later.\\\"\\n     - ~4.15s – ~6.50s: Speaker utters \\\"I enjoy the warm piano.\\\"\\n   - File B (~0.00s - 6.66s):\\n     - 0.00s – ~2.05s: Speaker utters \\\"The drums begin first.\\\"\\n     - ~2.05s – ~4.05s: Speaker utters \\\"The melody enters later.\\\"\\n     - ~4.05s – ~6.45s: Speaker utters \\\"I enjoy the soft guitar.\\\"\\n   - Specific speech differences:\\n     - Sentence 1: File A says \\\"The melody begins quietly\\\" vs. File B \\\"The drums begin first\\\".\\n     - Sentence 2: File A says \\\"The drums enter later\\\" vs. File B \\\"The melody enters later\\\".\\n     - Sentence 3: File A says \\\"I enjoy the warm piano\\\" vs. File B \\\"I enjoy the soft guitar\\\".\\n\\n4. Suspected Causes (Separately):\\n   - The differences in phonemes, word choices, and lexical order reflect two distinct script readings / synthesized text prompts designed to contrast subject and predicate descriptions (melody vs. drums, quietly vs. first, warm piano vs. soft guitar).\\n   - Pitch, pacing, and cadence variations correspond directly to natural differences in syllabic lengths of the alternating words.\\n\\nEverything is covered precisely according to all constraints.### Transcriptions\\n\\n* **File A (Attachment 1):**  \\n  > \\\"The melody begins quietly. The drums enter later. I enjoy the warm piano.\\\"\\n\\n* **File B (Attachment 2):**  \\n  > \\\"The drums begin first. The melody enters later. I enjoy the soft guitar.\\\"\\n\\n---\\n\\n### Audible Observations\\n\\n**Metadata & General Sound Field:**\\n* **Duration:** File A is 6.6335 seconds; File B is 6.6586 seconds (from supplied metadata). Both files are single-channel (mono) at a 22,050 Hz sampling rate.\\n* **Loudness Disclosure:** Loudness is not matched between the two recordings; higher or lower perceived volume does not indicate superior or inferior quality.\\n\\n**Audible Speech & Timing Observations:**\\n* **File A (Attachment 1):**\\n  * **0.00s – ~2.10s:** Clear vocal delivery of the phrase *\\\"The melody begins quietly.\\\"*\\n  * **~2.10s – ~4.15s:** Vocal delivery of the phrase *\\\"The drums enter later.\\\"*\\n  * **~4.15s – ~6.50s:** Vocal delivery of the phrase *\\\"I enjoy the warm piano.\\\"* Tail tapers into silence leading up to the 6.63s mark.\\n* **File B (Attachment 2):**\\n  * **0.00s – ~2.05s:** Vocal delivery of the phrase *\\\"The drums begin first.\\\"*\\n  * **~2.05s – ~4.05s:** Vocal delivery of the phrase *\\\"The melody enters later.\\\"*\\n  * **~4.05s – ~6.45s:** Vocal delivery of the phrase *\\\"I enjoy the soft guitar.\\\"* Tail tapers into silence leading up to the 6.66s mark.\\n\\n**Key Audible Speech Differences:**\\n* **First Sentence:** File A introduces the subject as *\\\"The melody\\\"* paired with *\\\"quietly\\\"*, whereas File B opens with *\\\"The drums\\\"* paired with *\\\"first\\\"*.\\n* **Second Sentence:** The subjects are inverted: File A states *\\\"The drums enter later\\\"*, whereas File B states *\\\"The melody enters later\\\"*.\\n* **Third Sentence:** While both files begin with *\\\"I enjoy the\\\"*, File A concludes with *\\\"warm piano\\\"* while File B concludes with *\\\"soft guitar\\\"*.\\n\\n---\\n\\n### Suspected Causes\\n\\n* **Script / Text-to-Speech Prompt Differences:** The audible divergence in words stems directly from two distinct textual prompts/scripts with deliberately inverted and substituted phrasing (melody vs. drums; quietly vs. first; warm piano vs. soft guitar).\\n* **Timing & Cadence Variations:** Minor differences in timing intervals and inflection between the two files reflect the varying syllable counts and consonant structures of the substituted words.\\n\\n---\\n\\n### Limitations\\n\\n* Perceptual evaluation cannot determine exact decibel (dB) levels, precise frequency/EQ response, or objective SNR.\\n* Both files are mono, meaning stereo width and panning cannot be assessed.\\n* Exact musical tempo/BPM cannot be derived as these are spoken-word recordings without a defined musical beat grid.\\n* No assessment of universal aesthetic quality or professional mixing certification is made.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 2426,\n    \"prompt_tokens\": 6406,\n    \"total_tokens\": 8832\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    }
+  ],
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "inputs": [
+    {
+      "name": "neutral-a.wav",
+      "sha256": "70b0fc64691599fc2ef092c7423569fd7cbebaa61dc6aa93f9502c9161ed7986"
+    },
+    {
+      "name": "neutral-b.wav",
+      "sha256": "8c6b300cb81a1ed3b0e9a9473144662311060b35d29e58ba3f5d7e02a9ef1dcd"
+    }
+  ]
+}
