@@ -40,12 +40,24 @@ AGY 的 primary-agent init 工具列表比 profile 声明宽，不能把 `tools:
 
 确定的故障链是 **完整音频已进入订阅生成请求 → 订阅层拒绝 → CLI terminal 仍为 SUCCESS → 旧网关只检查非空正文，MCP 误标 complete**。附件读取、解码、内容丢失与 timeout 不是这两次拒绝的根因。CLI startup 日志的 `not logged into Antigravity` 也出现在成功请求启动阶段，随后 login/模型请求完成，不能据它认定过期凭据造成这次故障。
 
-修复：拒绝现在返回 HTTP 502 / MCP isError；保留 `audio_analysis_refused`、before/after attachment reads 阶段、conversation_id、网关 bridge request_id、模型、已完成读取数和真实失败 provider usage 到 sidecar 日志。没有静默删附件、改问法或自动重试。两个文件读取都完成是传输条件，仍不等于听觉判断准确。
+初次修复：拒绝返回 HTTP 502 / MCP isError；原收据使用 `audio_analysis_refused`。后续统一为 `provider_content_filter`，保留 before/after attachment reads 阶段、conversation_id、网关 bridge request_id、模型、已完成读取数和真实失败 provider usage 到 sidecar 日志。没有静默删附件、改问法或自动重试。两个文件读取都完成是传输条件，仍不等于听觉判断准确。
 
 Google 原始安全分类、blockedReason/finishReason 和触发特征没有在当前 CLI 协议/所存记录中暴露。**已定位到订阅层过滤拒绝和网关假成功缺陷；具体过滤触发原因未知**。没有足够证据断言是某个词、两段音频、版权或网络问题，也不能保证该上游拒绝从此不会发生。协议若公开原始拒绝原因，应直接保留它，而不是增加猜测和特殊绕过逻辑。
 
+## 用户要求继续修复后的终态校验补丁
+
+检查 `8f57e88` 的实际代码并回放 CLI 已观察到的过滤诊断，发现上一轮识别只位于音频路径，普通文本仍将该诊断返回为答案；开头多一个空白即可绕过音频拒绝识别，纯空白正文也被当作完成。基线回放确认普通文本拒绝与纯空白均被接受。这是确定的网关缺陷，和未知的 Google 过滤触发条件分别处理。
+
+拒绝识别现在由 bridge 的共享终态正文校验负责；音频调用同一函数并提供读取阶段。只识别当前 CLI 的已观察诊断前缀，忽略其前导空白，不按“不能”“无法”等普通措辞猜测拒绝；正常答案中引用诊断文字仍保留。空白正文明确失败。私有错误体增加 `code=provider_content_filter`、phase 和 conversation_id，公开协议继续由 LiteLLM 处理，现有 handler 保留诊断标记并将 HTTP 502 传至 MCP。没有新增服务、依赖、重试或 fallback，也没有修改输入或隐藏提供方拒绝。
+
+使用原固定部署镜像的临时 QA 容器，六个受影响文件合计 **220 passed / 3 warnings**。新增回放覆盖普通文本、Advisor、schema、带空白诊断、音频读取前/后拒绝、正文为空白、正常引用诊断，以及 MCP 的 ToolError 与只调用一次。基线原代码回放和新代码回归都使用 fixture，不能称为 Google live 过滤测试。Sidecar 已按 Compose 重建并更新，部署与源码 bridge SHA-256 均为 `cae7c2739c57bd29b7fce36464d29c17ce4b131140e73764cad17ac78cf1d124`。本轮无 UI 变更；主执行者另做复查，未做独立评审。
+
+真实 MCP 使用与先前拒绝一致的两个口令 WAV 和同一问题复验。[本轮 production 收据](gemini-mcp-production-2026-09-30-1790791667.json)：单文件正确转写，11.877 秒、5,325 provider tokens；双文件 11.434 秒返回 HTTP 502 / MCP isError，正文保留 `provider_content_filter phase=after_attachment_reads` 和 conversation_id `bde4773d-93b9-48e1-9d73-2ba7f8abc40f`。Sidecar 日志确认 completed_reads=2、失败 provider usage=4,012 tokens、bridge request_id `1759182a92cb4798ab26ada38b96c52c`，未额外调用或改写请求。保存策略未变、readiness 200。LiteLLM 错误附带其“未找到 fallback”说明，但该 Gemini 音频组没有配置 fallback，不能把这段说明当作实际调用了其他模型。
+
+复查结论：**共享终态的假成功缺陷已修复并部署；Google 的双文件过滤拒绝仍实际发生，未解决**。这是部分修复，不能宣称偶发错误全部消失。CLI 帮助、当前 headless 协议和官方 changelog 未提供本通路可用的原始分类或过滤控制；继续解决上游拒绝需要提供方暴露原始 stop reason/修复拒绝行为，或经用户决定改变提供方策略。本轮保留订阅与输入合同，没有用重试、切模型或删附件掩盖它。单次复验通过只能证明该次通路正常，不能推断提供方以后不会过滤。
+
 ## Skill learning
 
-Northstar / Northstar QA 当前本地版本，版本号 unknown。预期 native Gemini 能听音频，观察到模型有能力但 gateway 文本运输没有附件，且 Messages 的 200 隐藏了丢失。盲口令比泛泛询问“听到什么”更能验证传输；真实 MCP 的两入口已复查，并进一步暴露 CLI SUCCESS 包装过滤拒绝的问题。验收应同时检查输入字节、读取完成、终态内容与 provider usage，保留音乐描述失败可防止把转写能力当作专业混音能力。该教训可用于 [Northstar Issues](https://github.com/stancsz/northstar/issues)，未发送外部消息。
+Northstar / Northstar QA 当前本地版本，版本号 unknown。预期 native Gemini 能听音频，观察到模型有能力但 gateway 文本运输没有附件，且 Messages 的 200 隐藏了丢失。盲口令比泛泛询问“听到什么”更能验证传输；真实 MCP 的两入口已复查，并进一步暴露 CLI SUCCESS 包装过滤拒绝的问题。验收应同时检查输入字节、读取完成、终态内容与 provider usage，保留音乐描述失败可防止把转写能力当作专业混音能力。本轮继续修复表明终态校验应由共享协议边界拥有，不能只加在一个输入分支；真实双文件仍拒绝，所以必须区分网关修复与上游问题解决。该教训可用于 [Northstar Issues](https://github.com/stancsz/northstar/issues)，未发送外部消息。
 
 官方依据：[Gemini 音频输入](https://ai.google.dev/gemini-api/docs/audio)、[AGY headless 协议与权限](https://antigravity.google/docs/cli/headless/)、[CLI 音频附件更新](https://antigravity.google/docs/changelog?tab=cli)、[权限 deny 规则](https://antigravity.google/docs/cli/permissions/)。模型/API 文档不能代替本仓库 Subscription 的运行证据。

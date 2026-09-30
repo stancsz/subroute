@@ -42,12 +42,20 @@ class ClientDisconnected(Exception):
     """The caller left before the CLI produced a terminal result."""
 
 
-class AudioRefused(RuntimeError):
-    def __init__(self, result: dict[str, Any], completed_reads: int):
+class ProviderRefused(RuntimeError):
+    def __init__(self, result: dict[str, Any], completed_reads: int | None = None):
         self.result = result
         self.completed_reads = completed_reads
-        phase = "after_attachment_reads" if completed_reads else "before_attachment_reads"
-        super().__init__(f"audio_analysis_refused phase={phase} conversation_id={result.get('conversation_id', 'unknown')}")
+        self.phase = "generation" if completed_reads is None else ("after_attachment_reads" if completed_reads else "before_attachment_reads")
+        super().__init__(f"provider_content_filter phase={self.phase} conversation_id={result.get('conversation_id', 'unknown')}")
+
+
+def _reject_refusal(result: dict[str, Any], completed_reads: int | None = None) -> None:
+    # AGY 1.2.11 wraps this provider-generated refusal in SUCCESS. Match its
+    # known diagnostic only, not ordinary model answers saying "I cannot".
+    response = result.get("response")
+    if isinstance(response, str) and response.lstrip().startswith("This request was blocked by Gemini's filters."):
+        raise ProviderRefused(result, completed_reads)
 
 
 def _terminate_and_reap(process: subprocess.Popen[str]) -> None:
@@ -176,8 +184,9 @@ def _terminal_result(stdout: str) -> dict[str, Any]:
 
 def _response_text(stdout: str) -> str:
     result = _terminal_result(stdout)
+    _reject_refusal(result)
     content = result.get("response")
-    if not isinstance(content, str) or not content:
+    if not isinstance(content, str) or not content.strip():
         raise RuntimeError("Antigravity returned no response text (status=SUCCESS)")
     return content
 
@@ -209,9 +218,7 @@ def _audio_reads(stdout: str, paths: list[str]) -> None:
             raise RuntimeError("Audio run attempted an unexpected tool or file")
         if update.get("state") == "DONE":
             read.add(path)
-    response = result.get("response", "")
-    if isinstance(response, str) and response.startswith("This request was blocked by Gemini's filters."):
-        raise AudioRefused(result, len(read))
+    _reject_refusal(result, len(read))
     if read != set(paths):
         raise RuntimeError("Audio run did not complete reads of every attachment")
 
@@ -405,10 +412,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.GATEWAY_TIMEOUT, {"detail": "Antigravity timed out"})
         except ClientDisconnected:
             logger.info("Antigravity CLI cancelled after client disconnect request_id=%s model=%r", request_id, model)
-        except AudioRefused as exc:
-            logger.warning("AGY audio refused request_id=%s model=%r error=%s completed_reads=%s provider_usage=%s",
+        except ProviderRefused as exc:
+            logger.warning("AGY provider refused request_id=%s model=%r error=%s completed_reads=%s provider_usage=%s",
                            request_id, model, str(exc), exc.completed_reads, exc.result.get("usage"))
-            self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc), "provider_usage": exc.result.get("usage")})
+            self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc), "code": "provider_content_filter",
+                                              "phase": exc.phase, "conversation_id": exc.result.get("conversation_id"),
+                                              "provider_usage": exc.result.get("usage")})
         except RuntimeError as exc:
             logger.warning("AGY request failed request_id=%s model=%r error=%s", request_id, model, str(exc)[:300])
             self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc)})

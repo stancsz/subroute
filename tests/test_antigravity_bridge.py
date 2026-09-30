@@ -34,6 +34,50 @@ def test_response_text_requires_provider_content():
     assert bridge._response_text(payload) == "complete"
 
 
+@pytest.mark.parametrize("content", ["", " \n\t"])
+def test_whitespace_is_not_a_completed_provider_answer(content):
+    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "response": content}})
+    with pytest.raises(RuntimeError, match="no response text"):
+        bridge._response_text(payload)
+
+
+def test_quoting_a_filter_message_in_an_answer_is_not_a_refusal():
+    content = "The CLI diagnostic is: This request was blocked by Gemini's filters."
+    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "response": content}})
+    assert bridge._response_text(payload) == content
+
+
+@pytest.mark.parametrize("options", [{}, {"advisor": True}, {"json_schema": {"type": "object"}}])
+def test_captured_provider_refusal_is_502_for_every_target_mode(monkeypatch, capsys, options):
+    usage = {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}
+    stdout = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "conversation_id": "refusal-fixture", "usage": usage,
+        "response": " \nThis request was blocked by Gemini's filters. Please rephrase.",
+    }})
+    server, thread, url = _start_bridge_server(monkeypatch, lambda *args, **kwargs: [])
+    calls = []
+    def run(*args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess([], 0, stdout, "")
+    monkeypatch.setattr(bridge, "_run_agy", run)
+    try:
+        response = httpx.post(url + "/v1/completions", json={"model": "fixture", "prompt": "hello", **options})
+        assert response.status_code == 502
+        error = response.json()
+        assert error["code"] == "provider_content_filter"
+        assert error["phase"] == "generation"
+        assert error["conversation_id"] == "refusal-fixture"
+        assert error["provider_usage"] == usage
+        assert len(calls) == 1
+        assert "completion succeeded" not in capsys.readouterr().err
+        assert bridge._CLI_SLOTS.acquire(timeout=0.1)
+        bridge._CLI_SLOTS.release()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_response_text_rejects_failed_agent_turn_with_reason():
     payload = '{"event":"result","result":{"status":"ERROR","response":"","error":"permission check failed"}}'
 

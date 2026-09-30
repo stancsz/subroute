@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from subroute.audio import audio_route, decode_audio
 from subroute.handlers import antigravity
 from subroute.music_mcp import create_server, read_asset
+from mcp.server.fastmcp.exceptions import ToolError
 from subroute.plugins.dynamic_router import DynamicRoutingPlugin
 from subroute.plugins.advisor_plugin import AdvisorPlugin
 from test_dynamic_routing import make_control_plane
@@ -102,7 +103,7 @@ def test_handler_sends_audio_bytes_separately_and_preserves_text_order(monkeypat
     assert result.usage.total_tokens == 12
 
 
-@pytest.mark.parametrize("outcome", ["complete", "missing", "unexpected", "timeout", "disconnect", "refused"])
+@pytest.mark.parametrize("outcome", ["complete", "missing", "unexpected", "timeout", "disconnect", "refused", "refused_before_reads"])
 def test_bridge_reads_exact_bytes_and_cleans_temporary_audio_on_every_outcome(monkeypatch, tmp_path, outcome):
     original_directory = bridge.tempfile.TemporaryDirectory
     monkeypatch.setattr(bridge.tempfile, "TemporaryDirectory", lambda **kwargs: original_directory(**{**kwargs, "dir": str(tmp_path)}))
@@ -120,12 +121,12 @@ def test_bridge_reads_exact_bytes_and_cleans_temporary_audio_on_every_outcome(mo
         if outcome == "disconnect":
             raise bridge.ClientDisconnected()
         events = []
-        if outcome != "missing":
+        if outcome not in {"missing", "refused_before_reads"}:
             events.append({"event": "step_update", "step_update": {
                 "step_type": "tool", "tool_name": "view_file", "state": "DONE",
                 "tool_info": {"parameters": {"AbsolutePath": str(path) if outcome != "unexpected" else "/root/unexpected"}},
             }})
-        response_text = "This request was blocked by Gemini's filters. Please rephrase." if outcome == "refused" else "heard"
+        response_text = " \nThis request was blocked by Gemini's filters. Please rephrase." if outcome.startswith("refused") else "heard"
         events.append({"event": "result", "result": {"status": "SUCCESS", "response": response_text, "usage": {
             "input_tokens": 10, "output_tokens": 2, "total_tokens": 12,
         }}})
@@ -138,7 +139,10 @@ def test_bridge_reads_exact_bytes_and_cleans_temporary_audio_on_every_outcome(mo
         except httpx.RemoteProtocolError:
             assert outcome == "disconnect"
         else:
-            assert response.status_code == {"complete": 200, "missing": 502, "unexpected": 502, "timeout": 504, "refused": 502}[outcome]
+            assert response.status_code == {"complete": 200, "missing": 502, "unexpected": 502, "timeout": 504, "refused": 502, "refused_before_reads": 502}[outcome]
+            if outcome.startswith("refused"):
+                assert response.json()["code"] == "provider_content_filter"
+                assert response.json()["phase"] == ("before_attachment_reads" if outcome == "refused_before_reads" else "after_attachment_reads")
         assert workspaces and all(not cwd.exists() for cwd in workspaces)
         assert bridge._CLI_SLOTS.acquire(timeout=0.1)
         bridge._CLI_SLOTS.release()
@@ -184,3 +188,18 @@ def test_mcp_tool_sends_actual_binary_to_gateway_and_checks_terminal_result(tmp_
     result = asyncio.run(run())
     assert len(calls) == 1
     assert "heard" in str(result)
+
+
+def test_mcp_provider_refusal_is_a_tool_error_without_retry(tmp_path, monkeypatch):
+    (tmp_path / "sample.wav").write_bytes(decode_audio(sample()))
+    client_type = httpx.AsyncClient
+    calls = []
+    def transport(req):
+        calls.append(req)
+        return httpx.Response(502, json={"error": {"message":
+            "Antigravity bridge returned 502: provider_content_filter phase=after_attachment_reads conversation_id=fixture"}})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(transport), **kwargs))
+    server = create_server(tmp_path, "http://fixture")
+    with pytest.raises(ToolError, match="provider_content_filter"):
+        asyncio.run(server.call_tool("analyze_audio", {"asset_path": "sample.wav", "question": "Describe", "focus": ["vocals"]}))
+    assert len(calls) == 1
