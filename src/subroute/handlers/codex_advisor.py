@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
 from collections.abc import AsyncIterator
 import time
 import uuid
 from typing import Any
+from urllib.parse import urlsplit
 import httpx
 
 from litellm import CustomLLM
@@ -108,6 +111,43 @@ def build_responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]
             "content": [{"type": content_type, "text": content}],
         })
 
+    def image_content(role: str, part: dict[str, Any]) -> dict[str, Any]:
+        # This CustomLLM bypasses LiteLLM's native image conversion. Preserve the
+        # standard URL/data input here, without broadening the existing transport.
+        if role != "user":
+            raise ValueError("Codex advisor images must be in user messages")
+        if part["type"] == "image_url":
+            image = part.get("image_url")
+            if set(part) - {"type", "image_url"} or not isinstance(image, dict):
+                raise ValueError("Advisor image_url must contain a URL object only")
+            if set(image) - {"url", "detail"}:
+                raise ValueError("Advisor image_url contains unsupported fields")
+            url, detail = image.get("url"), image.get("detail", "auto")
+        else:
+            if set(part) - {"type", "image_url", "detail"}:
+                raise ValueError("Advisor input_image contains unsupported fields")
+            url, detail = part.get("image_url"), part.get("detail", "auto")
+        if not isinstance(detail, str) or detail not in {"auto", "low", "high", "original"}:
+            raise ValueError("Advisor image detail must be auto, low, high or original")
+        if not isinstance(url, str) or not url or any(char.isspace() for char in url):
+            raise ValueError("Advisor image URL must be a nonempty URL or base64 image data URL")
+        if url.startswith("data:"):
+            header, separator, encoded = url.partition(",")
+            if header not in {
+                "data:image/png;base64", "data:image/jpeg;base64",
+                "data:image/webp;base64", "data:image/gif;base64",
+            } or not separator or not encoded:
+                raise ValueError("Advisor image data URL must contain supported base64 image data")
+            try:
+                base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as exc:
+                raise ValueError("Advisor image data URL contains invalid base64") from exc
+        else:
+            parsed = urlsplit(url)
+            if parsed.scheme not in {"https", "http"} or not parsed.hostname:
+                raise ValueError("Advisor image URL must use http, https or image data")
+        return {"type": "input_image", "image_url": url, "detail": detail}
+
     def add_function_call(call_id: Any, name: Any, arguments: Any) -> None:
         if not isinstance(call_id, str) or not call_id:
             raise ValueError("Advisor tool call is missing a call id")
@@ -164,28 +204,33 @@ def build_responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]
 
         content = message.get("content", "")
         if isinstance(content, list):
-            text_parts: list[str] = []
+            content_parts: list[dict[str, Any]] = []
 
-            def flush_text() -> None:
-                if text_parts:
-                    add_message(role, "\n".join(text_parts))
-                    text_parts.clear()
+            def flush_content() -> None:
+                if content_parts:
+                    items.append({"type": "message", "role": role, "content": list(content_parts)})
+                    content_parts.clear()
 
             for part in content:
                 if not isinstance(part, dict):
                     raise ValueError("Codex advisor content blocks must be objects")
                 part_type = part.get("type")
                 if part_type in {"text", "input_text", "output_text"} and isinstance(part.get("text"), str):
-                    text_parts.append(part["text"])
+                    content_parts.append({
+                        "type": "output_text" if role == "assistant" else "input_text",
+                        "text": part["text"],
+                    })
+                elif part_type in {"image_url", "input_image"}:
+                    content_parts.append(image_content(role, part))
                 elif part_type == "tool_use" and role == "assistant":
-                    flush_text()
+                    flush_content()
                     add_function_call(part.get("id"), part.get("name"), part.get("input", {}))
                 elif part_type == "tool_result" and role == "user":
-                    flush_text()
+                    flush_content()
                     add_function_output(part.get("tool_use_id"), part.get("content", ""))
                 else:
                     raise ValueError("Codex advisor does not support this content block")
-            flush_text()
+            flush_content()
         elif not isinstance(content, str):
             raise ValueError("Codex advisor content must be text")
         else:
@@ -286,7 +331,7 @@ async def call_codex_streaming_collect(
 
 
 class CodexAdvisorLLM(CustomLLM):
-    """Bridge for Codex subscription to act as a synchronous text advisor."""
+    """Bridge for Codex subscription with text advice and user image inputs."""
 
     async def acompletion(self, *args: Any, **kwargs: Any) -> ModelResponse:
         model = str(kwargs.get("model") or (args[0] if args else "gpt-5.6-terra"))

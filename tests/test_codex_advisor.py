@@ -1,7 +1,9 @@
 import asyncio
+import copy
 import json
 
 import httpx
+import litellm
 import pytest
 
 from subroute.handlers import codex_advisor as advisor
@@ -25,6 +27,10 @@ def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=Non
 
 
 DELTA = {"type": "response.output_text.delta", "delta": "partial"}
+IMAGE_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/N0sAAAAASUVORK5CYII="
+)
 
 
 @pytest.mark.parametrize("terminal", [None, "response.failed", "response.incomplete", "error"])
@@ -102,6 +108,155 @@ def test_instruction_and_assistant_roles_are_preserved():
     ])
     assert [item["role"] for item in result] == ["developer", "developer", "assistant"]
     assert result[2]["content"] == [{"type": "output_text", "text": "answer"}]
+
+
+def test_images_text_and_tool_history_keep_order_without_mutating_input():
+    messages = [
+        {"role": "system", "content": "Review the screenshot."},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "Checking source."},
+            {"type": "tool_use", "id": "read_1", "name": "read_file", "input": {"path": "view.tsx"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "text", "text": "Full screenshot"},
+            {"type": "image_url", "image_url": {"url": IMAGE_URL, "detail": "high"}},
+            {"type": "text", "text": "Before source result"},
+            {"type": "tool_result", "tool_use_id": "read_1", "content": "source contents"},
+            {"type": "input_image", "image_url": "https://example.com/crop.png", "detail": "original"},
+            {"type": "text", "text": "Crop after source result"},
+        ]},
+    ]
+    original = copy.deepcopy(messages)
+    result = advisor.build_responses_input(messages)
+
+    assert messages == original
+    assert [item["type"] for item in result] == [
+        "message", "message", "function_call", "message", "function_call_output", "message",
+    ]
+    assert result[0]["role"] == "developer"
+    assert result[1]["content"] == [{"type": "output_text", "text": "Checking source."}]
+    assert result[3] == {"type": "message", "role": "user", "content": [
+        {"type": "input_text", "text": "Full screenshot"},
+        {"type": "input_image", "image_url": IMAGE_URL, "detail": "high"},
+        {"type": "input_text", "text": "Before source result"},
+    ]}
+    assert result[4] == {"type": "function_call_output", "call_id": "read_1", "output": "source contents"}
+    assert result[5]["content"] == [
+        {"type": "input_image", "image_url": "https://example.com/crop.png", "detail": "original"},
+        {"type": "input_text", "text": "Crop after source result"},
+    ]
+
+
+@pytest.mark.parametrize("detail", ["auto", "low", "high", "original"])
+def test_image_only_user_messages_preserve_detail(detail):
+    result = advisor.build_responses_input([{"role": "user", "content": [
+        {"type": "image_url", "image_url": {"url": IMAGE_URL, "detail": detail}},
+    ]}])
+    assert result == [{"type": "message", "role": "user", "content": [
+        {"type": "input_image", "image_url": IMAGE_URL, "detail": detail},
+    ]}]
+
+
+def test_image_without_detail_defaults_to_auto():
+    result = advisor.build_responses_input([{"role": "user", "content": [
+        {"type": "input_image", "image_url": IMAGE_URL},
+    ]}])
+    assert result[0]["content"][0]["detail"] == "auto"
+
+
+@pytest.mark.parametrize("role", ["assistant", "developer", "system", "tool"])
+def test_images_in_unsupported_roles_fail_visibly(role):
+    with pytest.raises(ValueError):
+        advisor.build_responses_input([{"role": role, "content": [
+            {"type": "image_url", "image_url": {"url": IMAGE_URL}},
+        ]}])
+
+
+@pytest.mark.parametrize("part", [
+    {"type": "image_url", "image_url": IMAGE_URL},
+    {"type": "image_url", "image_url": {"url": IMAGE_URL}, "detail": "high"},
+    {"type": "image_url", "image_url": {"url": IMAGE_URL, "unknown": True}},
+    {"type": "input_image", "image_url": {"url": IMAGE_URL}},
+    {"type": "input_image", "file_id": "file_1"},
+    {"type": "input_image", "image_url": IMAGE_URL, "file_id": "file_1"},
+    *[{"type": "input_image", "image_url": value} for value in [
+        None, 12, "", "screenshot.png", "file:///screenshot.png", "https://", "https://example.com/a b.png",
+        "data:image/png;base64,", "data:image/png;base64,??", "data:image/svg+xml;base64,PHN2Zz4=",
+    ]],
+    *[{"type": "input_image", "image_url": IMAGE_URL, "detail": value} for value in [
+        None, 12, [], "tiny",
+    ]],
+])
+def test_malformed_images_are_rejected_without_loss(part):
+    with pytest.raises(ValueError):
+        advisor.build_responses_input([{"role": "user", "content": [
+            {"type": "text", "text": "Please inspect this"}, part,
+        ]}])
+
+
+@pytest.mark.parametrize("through_litellm", [False, True])
+def test_custom_advisor_passes_pixels_and_reasoning_to_existing_upstream(monkeypatch, through_litellm):
+    sent = []
+
+    def respond(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, text="".join(
+            "data: " + json.dumps(event) + "\n\n" for event in [
+                DELTA, {"type": "response.completed", "response": {
+                    "status": "completed",
+                    "usage": {"input_tokens": 19, "output_tokens": 7, "total_tokens": 26},
+                }},
+            ]
+        ))
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(advisor, "read_codex_credentials", lambda: ("fixture", "fixture"))
+    monkeypatch.setattr(advisor.httpx, "AsyncClient", lambda **kw: client_type(
+        transport=httpx.MockTransport(respond), **kw,
+    ))
+    messages = [{"role": "user", "content": [
+            {"type": "text", "text": "Inspect these exact pixels."},
+            {"type": "image_url", "image_url": {"url": IMAGE_URL, "detail": "high"}},
+    ]}]
+    if through_litellm:
+        monkeypatch.setattr(litellm, "custom_provider_map", [{
+            "provider": "codex-advisor", "custom_handler": advisor.codex_advisor_handler,
+        }])
+        response = asyncio.run(litellm.acompletion(
+            model="codex-advisor/gpt-6-sol", messages=messages,
+            reasoning_effort="high", allowed_openai_params=["reasoning_effort"],
+        ))
+    else:
+        response = asyncio.run(advisor.CodexAdvisorLLM().acompletion(
+            model="codex-advisor/gpt-6-sol", messages=messages,
+            optional_params={"reasoning_effort": "high"},
+        ))
+    assert sent == [{
+        "model": "gpt-6-sol", "stream": True, "store": False,
+        "reasoning": {"effort": "high"},
+        "input": [{"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": "Inspect these exact pixels."},
+            {"type": "input_image", "image_url": IMAGE_URL, "detail": "high"},
+        ]}],
+    }]
+    assert response.choices[0].message.content == "partial"
+    assert response.usage.total_tokens == 26
+
+
+def test_custom_advisor_rejects_bad_image_before_upstream_call(monkeypatch):
+    monkeypatch.setattr(advisor, "read_codex_credentials", lambda: ("fixture", "fixture"))
+
+    def unexpected_client(**kwargs):
+        pytest.fail("Malformed image must not reach the provider")
+
+    monkeypatch.setattr(advisor.httpx, "AsyncClient", unexpected_client)
+    with pytest.raises(advisor.CustomLLMError) as error:
+        asyncio.run(advisor.CodexAdvisorLLM().acompletion(
+            model="gpt-6-sol", messages=[{"role": "user", "content": [
+                {"type": "input_image", "image_url": "screenshot.png"},
+            ]}],
+        ))
+    assert error.value.status_code == 400
 
 
 def test_anthropic_tool_history_is_translated_to_responses_items():

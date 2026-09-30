@@ -4,7 +4,7 @@ model_list:
   - model_name: codex-sol-advisor
     model_info:
       display_name: Codex Sol Advisor
-      capabilities: [text]
+      capabilities: [text, vision]
       selectable: false
       advisor_selectable: true
     litellm_params:
@@ -14,7 +14,7 @@ model_list:
   - model_name: codex-astra-advisor
     model_info:
       display_name: Codex Astra Advisor
-      capabilities: [text]
+      capabilities: [text, vision]
       selectable: false
       advisor_selectable: true
     litellm_params:

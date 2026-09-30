@@ -19,6 +19,8 @@ The former **Luna Advisor Escalation** skill has moved to the central [Northstar
 
 Subroute still owns the `experts` service, provider authentication and gateway runtime. Moving the skill does not move or deploy those services. Historical advisor evaluations below describe the Subroute revisions at which they were recorded.
 
+The dedicated Sol/Astra `experts` endpoint accepts user image inputs for screenshot-backed advice. Northstar's caller proactively attaches images with repeatable `--image` arguments; optional Advisor-directed Pi source reading remains caller orchestration, not backend tool execution. See [image-input verification and limits](docs/evals/advisor-image-input-2026-09-30.md).
+
 ## The problem
 
 Your coding tools remember an endpoint and model. Your AI provider, account, or preferred route can change. Updating every client each time is tedious and makes it harder to know which connection will handle the next request.
