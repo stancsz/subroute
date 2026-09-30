@@ -72,3 +72,5 @@ Google 也明确提醒静态词表可能错误针对使用这些词汇的群体�
 继续复验后，[原探针六次调用](../evals/gemini-filter-followup-2026-09-30.json) 中 **A/B 完整转写有一次实际过滤**，11.412 秒、HTTP 502，下一次完全相同的 A/B 请求又成功。原 question 是 `Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.`；两段 SAPI 测试音频含此前的 secret words/code 与测试数字，哈希和正文相同，未删词或改音频。该次 bridge completed_reads=1，不能声称两个附件都进入了本轮后续生成；MCP 正确返回 refused，后续普通音频成功。原始类别仍未公开，不能把“BOTH”、secret 或 code 单独认定为原因。另四次显式复验全部成功，收据保留，不覆盖原拒绝。[追加四次收据](../evals/gemini-filter-usage-2026-09-30.json)。
 
 扩大到用户目录的 [48 个文件入口测试](../evals/gemini-catalog-matrix-2026-09-30.json)：45 份完整 MP3 处理完成，3 份超过上限的合集在本地明确拒绝，本批未出现 Google 过滤/传输错误。这里证明现有目录的这次只读音乐分析任务可运行，不能推导所有未来提示词和歌词都不被拒绝。
+
+用户要求验证有限重试后的 [12 项语音恢复试验](../evals/gemini-recovery-probes-2026-09-30.json)：首次 6/12 完成，6 个过滤失败各原样复验一次，恢复 2 个、4 个持续拒绝，最终 8/12。共 18 次工具调用、10 个过滤终态全部保留；没有删词或换文件。它证明单次复验不能可靠消除本次拒绝，仍不能将 secret/code/BOTH 等认定为触发词。该组为刻意选取的压力探针，不代表日常真实歌曲的总体成功率。

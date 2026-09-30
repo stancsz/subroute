@@ -1,0 +1,602 @@
+[
+  {
+    "case": "music_31_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\《一天》 - 鹿晗⧸队长 官方MV.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_10_groove",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 -  跟別人要IG (MV).mp3",
+      "question": "请评价鼓、贝斯和人声的节奏互动，描述紧松感与律动；不要估算精确 BPM。",
+      "focus": [
+        "节奏",
+        "groove"
+      ]
+    }
+  },
+  {
+    "case": "music_35_melody",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\隊長 YOUNG Captain ⧸ 黃禮格 Hooleeger - Official MV《11》.mp3",
+      "question": "请评价人声旋律的记忆点、转折和与和声的互动，给出听感依据，不抄录整首歌词。",
+      "focus": [
+        "旋律",
+        "人声"
+      ]
+    }
+  },
+  {
+    "case": "music_21_arrangement",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【給妳的愛】audio.mp3",
+      "question": "请评价编曲层次、留白与段落变化，描述人声和伴奏的互动，并给出需要复听的位置。",
+      "focus": [
+        "编曲",
+        "层次",
+        "留白"
+      ]
+    }
+  },
+  {
+    "case": "music_14_sibilance",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz - 证据『我总在创造你不爱我的证据，最后才发现原来你爱我会爱得这么满。』【动态歌词MV】.mp3",
+      "question": "请听完整音频，区分人声齿音、镲片高频和失真，指出疑似刺耳位置；听不确定就说明，不猜插件参数。",
+      "focus": [
+        "齿音",
+        "高频刺耳"
+      ]
+    }
+  },
+  {
+    "case": "music_07_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "reference.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_19_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【到處都是妳的痕跡】audio.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_40_groove",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【最後一次】The Last Time｜Official MV.mp3",
+      "question": "请评价鼓、贝斯和人声的节奏互动，描述紧松感与律动；不要估算精确 BPM。",
+      "focus": [
+        "节奏",
+        "groove"
+      ]
+    }
+  },
+  {
+    "case": "music_38_sibilance",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【Why You Gonna Lie】｜Official MV.mp3",
+      "question": "请听完整音频，区分人声齿音、镲片高频和失真，指出疑似刺耳位置；听不确定就说明，不猜插件参数。",
+      "focus": [
+        "齿音",
+        "高频刺耳"
+      ]
+    }
+  },
+  {
+    "case": "music_pair_04",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "test\\Aioz - 放你走吧『這次我就放你走吧 你千萬別回頭啦，我這種不懂珍惜的人 才不值得你愛啊。』【動態歌詞MV】.mp3",
+      "b_path": "test\\Aioz - 证据『我总在创造你不爱我的证据，最后才发现原来你爱我会爱得这么满。』【动态歌词MV】.mp3",
+      "question": "请听两首完整歌曲，比较人声清晰度、编曲层次与律动差异，分别标 A/B。响度未匹配，不要把更响当作更好，也不做法律抄袭结论。",
+      "focus": [
+        "人声清晰度",
+        "编曲",
+        "律动"
+      ]
+    }
+  },
+  {
+    "case": "music_25_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Juice Boy ft. Karencici 《Target》Official Music Video.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_pair_02",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "BK_LBI利比 - 走向我是為了離開我『那些我幻想的生活 變成了泡沫』【動態歌詞】.mp3",
+      "b_path": "BK_利比《跳楼机》(官方歌词MV)｜LBI - Jumping Machine (Official Lyric Video).mp3",
+      "question": "请听两首完整歌曲，比较人声清晰度、编曲层次与律动差异，分别标 A/B。响度未匹配，不要把更响当作更好，也不做法律抄袭结论。",
+      "focus": [
+        "人声清晰度",
+        "编曲",
+        "律动"
+      ]
+    }
+  },
+  {
+    "case": "music_17_melody",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\ASEN - 嘻哈脑壳(Official Music Video).mp3",
+      "question": "请评价人声旋律的记忆点、转折和与和声的互动，给出听感依据，不抄录整首歌词。",
+      "focus": [
+        "旋律",
+        "人声"
+      ]
+    }
+  },
+  {
+    "case": "music_05_melody",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_LBI利比 - 走向我是為了離開我『那些我幻想的生活 變成了泡沫』【動態歌詞】.mp3",
+      "question": "请评价人声旋律的记忆点、转折和与和声的互动，给出听感依据，不抄录整首歌词。",
+      "focus": [
+        "旋律",
+        "人声"
+      ]
+    }
+  },
+  {
+    "case": "music_09_arrangement",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 - 消失一整天 (MV).mp3",
+      "question": "请评价编曲层次、留白与段落变化，描述人声和伴奏的互动，并给出需要复听的位置。",
+      "focus": [
+        "编曲",
+        "层次",
+        "留白"
+      ]
+    }
+  },
+  {
+    "case": "music_01_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK-【妳不是妳，我不是我】audio.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_08_sibilance",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 - 你做那音樂可以當飯吃嗎 (MV).mp3",
+      "question": "请听完整音频，区分人声齿音、镲片高频和失真，指出疑似刺耳位置；听不确定就说明，不猜插件参数。",
+      "focus": [
+        "齿音",
+        "高频刺耳"
+      ]
+    }
+  },
+  {
+    "case": "music_42_vocal",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣OSN-Circles (Official Music Video).mp3",
+      "question": "请评价主唱的咬字、气息、情绪、和声叠层与生成伪影，不猜录音设备或插件。",
+      "focus": [
+        "人声",
+        "咬字",
+        "情绪"
+      ]
+    }
+  },
+  {
+    "case": "music_23_melody",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\h3R3 - 忘不掉的你【動態歌詞】「你冰冷的話語就像這傾盆的大雨 將我的溫柔澆滅卻表現得無所謂」♪.mp3",
+      "question": "请评价人声旋律的记忆点、转折和与和声的互动，给出听感依据，不抄录整首歌词。",
+      "focus": [
+        "旋律",
+        "人声"
+      ]
+    }
+  },
+  {
+    "case": "music_24_vocal",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\h3R3⧸林達浪 - 還是會想你【動態歌詞】「還是會想你 還是會怪你 怪你輕而易舉瀟灑抽離」♪.mp3",
+      "question": "请评价主唱的咬字、气息、情绪、和声叠层与生成伪影，不猜录音设备或插件。",
+      "focus": [
+        "人声",
+        "咬字",
+        "情绪"
+      ]
+    }
+  },
+  {
+    "case": "music_11_melody",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "Showmaîn邱小明 - 別把我打上岸 (MV).mp3",
+      "question": "请评价人声旋律的记忆点、转折和与和声的互动，给出听感依据，不抄录整首歌词。",
+      "focus": [
+        "旋律",
+        "人声"
+      ]
+    }
+  },
+  {
+    "case": "music_22_groove",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【還是分開了】audio.mp3",
+      "question": "请评价鼓、贝斯和人声的节奏互动，描述紧松感与律动；不要估算精确 BPM。",
+      "focus": [
+        "节奏",
+        "groove"
+      ]
+    }
+  },
+  {
+    "case": "music_13_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz - 放你走吧『這次我就放你走吧 你千萬別回頭啦，我這種不懂珍惜的人 才不值得你愛啊。』【動態歌詞MV】.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_29_melody",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Tr33 x BK x Seluu -【你知道你比晚霞好看嗎】Music Video.mp3",
+      "question": "请评价人声旋律的记忆点、转折和与和声的互动，给出听感依据，不抄录整首歌词。",
+      "focus": [
+        "旋律",
+        "人声"
+      ]
+    }
+  },
+  {
+    "case": "music_12_vocal",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz - 小熊『總是莫名的想起 曾經你我的約定，爛在淤泥的回憶 小熊心裡塞滿了你。』【動態歌詞MV】.mp3",
+      "question": "请评价主唱的咬字、气息、情绪、和声叠层与生成伪影，不猜录音设备或插件。",
+      "focus": [
+        "人声",
+        "咬字",
+        "情绪"
+      ]
+    }
+  },
+  {
+    "case": "music_36_vocal",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\隊長YoungCaptain - 哪裡都是你【動態歌詞】「你想要的是現在 而不是那遙遠的未來」♪.mp3",
+      "question": "请评价主唱的咬字、气息、情绪、和声叠层与生成伪影，不猜录音设备或插件。",
+      "focus": [
+        "人声",
+        "咬字",
+        "情绪"
+      ]
+    }
+  },
+  {
+    "case": "music_43_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "隊長 - 碎碎念『所以別再問那麼多問題 回憶全部都被你給佔據』【動態歌詞 Lyrics】.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_06_vocal",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_利比《跳楼机》(官方歌词MV)｜LBI - Jumping Machine (Official Lyric Video).mp3",
+      "question": "请评价主唱的咬字、气息、情绪、和声叠层与生成伪影，不猜录音设备或插件。",
+      "focus": [
+        "人声",
+        "咬字",
+        "情绪"
+      ]
+    }
+  },
+  {
+    "case": "music_32_sibilance",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\《中國新說唱2020》純享：GALI《70%》反擊抄襲論全場Respect｜愛奇藝.mp3",
+      "question": "请听完整音频，区分人声齿音、镲片高频和失真，指出疑似刺耳位置；听不确定就说明，不猜插件参数。",
+      "focus": [
+        "齿音",
+        "高频刺耳"
+      ]
+    }
+  },
+  {
+    "case": "music_34_groove",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\隊長 Young Captain - 樓頂上的小斑鳩『我的確想讓你回來 回來 不要再次離開 離開』【Official Music Video】.mp3",
+      "question": "请评价鼓、贝斯和人声的节奏互动，描述紧松感与律动；不要估算精确 BPM。",
+      "focus": [
+        "节奏",
+        "groove"
+      ]
+    }
+  },
+  {
+    "case": "music_16_groove",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz⧸BigYear大年 - UFO『Girl u got me crazy like UFO，擦肩而過期望你會回頭。』【動態歌詞Lyrics】.mp3",
+      "question": "请评价鼓、贝斯和人声的节奏互动，描述紧松感与律动；不要估算精确 BPM。",
+      "focus": [
+        "节奏",
+        "groove"
+      ]
+    }
+  },
+  {
+    "case": "music_03_arrangement",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK-【水瓶座】audio.mp3",
+      "question": "请评价编曲层次、留白与段落变化，描述人声和伴奏的互动，并给出需要复听的位置。",
+      "focus": [
+        "编曲",
+        "层次",
+        "留白"
+      ]
+    }
+  },
+  {
+    "case": "music_39_arrangement",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【Without You】沒了妳｜Official MV.mp3",
+      "question": "请评价编曲层次、留白与段落变化，描述人声和伴奏的互动，并给出需要复听的位置。",
+      "focus": [
+        "编曲",
+        "层次",
+        "留白"
+      ]
+    }
+  },
+  {
+    "case": "music_28_groove",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Ryan B,AY楊佬叁   再也没有 1080P MV 首发.mp3",
+      "question": "请评价鼓、贝斯和人声的节奏互动，描述紧松感与律动；不要估算精确 BPM。",
+      "focus": [
+        "节奏",
+        "groove"
+      ]
+    }
+  },
+  {
+    "case": "music_pair_05",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "test\\ASEN - 嘻哈脑壳(Official Music Video).mp3",
+      "b_path": "test\\BK-【凌晨三點 3AM】(audio).mp3",
+      "question": "请听两首完整歌曲，比较人声清晰度、编曲层次与律动差异，分别标 A/B。响度未匹配，不要把更响当作更好，也不做法律抄袭结论。",
+      "focus": [
+        "人声清晰度",
+        "编曲",
+        "律动"
+      ]
+    }
+  },
+  {
+    "case": "music_18_vocal",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【凌晨三點 3AM】(audio).mp3",
+      "question": "请评价主唱的咬字、气息、情绪、和声叠层与生成伪影，不猜录音设备或插件。",
+      "focus": [
+        "人声",
+        "咬字",
+        "情绪"
+      ]
+    }
+  },
+  {
+    "case": "music_37_clarity",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣 OSN -【So Bad】Official MV.mp3",
+      "question": "请听完整音频，评价主唱清晰度与伴奏遮蔽，指出最值得复听的位置，分开听到的现象和原因猜测。",
+      "focus": [
+        "人声清晰度",
+        "伴奏遮蔽"
+      ]
+    }
+  },
+  {
+    "case": "music_04_groove",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK_LBI利比 - 爛片劇情『打開電視 卻找不到遙控』【Lyrics Video】.mp3",
+      "question": "请评价鼓、贝斯和人声的节奏互动，描述紧松感与律动；不要估算精确 BPM。",
+      "focus": [
+        "节奏",
+        "groove"
+      ]
+    }
+  },
+  {
+    "case": "music_02_sibilance",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "BK-【最後一次鐘聲】Music Video.mp3",
+      "question": "请听完整音频，区分人声齿音、镲片高频和失真，指出疑似刺耳位置；听不确定就说明，不猜插件参数。",
+      "focus": [
+        "齿音",
+        "高频刺耳"
+      ]
+    }
+  },
+  {
+    "case": "music_27_arrangement",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\LBI利比 - 小城夏天『橘黃色的日落 吞沒在海平線』【Lyrics Video】.mp3",
+      "question": "请评价编曲层次、留白与段落变化，描述人声和伴奏的互动，并给出需要复听的位置。",
+      "focus": [
+        "编曲",
+        "层次",
+        "留白"
+      ]
+    }
+  },
+  {
+    "case": "music_33_arrangement",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\队长 YOUNG CAPTAIN – 予你 – OFFICIAL LYRICS MV 官方歌词版.mp3",
+      "question": "请评价编曲层次、留白与段落变化，描述人声和伴奏的互动，并给出需要复听的位置。",
+      "focus": [
+        "编曲",
+        "层次",
+        "留白"
+      ]
+    }
+  },
+  {
+    "case": "music_pair_03",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "Showmaîn邱小明 - 消失一整天 (MV).mp3",
+      "b_path": "Showmaîn邱小明 -  跟別人要IG (MV).mp3",
+      "question": "请听两首完整歌曲，比较人声清晰度、编曲层次与律动差异，分别标 A/B。响度未匹配，不要把更响当作更好，也不做法律抄袭结论。",
+      "focus": [
+        "人声清晰度",
+        "编曲",
+        "律动"
+      ]
+    }
+  },
+  {
+    "case": "music_20_sibilance",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\BK-【妳對我多重要】audio （Prod. EVOMUSIC）.mp3",
+      "question": "请听完整音频，区分人声齿音、镲片高频和失真，指出疑似刺耳位置；听不确定就说明，不猜插件参数。",
+      "focus": [
+        "齿音",
+        "高频刺耳"
+      ]
+    }
+  },
+  {
+    "case": "music_pair_01",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "BK-【妳不是妳，我不是我】audio.mp3",
+      "b_path": "BK-【最後一次鐘聲】Music Video.mp3",
+      "question": "请听两首完整歌曲，比较人声清晰度、编曲层次与律动差异，分别标 A/B。响度未匹配，不要把更响当作更好，也不做法律抄袭结论。",
+      "focus": [
+        "人声清晰度",
+        "编曲",
+        "律动"
+      ]
+    }
+  },
+  {
+    "case": "music_15_arrangement",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Aioz ⧸ 劉思達LOFTHESTAR ⧸ 張天樞Dubhe - 算了吧『霜停在我的眼眸快結成了痂，對著雪人念準備好的情話。』【動態歌詞⧸Vietsub⧸Pinyin Lyrics】.mp3",
+      "question": "请评价编曲层次、留白与段落变化，描述人声和伴奏的互动，并给出需要复听的位置。",
+      "focus": [
+        "编曲",
+        "层次",
+        "留白"
+      ]
+    }
+  },
+  {
+    "case": "music_41_melody",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\高爾宣OSN & 派偉俊 Patrick Brasca -Hold On (Official Music Video).mp3",
+      "question": "请评价人声旋律的记忆点、转折和与和声的互动，给出听感依据，不抄录整首歌词。",
+      "focus": [
+        "旋律",
+        "人声"
+      ]
+    }
+  },
+  {
+    "case": "music_26_sibilance",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\Juice Boy 《一萬公里外的你》Official Music Video.mp3",
+      "question": "请听完整音频，区分人声齿音、镲片高频和失真，指出疑似刺耳位置；听不确定就说明，不猜插件参数。",
+      "focus": [
+        "齿音",
+        "高频刺耳"
+      ]
+    }
+  },
+  {
+    "case": "music_30_vocal",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "test\\TYSON YOSHI - Christy (Prod. MADBOII).mp3",
+      "question": "请评价主唱的咬字、气息、情绪、和声叠层与生成伪影，不猜录音设备或插件。",
+      "focus": [
+        "人声",
+        "咬字",
+        "情绪"
+      ]
+    }
+  }
+]

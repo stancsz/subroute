@@ -1,0 +1,140 @@
+[
+  {
+    "case": "probe_AB_3",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "blind.wav",
+      "b_path": "blind-b.wav",
+      "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+      "focus": [
+        "audible speech differences"
+      ]
+    }
+  },
+  {
+    "case": "probe_AA_1",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "blind.wav",
+      "b_path": "blind.wav",
+      "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+      "focus": [
+        "audible speech differences"
+      ]
+    }
+  },
+  {
+    "case": "probe_A_2",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "blind.wav",
+      "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+      "focus": [
+        "audible speech"
+      ]
+    }
+  },
+  {
+    "case": "probe_A_3",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "blind.wav",
+      "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+      "focus": [
+        "audible speech"
+      ]
+    }
+  },
+  {
+    "case": "probe_B_3",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "blind-b.wav",
+      "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+      "focus": [
+        "audible speech"
+      ]
+    }
+  },
+  {
+    "case": "probe_A_1",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "blind.wav",
+      "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+      "focus": [
+        "audible speech"
+      ]
+    }
+  },
+  {
+    "case": "probe_AA_3",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "blind.wav",
+      "b_path": "blind.wav",
+      "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+      "focus": [
+        "audible speech differences"
+      ]
+    }
+  },
+  {
+    "case": "probe_AA_2",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "blind.wav",
+      "b_path": "blind.wav",
+      "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+      "focus": [
+        "audible speech differences"
+      ]
+    }
+  },
+  {
+    "case": "probe_B_2",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "blind-b.wav",
+      "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+      "focus": [
+        "audible speech"
+      ]
+    }
+  },
+  {
+    "case": "probe_B_1",
+    "tool": "analyze_audio",
+    "arguments": {
+      "asset_path": "blind-b.wav",
+      "question": "Transcribe exactly what is spoken. Do not infer words from the filename.",
+      "focus": [
+        "audible speech"
+      ]
+    }
+  },
+  {
+    "case": "probe_AB_1",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "blind.wav",
+      "b_path": "blind-b.wav",
+      "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+      "focus": [
+        "audible speech differences"
+      ]
+    }
+  },
+  {
+    "case": "probe_AB_2",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "blind.wav",
+      "b_path": "blind-b.wav",
+      "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+      "focus": [
+        "audible speech differences"
+      ]
+    }
+  }
+]
