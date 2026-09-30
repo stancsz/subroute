@@ -1,10 +1,12 @@
 import asyncio
 import copy
 import json
+from pathlib import Path
 
 import httpx
 import litellm
 import pytest
+import yaml
 
 from subroute.handlers import codex_advisor as advisor
 
@@ -195,7 +197,8 @@ def test_malformed_images_are_rejected_without_loss(part):
 
 
 @pytest.mark.parametrize("through_litellm", [False, True])
-def test_custom_advisor_passes_pixels_and_reasoning_to_existing_upstream(monkeypatch, through_litellm):
+@pytest.mark.parametrize("model_name", ["gpt-6-sol", "gpt-6.1-sol"])
+def test_custom_advisor_passes_pixels_and_reasoning_to_existing_upstream(monkeypatch, through_litellm, model_name):
     sent = []
 
     def respond(request):
@@ -223,16 +226,16 @@ def test_custom_advisor_passes_pixels_and_reasoning_to_existing_upstream(monkeyp
             "provider": "codex-advisor", "custom_handler": advisor.codex_advisor_handler,
         }])
         response = asyncio.run(litellm.acompletion(
-            model="codex-advisor/gpt-6-sol", messages=messages,
+            model=f"codex-advisor/{model_name}", messages=messages,
             reasoning_effort="high", allowed_openai_params=["reasoning_effort"],
         ))
     else:
         response = asyncio.run(advisor.CodexAdvisorLLM().acompletion(
-            model="codex-advisor/gpt-6-sol", messages=messages,
+            model=f"codex-advisor/{model_name}", messages=messages,
             optional_params={"reasoning_effort": "high"},
         ))
     assert sent == [{
-        "model": "gpt-6-sol", "stream": True, "store": False,
+        "model": model_name, "stream": True, "store": False,
         "reasoning": {"effort": "high"},
         "input": [{"type": "message", "role": "user", "content": [
             {"type": "input_text", "text": "Inspect these exact pixels."},
@@ -241,6 +244,17 @@ def test_custom_advisor_passes_pixels_and_reasoning_to_existing_upstream(monkeyp
     }]
     assert response.choices[0].message.content == "partial"
     assert response.usage.total_tokens == 26
+
+
+def test_dedicated_experts_exposes_only_versioned_sol61_without_fallback():
+    config = yaml.safe_load((Path(__file__).parents[1] / "config/litellm.experts.yaml").read_text())
+    models = config["model_list"]
+    assert len(models) == 1
+    assert models[0]["model_name"] == "codex-gpt-6.1-sol-advisor"
+    assert models[0]["litellm_params"]["model"] == "codex-advisor/gpt-6.1-sol"
+    assert "vision" in models[0]["model_info"]["capabilities"]
+    assert config["router_settings"]["num_retries"] == 0
+    assert config["router_settings"]["fallbacks"] == []
 
 
 def test_custom_advisor_rejects_bad_image_before_upstream_call(monkeypatch):

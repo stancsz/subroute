@@ -21,6 +21,7 @@ from subroute.plugins.codex_credentials import CODEX_API_BASE, read_codex_creden
 from subroute.handlers.codex_messages import normalize_messages
 
 MODELS = {
+    "gpt-6.1-sol": "gpt-6.1-sol",
     "gpt-5.6-terra": "gpt-5.6-terra",
     "terra": "gpt-5.6-terra",
     "gpt-6-sol": "gpt-6-sol",

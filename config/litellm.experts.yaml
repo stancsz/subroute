@@ -1,24 +1,14 @@
 # A deliberately narrow, loopback-only API for compact expert consultations.
 # It exposes no executor aliases, routing state, UI, or advisor orchestration.
 model_list:
-  - model_name: codex-sol-advisor
+  - model_name: codex-gpt-6.1-sol-advisor
     model_info:
-      display_name: Codex Sol Advisor
+      display_name: GPT-6.1 Sol Advisor
       capabilities: [text, vision]
       selectable: false
       advisor_selectable: true
     litellm_params:
-      model: codex-advisor/gpt-6-sol
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-astra-advisor
-    model_info:
-      display_name: Codex Astra Advisor
-      capabilities: [text, vision]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-6-astra
+      model: codex-advisor/gpt-6.1-sol
       allowed_openai_params: [reasoning_effort]
 
 router_settings:

@@ -16,6 +16,22 @@ Northstar maintains the full caller/reader receipts, three failed source-reader 
 
 Saved production/staging routing policy is unchanged; their containers were not restarted. Installed skill copies were not refreshed. This validates the dedicated experts route, not automatic Advisor use on all public gateway protocols. Standing owner Docker authorization covers scoped direct-main publication and affected-service update. Git refs and the completion handoff identify the published revision and final health result.
 
+## GPT-6.1 Sol-only follow-up
+
+The owner's subsequent requirement removes Astra and older Sol from this dedicated Advisor endpoint. The sole catalog entry `codex-gpt-6.1-sol-advisor` maps to `codex-advisor/gpt-6.1-sol`; the existing Subscription collector now recognizes that exact model. Shared worker-gateway aliases remain outside this dedicated catalog change. Versioned routing fails on an older service instead of silently selecting the old Sol. Zero retries/fallbacks are unchanged.
+
+Focused suite now **72 passed**, one existing dependency warning. Both direct CustomLLM and real LiteLLM dispatch against mocked upstream prove `gpt-6.1-sol` reaches the existing transport with original pixels and reasoning. A separate config regression checks sole alias/model and retry/fallback boundaries. Northstar reports 35 Python and two Node passes, including pre-call Astra CLI rejection. The same nonauthor reviewer independently checks this follow-up; primary owns acceptance/publication.
+
+Restarted only `experts`. The first readiness poll during startup ended prematurely; subsequent readiness is healthy and the models API lists only the versioned alias. Requests using old `codex-sol-advisor` and `codex-astra-advisor` return HTTP 400 invalid model, without substitute advice. Experts has no database configured; its readiness is not database verification.
+
+Fresh 6.1 pixel-backed request `chatcmpl-codex-advisor-dc05ce70d92b` reads the screenshot's title/label and clipping. Image-plus-reader requests `chatcmpl-codex-advisor-11bd52afb683` / `chatcmpl-codex-advisor-7d15032d7399` use the same versioned expert before and after one Advisor-generated source question; final feedback combines validated caller line 71 and image observations. Northstar preserves these three new receipt files in `docs/evals/assets/advisor-images/sol61-*.json`. Earlier screenshots/charts/source-reader receipts above are old-Sol history, not fresh 6.1 proof. New calls report 3,199 expert + 5,190 Pi = 8,389 tokens; cumulative whole increment 65,506 tokens including failures, monetary cost unknown. This remains one narrow source success with unknown actual Pi model, not aesthetic approval, general reader reliability or savings.
+
+Only the dedicated endpoint/model pin, tests and its current documentation are in this follow-up. Production/staging settings, containers and installed skill copies remain unchanged. Publication uses standing Docker-service authorization; commit/remote refs and final health must be checked before handoff.
+
+Primary accepts the scoped pin after inspecting the nonauthor READY review recorded in Northstar's `docs/reports/central-package/advisor-image-review.md`. Independent checks covered 6 caller tests, 5 backend tests, exact 6.1 request/pixel/source evidence, promoted receipt equality and complete token sums. Six related files form the direct-main follow-up; Git and final handoff identify the actual published revision and post-publication health. No broader gateway model removal or skill installation is claimed.
+
+Learning: pin and test the upstream model as well as the public alias, reject removed selections visibly, and obtain fresh pixel/source evidence when the expert version changes.
+
 ## Learning
 
 Generic framework image support does not prove a custom provider preserves images. Inspect the actual rejecting boundary, retain original pixels/roles, exercise real LiteLLM dispatch, then verify a pixel-dependent provider answer. Keep source-reader failures distinct from image transport and from final acceptance. Stronger model advice and transport correctness do not waive owner approval or independent QA.

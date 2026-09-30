@@ -19,7 +19,7 @@ The former **Luna Advisor Escalation** skill has moved to the central [Northstar
 
 Subroute still owns the `experts` service, provider authentication and gateway runtime. Moving the skill does not move or deploy those services. Historical advisor evaluations below describe the Subroute revisions at which they were recorded.
 
-The dedicated Sol/Astra `experts` endpoint accepts user image inputs for screenshot-backed advice. Northstar's caller proactively attaches images with repeatable `--image` arguments; optional Advisor-directed Pi source reading remains caller orchestration, not backend tool execution. See [image-input verification and limits](docs/evals/advisor-image-input-2026-09-30.md).
+The dedicated `experts` endpoint exposes only `codex-gpt-6.1-sol-advisor`, mapped to GPT-6.1 Sol, and accepts user images for screenshot-backed advice. Astra and older Sol aliases are removed from this endpoint; there is no retry or model fallback. Northstar's caller proactively attaches images with repeatable `--image` arguments; optional Advisor-directed Pi source reading remains caller orchestration, not backend tool execution. See [image-input verification and limits](docs/evals/advisor-image-input-2026-09-30.md).
 
 ## The problem
 
