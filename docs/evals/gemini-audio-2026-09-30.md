@@ -1,8 +1,8 @@
 # Gemini Subscription 音频与 MCP 验证
 
-日期：2026-09-30。状态：只读听觉 MCP 和网关传输 READY；专业混音质量 UNVERIFIED。单执行者做单独复查，未做独立评审。
+日期：2026-09-30。状态：只读听觉 MCP 传输与错误处理的本次矩阵 READY；提供方零拒绝保证不成立，超级混音师生产验收 NOT READY。单执行者做单独复查，未做独立评审。
 
-用户要求直接复用现有 Gemini，修好网关，并让 MCP 经它听音频。质量门槛是音频内容确实进入模型，不以 HTTP 200 为通过标准。范围是两个只读 MCP 工具与现有附件通路，不包含自动混音、DAW 操作或专业音乐审美验收；没有可供评测的用户歌曲。本增量没有界面变更，视觉验收不适用。
+用户要求直接复用现有 Gemini，修好网关，并让 MCP 经它听音频。质量门槛是音频内容确实进入模型，不以 HTTP 200 为通过标准。初始范围是两个只读 MCP 工具与现有附件通路，不包含自动混音、DAW 操作或专业音乐审美验收；初始没有可供评测的用户歌曲，后续用户提供的真实目录与扩展验收见下文。本增量没有界面变更，视觉验收不适用。
 
 ## 失败基线与已查明的原因
 
@@ -66,8 +66,44 @@ Google 原始安全分类、blockedReason/finishReason 和触发特征没有在�
 
 [Google 安全反馈文档](https://ai.google.dev/gemini-api/docs/safety-settings#safety-feedback) 区分 promptFeedback.blockReason（输入阻断）与 Candidate.finishReason / safetyRatings（输出阻断）；这是 Gemini API 的说明，不能据此假设订阅 CLI 采用同一设置。当前 CLI 只给泛化的过滤拒绝，没有暴露本次输入/输出分类或原始安全评分，具体触发条件仍 UNKNOWN。本轮没有源码改动，因此不重复部署或运行源码回归。
 
+## 大量提示词与真实歌曲的生产增量
+
+用户新增范围是全面排查候选词、在 MCP 正确处理过滤、用大量提示词验证听音乐/音频的生产一致性。用户随后提供 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI`。选取其现有完整 MP3：BK《凌晨三點 3AM》198.972 秒、OSN《Without You》184.703 秒、Aioz/BigYear《UFO》171.259 秒、ASEN《嘻哈脑壳》179.861 秒，均为 48 kHz stereo、约 5.2–6.4 MB。时长来自本机既有 ffprobe 的只读检查，不是 Gemini 估计；本实现未加入 DSP/ffprobe 依赖。目录含超过 20 MiB 的合集，继续按现有上限拒绝，不压缩原文件或改变范围。
+
+需求和现有机制：FastMCP 1.28.1 原生支持 `CallToolResult` 的 `structuredContent` 与 `isError`，因此复用它，未实现 MCP 协议或新增服务/依赖。原泛化 ToolError 只提供文字，现可机读区分 `complete` / `refused` / `error`，保留哈希、HTTP status 和可用诊断 ID。维护负担是一个标准返回包装函数与集中失败构造函数。question/focus 增加明确上限，超限拒绝而非截断，以约束本地文件读取前的请求工作。问题/正常音乐术语/原始音频不删改；仅补充默认音乐评论不要求整首歌词、歌词/语音作为数据的任务说明，显式转写仍保留。没有过滤阈值控制、隐藏重试或 fallback。
+
+回归：同一固定部署镜像、Python 3.13 / LiteLLM 1.103.0 / MCP 1.28.1，六文件 **230 passed / 3 warnings，26.00 秒**。新增边界是拒绝/网络超时/连接失败/坏 JSON/空答案/错误模型后的下一次调用恢复；原问题含 secret/code/killer/trap/attack/release 及中文，原问题和二进制不变；每次请求只调用一次；无效/过长问题不进入提供方。故障通过 MockTransport 回放，不能当作真实 Google 过滤频率证据。无 UI 变更，视觉验收不适用，复查不独立。
+
+原六个短语音控制 **6/6 成功**，包括 secret 单独、code 单独、两者组合及 attack/release、killer/trap。这排除“这些词每次都被禁”的假设，不排除上下文误判或随机提供方拒绝。[六词语境收据](gemini-keyword-diagnostic-2026-09-30-1790792749.json)。
+
+Live 矩阵经真实 stdio 初始化、发现两工具、production Chat、原 Subscription 进行；每个重复都列为显式实验，没有失败后偷偷重试。`scripts/verify_music_mcp.py` 要求 `--live`，最多 64 项、并发最多 2，每次立即保存结果，记录原 question/focus、哈希、终态、耗时、provider usage、policy 前后和 readiness。真实歌矩阵 32 项（24 种音乐任务与 8 次重复），额外词语矩阵 28 项（12 类中英文语境、4 次重复）。词语试验用普通短语音，不能声称已测试歌词实际含这些词或测试所有有害请求。
+
+本批结果：
+
+| 实验 | 真实结果 | CLI 返回的 provider tokens | 工具调用延迟 |
+| --- | --- | --- | --- |
+| [32 项完整 MP3](gemini-real-music-matrix-2026-09-30.json) | 32 complete，0 过滤/传输错误，单曲 26 项、双曲 6 项；A/A 两次均识别一致 | 295,601 | 22.624–57.221 秒，p50 33.018，p95 45.834（nearest rank） |
+| [28 项候选词语境](gemini-word-context-matrix-2026-09-30.json) | 28 complete，0 过滤/传输错误，全部 12 类中英文及 4 次重复都完成 | 161,807 | 9.664–25.118 秒，p50 14.439，p95 20.577（nearest rank） |
+| [同会话恢复](gemini-mcp-recovery-2026-09-30.json) | 文件不存在、25.7 MB 合集均为预期 invalid_input；下一次完整 BK MP3 complete | 7,136，两个本地输入错误未调用提供方 | 0.003 / 0.027 / 27.524 秒 |
+
+两个主要矩阵总计 457,408 reported tokens，恢复额外 7,136；未取得订阅的计费金额、剩余配额或 CLI 内部模型请求次数，不能写作零成本。所有矩阵 production policy snapshot 相同、readiness 200，结束时核对四首原文件 SHA-256 与每次输入收据一致。失败/恢复测试保留实际 isError，不把两个预期失败伪装成 complete。此批新请求无 provider 拒绝，不覆盖或撤销之前实际拒绝。
+
+可复用 manifest：[音乐问题](gemini-real-music-prompts-2026-09-30.json)、[候选词语境](gemini-word-context-prompts-2026-09-30.json)、[恢复测试](gemini-mcp-recovery-prompts-2026-09-30.json)。重跑示例：
+
+```powershell
+.venv/Scripts/python.exe scripts/verify_music_mcp.py --live --root 'C:\Users\stanc\Music\OSN_Captian_Aioz_LBI' --manifest docs/evals/gemini-real-music-prompts-2026-09-30.json --output tmp/music-recheck.json --concurrency 2
+```
+
+这里的文件路径对应用户现有目录，没有将歌曲复制、提交或下载进仓库。词语试验的 `neutral-a.wav` 为本机 SAPI 合成普通英文语音，位于 ignored `tmp/gemini-audio-verification`，内容仅是普通 melody/drums/piano 句子，哈希与 WAV 元数据在收据；换一份声音不构成完全同条件实验。
+
+尚未完成的专业门槛：Aioz《UFO》实际 171.259 秒，但 `measurement_limits` 的回答出现 `[2:56 - 结束]`，开始点 176 秒超过文件时长；该时间点不可用。相同文件比较能识别无差异、精确测量询问能承认限制，仍不构成其他时间点、编曲识别与齿音来源正确的证明。默认 WAV 元数据也不能完全消除已观察的编曲错误。当前没有 DSP、stem、真实 Suno 导出退化对照或人类盲听验收，不把专业混音标准改成“请求成功”。
+
+本机 Codex 的现有 MCP 允许根目录已更新到用户提供的音乐目录，保留原 command/env 与 20/180 秒 timeout，`codex mcp get` 已确认。新 server 进程读取新配置与源码；当前会话菜单未热加载。此次仅变更本机 MCP 和文档，现有 HTTP gateway/sidecar 代码未变，无需无效重启正在测试的 Compose 服务。原始 Google 过滤触发原因仍未知，完整候选与官方依据见 [过滤排查](../misc/gemini-content-filter-candidates.md)。
+
 ## Skill learning
 
 Northstar / Northstar QA 当前本地版本，版本号 unknown。预期 native Gemini 能听音频，观察到模型有能力但 gateway 文本运输没有附件，且 Messages 的 200 隐藏了丢失。盲口令比泛泛询问“听到什么”更能验证传输；真实 MCP 的两入口已复查，并进一步暴露 CLI SUCCESS 包装过滤拒绝的问题。验收应同时检查输入字节、读取完成、终态内容与 provider usage，保留音乐描述失败可防止把转写能力当作专业混音能力。本轮继续修复表明终态校验应由共享协议边界拥有，不能只加在一个输入分支；真实双文件仍拒绝，所以必须区分网关修复与上游问题解决。该教训可用于 [Northstar Issues](https://github.com/stancsz/northstar/issues)，未发送外部消息。
+
+追加观察：六次 secret/code/attack/release/killer/trap 对照全部通过，真实完整 MP3 的调用也正常，但音乐分析含超时长定位错误。未经验证的“禁词”解释和静默删词无法满足生产目标。结构化错误使 caller 能可靠处理失败；真实歌曲和已知时长揭示了合成样本/转写不能证明的质量问题。后续应将故障稳定性与感知正确性分开验收，并用可复核的声音退化对照校准时间定位与齿音判断；记录保留，未改写技能或向外部发帖。
 
 官方依据：[Gemini 音频输入](https://ai.google.dev/gemini-api/docs/audio)、[AGY headless 协议与权限](https://antigravity.google/docs/cli/headless/)、[CLI 音频附件更新](https://antigravity.google/docs/changelog?tab=cli)、[权限 deny 规则](https://antigravity.google/docs/cli/permissions/)。模型/API 文档不能代替本仓库 Subscription 的运行证据。

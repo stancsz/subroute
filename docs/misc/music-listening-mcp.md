@@ -8,9 +8,13 @@
 
 ## 当前可用的 Gemini MVP
 
-`python -m subroute.music_mcp --root <音频目录> --gateway-url http://127.0.0.1:4000` 启动标准 stdio MCP，额外依赖用 `pip install -e ".[music]"` 安装。当前已将 `subroute-music` 注册到本机 Codex，文件根目录是 `D:\github\subroute`，仅允许其内部 WAV/MP3。新会话加载该配置；本次通过真实 MCP SDK 完成握手、发现工具和调用，并未宣称当前会话的动态工具菜单已经刷新。
+`python -m subroute.music_mcp --root <音频目录> --gateway-url http://127.0.0.1:4000` 启动标准 stdio MCP，额外依赖用 `pip install -e ".[music]"` 安装。当前已将 `subroute-music` 注册到本机 Codex，文件根目录按用户提供的路径更新为 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI`，仅允许其内部 WAV/MP3。新会话或重启 MCP server 加载该配置；本次通过真实 MCP SDK 完成握手、发现工具和调用，并未宣称当前会话的动态工具菜单已经刷新。
 
 当前参数比下文专业设计简单：`analyze_audio(asset_path, question, focus)`；`compare_audio(a_path, b_path, question, focus)`。最多两个文件、合计 20 MiB。返回 `gemini-listening-v1` structuredContent：原文件哈希、WAV 时长/采样率/声道、实际 provider usage、Gemini 观察与限制。`complete` 指完成此次订阅请求和指定文件读取，不证明其判断正确。
+
+question 最多 8,000 字符，focus 最多 16 项、每项 128 字符；超限明确拒绝，不截断。过滤拒绝返回标准 MCP `CallToolResult`：`isError=true`、`status=refused`、`error.code=provider_content_filter`，保留文件哈希和可用的 phase/request_id/conversation_id。其他错误为 `status=error`，明确 `invalid_input`、`gateway_timeout`、`gateway_unavailable`、`gateway_error` 或 `invalid_response`，HTTP 错误包含 http_status。失败 usage 为 null，不能当成零费用；提供方可用 usage 仍在对应 bridge 日志。没有自动重试或改词/删词。
+
+默认提示词让歌词和语音作为数据，只做音乐评论时不要求完整转写；明确的转写请求仍保留。正常的 attack/release、killer/trap 等术语不会屏蔽。官方类别、候选词、测试与语义边界见 [过滤排查](gemini-content-filter-candidates.md)。这些改动不能控制 Google Subscription 的原始过滤阈值。
 
 ```json
 {"asset_path":"audio/suno-original.wav","question":"听一下主歌和副歌的人声清晰度、齿音、旋律与编曲，指出需要复查的时间段。","focus":["人声","sibilance","编曲","旋律","groove"]}

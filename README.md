@@ -135,6 +135,8 @@ The gateway binds to loopback by default. Keep it on your machine unless you int
 
 Audio requests use Chat `input_audio`, route explicitly to Gemini Subscription and disable the saved advisor for that request, including in Force mode. The saved policy stays intact. At most two files and 20 MiB combined are accepted. Messages/Responses audio is rejected rather than dropped. The read-only [music MCP](docs/misc/music-listening-mcp.md) sends original audio to Google through this route; it does not perform DSP or certify mixing quality.
 
+MCP refusals and transport failures return structured `isError` results, never successful listening reports. Original questions and files are preserved, with no automatic retry or word deletion. See [filter candidates and evidence](docs/misc/gemini-content-filter-candidates.md); there is no verified complete keyword blacklist or zero-error guarantee.
+
 ## Project notes
 
 - [Architecture and ownership](docs/misc/architecture.md)
@@ -240,6 +242,8 @@ Chat 通过 `message.images`/`delta.images` 返回图片 data URL；Responses �
 Gemini 订阅同样由后端管理输出上限：CLI 不提供输出 token 上限参数，因此不会执行调用方设置的上限。这适用于普通响应、SSE 和 Anthropic Messages。Subroute 保留完整响应和真实 provider usage，不通过截断输出伪装成遵守了上限。工具 schema 必须自包含；远程 schema 引用会在 provider 调用前被拒绝。
 
 音频请求使用 Chat `input_audio`，明确路由到 Gemini Subscription，并关闭本次请求的 Advisor，Force 模式同样适用；保存的策略不变。最多两个附件，合计 20 MiB。Messages/Responses 音频会明确拒绝，防止静默丢失。[音乐 MCP](docs/misc/music-listening-mcp.md) 经此路径将原始音频发送到 Google，不执行 DSP 或认证混音质量。
+
+MCP 的拒绝和传输失败会返回结构化 `isError`，不会伪造成功听觉报告。原问题与文件保留，不自动重试或删词。见 [过滤候选语境与实测](docs/misc/gemini-content-filter-candidates.md)；没有已验证的完整禁词表或零错误保证。
 
 网关默认只监听本机回环地址。除非你主动配置并保护其他网络边界，否则请将其保留在本机使用。
 

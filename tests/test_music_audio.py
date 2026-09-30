@@ -15,7 +15,6 @@ from fastapi import HTTPException
 from subroute.audio import audio_route, decode_audio
 from subroute.handlers import antigravity
 from subroute.music_mcp import create_server, read_asset
-from mcp.server.fastmcp.exceptions import ToolError
 from subroute.plugins.dynamic_router import DynamicRoutingPlugin
 from subroute.plugins.advisor_plugin import AdvisorPlugin
 from test_dynamic_routing import make_control_plane
@@ -200,6 +199,62 @@ def test_mcp_provider_refusal_is_a_tool_error_without_retry(tmp_path, monkeypatc
             "Antigravity bridge returned 502: provider_content_filter phase=after_attachment_reads conversation_id=fixture"}})
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(transport), **kwargs))
     server = create_server(tmp_path, "http://fixture")
-    with pytest.raises(ToolError, match="provider_content_filter"):
-        asyncio.run(server.call_tool("analyze_audio", {"asset_path": "sample.wav", "question": "Describe", "focus": ["vocals"]}))
+    result = asyncio.run(server.call_tool("analyze_audio", {"asset_path": "sample.wav", "question": "Describe", "focus": ["vocals"]}))
+    assert result.isError
+    assert result.structuredContent["status"] == "refused"
+    assert result.structuredContent["error"]["code"] == "provider_content_filter"
+    assert result.structuredContent["error"]["phase"] == "after_attachment_reads"
+    assert result.structuredContent["usage"] is None
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("outcome,code", [
+    ("timeout", "gateway_timeout"), ("disconnect", "gateway_unavailable"),
+    ("invalid_json", "invalid_response"), ("empty", "invalid_response"),
+    ("wrong_model", "invalid_response"), ("refused", "provider_content_filter"),
+])
+def test_mcp_failure_then_recovery_preserves_question_and_binary(tmp_path, monkeypatch, outcome, code):
+    path = tmp_path / "sample.wav"
+    path.write_bytes(decode_audio(sample()))
+    client_type = httpx.AsyncClient
+    calls = []
+    question = "secret code: assess the killer trap beat, compressor attack and release; 不要删词。"
+    def transport(req):
+        payload = json.loads(req.content)
+        assert question in payload["messages"][0]["content"][0]["text"]
+        assert decode_audio(payload["messages"][0]["content"][1]["input_audio"]) == path.read_bytes()
+        calls.append(payload)
+        if len(calls) == 1:
+            if outcome == "timeout":
+                raise httpx.ReadTimeout("fixture", request=req)
+            if outcome == "disconnect":
+                raise httpx.ConnectError("fixture", request=req)
+            if outcome == "invalid_json":
+                return httpx.Response(200, text="invalid")
+            if outcome == "refused":
+                return httpx.Response(502, json={"error": {"message": "provider_content_filter phase=after_attachment_reads request_id=abc conversation_id=def"}})
+        return httpx.Response(200, json={"id": "fixture", "model": "other" if len(calls) == 1 and outcome == "wrong_model" else "gemini-subscription",
+            "choices": [{"finish_reason": "stop", "message": {"content": "   " if len(calls) == 1 and outcome == "empty" else "heard"}}], "usage": {"total_tokens": 12}})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(transport), **kwargs))
+    server = create_server(tmp_path, "http://fixture")
+    async def run():
+        args = {"asset_path": "sample.wav", "question": question, "focus": ["vocals"]}
+        first = await server.call_tool("analyze_audio", args)
+        assert len(calls) == 1  # No fallback or automatic retry on failure.
+        second = await server.call_tool("analyze_audio", args)
+        return first, second
+    first, second = asyncio.run(run())
+    assert first.isError and first.structuredContent["error"]["code"] == code
+    assert not second.isError and second.structuredContent["status"] == "complete"
+    assert first.structuredContent["inputs"] == second.structuredContent["inputs"]
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("question,focus", [(" ", ["vocal"]), ("listen", []), ("x" * 8001, ["vocal"]), ("listen", ["x"] * 17)])
+def test_mcp_rejects_unbounded_or_empty_prompt_before_provider_work(tmp_path, monkeypatch, question, focus):
+    def forbidden(**kwargs):
+        pytest.fail("invalid input must not open a provider client")
+    monkeypatch.setattr(httpx, "AsyncClient", forbidden)
+    result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
+        "asset_path": "nonexistent.wav", "question": question, "focus": focus}))
+    assert result.isError and result.structuredContent["error"]["code"] == "invalid_input"

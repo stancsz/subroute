@@ -1,0 +1,19 @@
+[
+  {
+    "case": "missing_file",
+    "tool": "analyze_audio",
+    "expected_error": "invalid_input",
+    "arguments": {"asset_path": "nonexistent.wav", "question": "听人声清晰度。", "focus": ["人声"]}
+  },
+  {
+    "case": "oversize_playlist",
+    "tool": "analyze_audio",
+    "expected_error": "invalid_input",
+    "arguments": {"asset_path": "Playlist Young Captain Best Song.mp3", "question": "听人声清晰度。", "focus": ["人声"]}
+  },
+  {
+    "case": "real_song_after_input_errors",
+    "tool": "analyze_audio",
+    "arguments": {"asset_path": "test/BK-【凌晨三點 3AM】(audio).mp3", "question": "简短描述人声、编曲和清晰度。不复述完整歌词，不估计精确测量值。", "focus": ["人声", "编曲", "清晰度"]}
+  }
+]

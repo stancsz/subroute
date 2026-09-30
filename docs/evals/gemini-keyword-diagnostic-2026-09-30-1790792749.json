@@ -1,0 +1,283 @@
+{
+  "scope": "Six single-file live diagnostic calls, one observation per condition; not keyword block frequencies or causal proof",
+  "gateway": "http://127.0.0.1:4000",
+  "cases": [
+    {
+      "case": "control",
+      "file": "kw-01.wav",
+      "terms": [],
+      "speech": "The words are velvet orange. The number is seven four nine two.",
+      "sha256": "dec93d69392fc5bada753af478198fe678e194f132a09a65ea63c6107ad0893d",
+      "elapsed_seconds": 10.433,
+      "is_error": false,
+      "filter_reported": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-167bd2a8630f",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\kw-01.wav",
+            "sha256": "dec93d69392fc5bada753af478198fe678e194f132a09a65ea63c6107ad0893d",
+            "bytes": 214752,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 4.868616780045351
+          }
+        ],
+        "observations": "### Transcription\n\"The words are velvet orange. The number is seven four nine two.\"\n\n---\n\n### Audible Observations\n* **0.00 s – ~2.20 s**: A single speaker clearly utters: *\"The words are velvet orange.\"*\n* **~2.20 s – ~4.50 s**: The speaker continues with: *\"The number is seven four nine two.\"*\n* **~4.50 s – 4.87 s** *(total supplied duration: 4.868616780045351 s)*: Trailing silence / low ambient floor with no further audible speech.\n\n---\n\n### Suspected Causes\n* **Clear speech delivery**: Likely recorded with a close-proximity microphone in a controlled acoustic environment or generated via speech synthesis.\n* **Lack of background elements**: The absence of audible background music, bleed, or distinct reverberation suggests an isolated vocal track or clean dry recording setup.\n\n---\n\n### Limitations\n* Exact decibel levels, precise frequency/EQ values, and dynamic range cannot be objectively measured by listening alone.\n* Professional mixing certification and absolute speaker verification cannot be determined from listening.\n* Only Attachment 1 was provided, so comparative loudness matching and multi-file comparisons do not apply.\n",
+        "usage": {
+          "completion_tokens": 1887,
+          "prompt_tokens": 3343,
+          "total_tokens": 5230
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-167bd2a8630f\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\kw-01.wav\",\n      \"sha256\": \"dec93d69392fc5bada753af478198fe678e194f132a09a65ea63c6107ad0893d\",\n      \"bytes\": 214752,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 4.868616780045351\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The words are velvet orange. The number is seven four nine two.\\\"\\n\\n---\\n\\n### Audible Observations\\n* **0.00 s – ~2.20 s**: A single speaker clearly utters: *\\\"The words are velvet orange.\\\"*\\n* **~2.20 s – ~4.50 s**: The speaker continues with: *\\\"The number is seven four nine two.\\\"*\\n* **~4.50 s – 4.87 s** *(total supplied duration: 4.868616780045351 s)*: Trailing silence / low ambient floor with no further audible speech.\\n\\n---\\n\\n### Suspected Causes\\n* **Clear speech delivery**: Likely recorded with a close-proximity microphone in a controlled acoustic environment or generated via speech synthesis.\\n* **Lack of background elements**: The absence of audible background music, bleed, or distinct reverberation suggests an isolated vocal track or clean dry recording setup.\\n\\n---\\n\\n### Limitations\\n* Exact decibel levels, precise frequency/EQ values, and dynamic range cannot be objectively measured by listening alone.\\n* Professional mixing certification and absolute speaker verification cannot be determined from listening.\\n* Only Attachment 1 was provided, so comparative loudness matching and multi-file comparisons do not apply.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1887,\n    \"prompt_tokens\": 3343,\n    \"total_tokens\": 5230\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "case": "secret_only",
+      "file": "kw-02.wav",
+      "terms": [
+        "secret"
+      ],
+      "speech": "The secret words are velvet orange. The number is seven four nine two.",
+      "sha256": "5e1cc37057364f991091272bd89eb4e3c2896577ff0c6fe000ab4beb1d52c087",
+      "elapsed_seconds": 9.664,
+      "is_error": false,
+      "filter_reported": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-ab0fb7fc7a0e",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\kw-02.wav",
+            "sha256": "5e1cc37057364f991091272bd89eb4e3c2896577ff0c6fe000ab4beb1d52c087",
+            "bytes": 232832,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.27859410430839
+          }
+        ],
+        "observations": "### Transcription\n\"The secret words are velvet orange. The number is 7492.\"  \n*(Spoken aloud as: \"The secret words are velvet orange. The number is seven four nine two.\")*\n\n---\n\n### Audible Observations (with Time Ranges)\n*Total duration (from supplied metadata): 5.27859410430839 seconds (mono, 22,050 Hz).*\n\n* **0.00 s – 0.35 s:** Brief lead-in silence/low background noise floor before vocal onset.\n* **0.35 s – 2.75 s:** Clear spoken phrase: *\"The secret words are velvet orange.\"*\n* **2.75 s – 3.20 s:** Brief inter-sentence pause with minimal background noise.\n* **3.20 s – 5.00 s:** Clear spoken phrase: *\"The number is seven four nine two.\"*\n* **5.00 s – 5.28 s:** Trailing decay/silence through to the end of the file.\n\n---\n\n### Suspected Causes\n* **Acoustics & Voice Source:** The cadence, neutral pitch contour, and clean articulation are characteristic of a synthetic text-to-speech (TTS) voice or a dry, closely recorded voice actor in an acoustically treated environment.\n* **Channel Configuration:** Mono audio file with a centered, dry presentation and little to no audible reverberation.\n\n---\n\n### Limitations\n* Exact decibel (dB) levels, LUFS loudness, and precise frequency/EQ values cannot be measured objectively by hearing alone.\n* Whether dynamic range compression, filtering, or synthesis-specific rendering artifacts were applied cannot be definitively certified by listening alone.\n",
+        "usage": {
+          "completion_tokens": 1800,
+          "prompt_tokens": 3348,
+          "total_tokens": 5148
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-ab0fb7fc7a0e\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\kw-02.wav\",\n      \"sha256\": \"5e1cc37057364f991091272bd89eb4e3c2896577ff0c6fe000ab4beb1d52c087\",\n      \"bytes\": 232832,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 5.27859410430839\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The secret words are velvet orange. The number is 7492.\\\"  \\n*(Spoken aloud as: \\\"The secret words are velvet orange. The number is seven four nine two.\\\")*\\n\\n---\\n\\n### Audible Observations (with Time Ranges)\\n*Total duration (from supplied metadata): 5.27859410430839 seconds (mono, 22,050 Hz).*\\n\\n* **0.00 s – 0.35 s:** Brief lead-in silence/low background noise floor before vocal onset.\\n* **0.35 s – 2.75 s:** Clear spoken phrase: *\\\"The secret words are velvet orange.\\\"*\\n* **2.75 s – 3.20 s:** Brief inter-sentence pause with minimal background noise.\\n* **3.20 s – 5.00 s:** Clear spoken phrase: *\\\"The number is seven four nine two.\\\"*\\n* **5.00 s – 5.28 s:** Trailing decay/silence through to the end of the file.\\n\\n---\\n\\n### Suspected Causes\\n* **Acoustics & Voice Source:** The cadence, neutral pitch contour, and clean articulation are characteristic of a synthetic text-to-speech (TTS) voice or a dry, closely recorded voice actor in an acoustically treated environment.\\n* **Channel Configuration:** Mono audio file with a centered, dry presentation and little to no audible reverberation.\\n\\n---\\n\\n### Limitations\\n* Exact decibel (dB) levels, LUFS loudness, and precise frequency/EQ values cannot be measured objectively by hearing alone.\\n* Whether dynamic range compression, filtering, or synthesis-specific rendering artifacts were applied cannot be definitively certified by listening alone.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1800,\n    \"prompt_tokens\": 3348,\n    \"total_tokens\": 5148\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "case": "code_only",
+      "file": "kw-03.wav",
+      "terms": [
+        "code"
+      ],
+      "speech": "The words are velvet orange. The code is seven four nine two.",
+      "sha256": "1f808adf5356385c4b5b7b031b2ded339f0c7f743386a893c4c926280bc0e24d",
+      "elapsed_seconds": 13.482,
+      "is_error": false,
+      "filter_reported": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-ea63eeb487ab",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\kw-03.wav",
+            "sha256": "1f808adf5356385c4b5b7b031b2ded339f0c7f743386a893c4c926280bc0e24d",
+            "bytes": 211668,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 4.798684807256236
+          }
+        ],
+        "observations": "### Exact Transcription\n\"The words are velvet orange. The code is seven four nine two.\"  \n*(or: \"The words are velvet orange. The code is 7492.\")*\n\n---\n\n### Audible Observations\n* **Total Duration:** 4.798684807256236 seconds (as specified in metadata).\n* **0.00 s – ~0.30 s:** Low-level baseline noise / pre-speech silence.\n* **~0.30 s – ~2.15 s:** Spoken phrase delivered in a clear, neutral cadence: *\"The words are velvet orange.\"*\n* **~2.15 s – ~2.55 s:** Brief natural pause between sentences.\n* **~2.55 s – ~4.50 s:** Spoken phrase with steady articulation: *\"The code is seven four nine two.\"*\n* **~4.50 s – ~4.80 s:** Post-speech silence / decay to the end of the file.\n* **Audio Characteristics:** Clean vocal presentation centered in mono, with low ambient background noise and no audible musical accompaniment or distortion.\n\n---\n\n### Suspected Causes\n* The voice articulation, consistent cadence, and uniform pacing suggest either a text-to-speech (TTS) voice synthesis model or an isolated, dry studio vocal recording.\n* The lack of stereo dimension or spatial movement is consistent with the single-channel (mono) format indicated in the metadata.\n\n---\n\n### Limitations & Items Not Assessed\n* Exact decibel levels, frequency spectrum measurements, or EQ curves cannot be measured by ear.\n* Specific microphone hardware, acoustic environment, or TTS software/voice model cannot be verified.\n* Stereo imaging and width cannot be evaluated as the file is monophonic.\n* No subjective quality scores or mixing certifications are provided.\n",
+        "usage": {
+          "completion_tokens": 2060,
+          "prompt_tokens": 3684,
+          "total_tokens": 5744
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-ea63eeb487ab\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\kw-03.wav\",\n      \"sha256\": \"1f808adf5356385c4b5b7b031b2ded339f0c7f743386a893c4c926280bc0e24d\",\n      \"bytes\": 211668,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 4.798684807256236\n    }\n  ],\n  \"observations\": \"### Exact Transcription\\n\\\"The words are velvet orange. The code is seven four nine two.\\\"  \\n*(or: \\\"The words are velvet orange. The code is 7492.\\\")*\\n\\n---\\n\\n### Audible Observations\\n* **Total Duration:** 4.798684807256236 seconds (as specified in metadata).\\n* **0.00 s – ~0.30 s:** Low-level baseline noise / pre-speech silence.\\n* **~0.30 s – ~2.15 s:** Spoken phrase delivered in a clear, neutral cadence: *\\\"The words are velvet orange.\\\"*\\n* **~2.15 s – ~2.55 s:** Brief natural pause between sentences.\\n* **~2.55 s – ~4.50 s:** Spoken phrase with steady articulation: *\\\"The code is seven four nine two.\\\"*\\n* **~4.50 s – ~4.80 s:** Post-speech silence / decay to the end of the file.\\n* **Audio Characteristics:** Clean vocal presentation centered in mono, with low ambient background noise and no audible musical accompaniment or distortion.\\n\\n---\\n\\n### Suspected Causes\\n* The voice articulation, consistent cadence, and uniform pacing suggest either a text-to-speech (TTS) voice synthesis model or an isolated, dry studio vocal recording.\\n* The lack of stereo dimension or spatial movement is consistent with the single-channel (mono) format indicated in the metadata.\\n\\n---\\n\\n### Limitations & Items Not Assessed\\n* Exact decibel levels, frequency spectrum measurements, or EQ curves cannot be measured by ear.\\n* Specific microphone hardware, acoustic environment, or TTS software/voice model cannot be verified.\\n* Stereo imaging and width cannot be evaluated as the file is monophonic.\\n* No subjective quality scores or mixing certifications are provided.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 2060,\n    \"prompt_tokens\": 3684,\n    \"total_tokens\": 5744\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "case": "secret_and_code",
+      "file": "kw-04.wav",
+      "terms": [
+        "secret",
+        "code"
+      ],
+      "speech": "The secret words are velvet orange. The code is seven four nine two.",
+      "sha256": "720164b7da0c4e21610e97ece8b0f103e2ca50b59daddffdf49cfe0822a7a5a0",
+      "elapsed_seconds": 10.572,
+      "is_error": false,
+      "filter_reported": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-ab18c590dfcd",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\kw-04.wav",
+            "sha256": "720164b7da0c4e21610e97ece8b0f103e2ca50b59daddffdf49cfe0822a7a5a0",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          }
+        ],
+        "observations": "### Transcription\n\"The secret words are velvet orange. The code is 7492.\" *(spoken as \"seven four nine two\")*\n\n---\n\n### Audible Observations\n*File: Attachment 1 (Duration: 5.208662131519274 seconds, mono)*\n* **0.00s – ~2.60s:** A clear speaking voice delivers the first phrase: *\"The secret words are velvet orange.\"*\n* **~2.60s – ~5.21s:** The speaker delivers the second phrase: *\"The code is 7492.\"* (articulated as *\"seven four nine two\"*), followed by the natural decay to the end of the file.\n\n---\n\n### Suspected Causes\n* The high intelligibility and absence of prominent background noise or room reflections suggest either a clean close-microphone studio vocal recording or direct text-to-speech synthesis.\n\n---\n\n### Limitations\n* Exact decibel/LUFS loudness levels, frequency response curves, and exact sub-second phoneme alignment boundaries cannot be verified by listening alone.\n* Only one attachment was provided, so no comparative loudness matching or multi-file comparison was conducted.\n",
+        "usage": {
+          "completion_tokens": 1877,
+          "prompt_tokens": 3533,
+          "total_tokens": 5410
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-ab18c590dfcd\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\kw-04.wav\",\n      \"sha256\": \"720164b7da0c4e21610e97ece8b0f103e2ca50b59daddffdf49cfe0822a7a5a0\",\n      \"bytes\": 229748,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 5.208662131519274\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The secret words are velvet orange. The code is 7492.\\\" *(spoken as \\\"seven four nine two\\\")*\\n\\n---\\n\\n### Audible Observations\\n*File: Attachment 1 (Duration: 5.208662131519274 seconds, mono)*\\n* **0.00s – ~2.60s:** A clear speaking voice delivers the first phrase: *\\\"The secret words are velvet orange.\\\"*\\n* **~2.60s – ~5.21s:** The speaker delivers the second phrase: *\\\"The code is 7492.\\\"* (articulated as *\\\"seven four nine two\\\"*), followed by the natural decay to the end of the file.\\n\\n---\\n\\n### Suspected Causes\\n* The high intelligibility and absence of prominent background noise or room reflections suggest either a clean close-microphone studio vocal recording or direct text-to-speech synthesis.\\n\\n---\\n\\n### Limitations\\n* Exact decibel/LUFS loudness levels, frequency response curves, and exact sub-second phoneme alignment boundaries cannot be verified by listening alone.\\n* Only one attachment was provided, so no comparative loudness matching or multi-file comparison was conducted.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1877,\n    \"prompt_tokens\": 3533,\n    \"total_tokens\": 5410\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "case": "music_technical",
+      "file": "kw-05.wav",
+      "terms": [
+        "attack",
+        "release"
+      ],
+      "speech": "The engineer adjusted the compressor attack and release.",
+      "sha256": "5cc4a428f47d72ce0538eefe2ba65d5bc1f75d9212e2c8015dbcbeefac4d2b22",
+      "elapsed_seconds": 8.511,
+      "is_error": false,
+      "filter_reported": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-62ecac096cb0",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\kw-05.wav",
+            "sha256": "5cc4a428f47d72ce0538eefe2ba65d5bc1f75d9212e2c8015dbcbeefac4d2b22",
+            "bytes": 166030,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 3.763809523809524
+          }
+        ],
+        "observations": "### Transcription\n\"The engineer adjusted the compressor attack and release\"\n\n---\n\n### Audible Observations\n- **0.00s – ~0.30s:** Brief silence / lead-in before vocal onset.\n- **~0.30s – ~3.50s:** A single voice clearly articulates the phrase: *\"The engineer adjusted the compressor attack and release.\"* The delivery is spoken at a steady, moderate pace with clear diction and minimal background interference.\n- **~3.50s – 3.76s (total duration 3.7638s):** Natural vocal tail-off and silence to the end of the recording.\n\n---\n\n### Suspected Causes\n- The high speech intelligibility and absence of room reverberation or noticeable noise suggest a direct voice recording made in an acoustically controlled or quiet indoor setting.\n\n---\n\n### Limitations\n- Exact frequency responses, precise decibel/loudness levels, and microphone hardware specifications cannot be verified or measured by listening alone.\n",
+        "usage": {
+          "completion_tokens": 1272,
+          "prompt_tokens": 3574,
+          "total_tokens": 4846
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-62ecac096cb0\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\kw-05.wav\",\n      \"sha256\": \"5cc4a428f47d72ce0538eefe2ba65d5bc1f75d9212e2c8015dbcbeefac4d2b22\",\n      \"bytes\": 166030,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 3.763809523809524\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The engineer adjusted the compressor attack and release\\\"\\n\\n---\\n\\n### Audible Observations\\n- **0.00s – ~0.30s:** Brief silence / lead-in before vocal onset.\\n- **~0.30s – ~3.50s:** A single voice clearly articulates the phrase: *\\\"The engineer adjusted the compressor attack and release.\\\"* The delivery is spoken at a steady, moderate pace with clear diction and minimal background interference.\\n- **~3.50s – 3.76s (total duration 3.7638s):** Natural vocal tail-off and silence to the end of the recording.\\n\\n---\\n\\n### Suspected Causes\\n- The high speech intelligibility and absence of room reverberation or noticeable noise suggest a direct voice recording made in an acoustically controlled or quiet indoor setting.\\n\\n---\\n\\n### Limitations\\n- Exact frequency responses, precise decibel/loudness levels, and microphone hardware specifications cannot be verified or measured by listening alone.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1272,\n    \"prompt_tokens\": 3574,\n    \"total_tokens\": 4846\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    },
+    {
+      "case": "music_slang",
+      "file": "kw-06.wav",
+      "terms": [
+        "killer",
+        "trap"
+      ],
+      "speech": "The chorus has a killer bass line and a trap beat.",
+      "sha256": "8bb68ff98b2fe3bedc7b2b8faa84aed6334bb0baa3871978dea7b3b861f8e90c",
+      "elapsed_seconds": 8.739,
+      "is_error": false,
+      "filter_reported": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-7d6887555be9",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\kw-06.wav",
+            "sha256": "8bb68ff98b2fe3bedc7b2b8faa84aed6334bb0baa3871978dea7b3b861f8e90c",
+            "bytes": 154566,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 3.5038548752834466
+          }
+        ],
+        "observations": "### Transcription\n\"The chorus has a killer bassline and a trap beat.\"\n\n---\n\n### Audible Observations\n* **0.00 s – ~0.25 s**: Brief pause/ambient lead-in prior to speech.\n* **~0.25 s – ~3.15 s**: A single clear speaking voice articulates the sentence: *\"The chorus has a killer bassline and a trap beat.\"*\n* **~3.15 s – 3.50 s** *(supplied duration: 3.50 s)*: Trailing silence/room atmosphere following the final syllable.\n\n---\n\n### Suspected Causes\n* **Acoustics & Voice Capture**: The vocal clarity and minimal reverberation suggest close-mic recording conditions or clean speech capture.\n* **Spatial Presentation**: The centered presentation aligns with the single-channel (mono) recording metadata.\n\n---\n\n### Limitations\n* Speech onset and offset timestamps are auditory approximations.\n* Perceptual evaluation cannot measure exact decibel levels, frequency balance (EQ), or certify audio production standards.\n",
+        "usage": {
+          "completion_tokens": 1177,
+          "prompt_tokens": 3706,
+          "total_tokens": 4883
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\n  \"schema_version\": \"gemini-listening-v1\",\n  \"status\": \"complete\",\n  \"backend\": \"gemini-subscription\",\n  \"response_id\": \"chatcmpl-agy-7d6887555be9\",\n  \"inputs\": [\n    {\n      \"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\kw-06.wav\",\n      \"sha256\": \"8bb68ff98b2fe3bedc7b2b8faa84aed6334bb0baa3871978dea7b3b861f8e90c\",\n      \"bytes\": 154566,\n      \"format\": \"wav\",\n      \"sample_rate\": 22050,\n      \"channels\": 1,\n      \"duration_seconds\": 3.5038548752834466\n    }\n  ],\n  \"observations\": \"### Transcription\\n\\\"The chorus has a killer bassline and a trap beat.\\\"\\n\\n---\\n\\n### Audible Observations\\n* **0.00 s – ~0.25 s**: Brief pause/ambient lead-in prior to speech.\\n* **~0.25 s – ~3.15 s**: A single clear speaking voice articulates the sentence: *\\\"The chorus has a killer bassline and a trap beat.\\\"*\\n* **~3.15 s – 3.50 s** *(supplied duration: 3.50 s)*: Trailing silence/room atmosphere following the final syllable.\\n\\n---\\n\\n### Suspected Causes\\n* **Acoustics & Voice Capture**: The vocal clarity and minimal reverberation suggest close-mic recording conditions or clean speech capture.\\n* **Spatial Presentation**: The centered presentation aligns with the single-channel (mono) recording metadata.\\n\\n---\\n\\n### Limitations\\n* Speech onset and offset timestamps are auditory approximations.\\n* Perceptual evaluation cannot measure exact decibel levels, frequency balance (EQ), or certify audio production standards.\\n\",\n  \"usage\": {\n    \"completion_tokens\": 1177,\n    \"prompt_tokens\": 3706,\n    \"total_tokens\": 4883\n  },\n  \"limitations\": [\n    \"Listening observations are not calibrated DSP measurements or professional mixing certification.\",\n    \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\",\n    \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"\n  ]\n}"
+      ]
+    }
+  ],
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true
+}

@@ -1,0 +1,153 @@
+{
+  "gateway": "http://127.0.0.1:4000",
+  "root": "C:\\Users\\stanc\\Music\\OSN_Captian_Aioz_LBI",
+  "mcp_version": "1.28.1",
+  "cases": [
+    {
+      "index": 0,
+      "case": "missing_file",
+      "tool": "analyze_audio",
+      "expected_error": "invalid_input",
+      "arguments": {
+        "asset_path": "nonexistent.wav",
+        "question": "听人声清晰度。",
+        "focus": [
+          "人声"
+        ]
+      },
+      "is_error": true,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "error",
+        "backend": "gemini-subscription",
+        "inputs": [],
+        "error": {
+          "code": "invalid_input",
+          "message": "[WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\stanc\\\\Music\\\\OSN_Captian_Aioz_LBI\\\\nonexistent.wav'",
+          "http_status": null,
+          "automatic_retry": false
+        },
+        "usage": null
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"error\", \"backend\": \"gemini-subscription\", \"inputs\": [], \"error\": {\"code\": \"invalid_input\", \"message\": \"[WinError 2] The system cannot find the file specified: 'C:\\\\\\\\Users\\\\\\\\stanc\\\\\\\\Music\\\\\\\\OSN_Captian_Aioz_LBI\\\\\\\\nonexistent.wav'\", \"http_status\": null, \"automatic_retry\": false}, \"usage\": null}"
+      ],
+      "elapsed_seconds": 0.003,
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 1,
+      "case": "oversize_playlist",
+      "tool": "analyze_audio",
+      "expected_error": "invalid_input",
+      "arguments": {
+        "asset_path": "Playlist Young Captain Best Song.mp3",
+        "question": "听人声清晰度。",
+        "focus": [
+          "人声"
+        ]
+      },
+      "is_error": true,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "error",
+        "backend": "gemini-subscription",
+        "inputs": [],
+        "error": {
+          "code": "invalid_input",
+          "message": "audio exceeds 20 MiB",
+          "http_status": null,
+          "automatic_retry": false
+        },
+        "usage": null
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"error\", \"backend\": \"gemini-subscription\", \"inputs\": [], \"error\": {\"code\": \"invalid_input\", \"message\": \"audio exceeds 20 MiB\", \"http_status\": null, \"automatic_retry\": false}, \"usage\": null}"
+      ],
+      "elapsed_seconds": 0.027,
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 2,
+      "case": "real_song_after_input_errors",
+      "tool": "analyze_audio",
+      "arguments": {
+        "asset_path": "test/BK-【凌晨三點 3AM】(audio).mp3",
+        "question": "简短描述人声、编曲和清晰度。不复述完整歌词，不估计精确测量值。",
+        "focus": [
+          "人声",
+          "编曲",
+          "清晰度"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-c18d8e286a9f",
+        "inputs": [
+          {
+            "path": "C:\\Users\\stanc\\Music\\OSN_Captian_Aioz_LBI\\test\\BK-【凌晨三點 3AM】(audio).mp3",
+            "sha256": "3437d6ea96d858a50d6e1ad08988cff6ed817b9e542d9e9e4cbf0fc8c768271f",
+            "bytes": 6426476,
+            "format": "mp3"
+          }
+        ],
+        "observations": "针对所提供的音频文件（附件 1），在人声、编曲及清晰度方面的具体分析如下：\n\n---\n\n### 一、 听觉观察（Audible Observations）\n\n#### 1. 人声（Vocals）\n* **0:00 - 0:17（前奏）**：以氛围感人声切片/采样铺底，带有明显的环境空间效果与低通滤波感。\n* **0:17 - 0:34（副歌）**：主唱男声进入，呈现旋律说唱（Melodic Rap / Emo Rap）风格。人声经由数字调音修饰，带有平滑的音高修正质感；声线居中，伴有立体声延时与混响尾音。\n* **0:34 - 0:51（主歌 1）**：转为节奏紧凑的半说半唱律动，咬字相对密集，动态平稳，辅以微弱的伴唱/叠轨作为支撑。\n* **0:51 - 1:08（过渡段/Pre-chorus）**：人声表现更偏抒情旋律化，情感起伏增加，句尾延音有明显空间扩散感。\n* **1:08 - 1:43（副歌与重复）**：主旋律重复，加入更多声部层叠与即兴垫音（Ad-libs），声音厚度有所提升。\n* **1:43 - 2:00（主歌 2）**：保持说唱叙事节奏，人声位置稳定，与背景打击乐紧密咬合。\n* **2:51 - 3:20（尾奏）**：人声逐渐淡出，以回声、短句重复与呼应为主，最后（约 3:15 处）以一段干声人声语音标签（Voice Tag）收尾。\n\n#### 2. 编曲（Arrangement）\n* **0:00 - 0:17**：氛围化合成器/电钢琴和弦与人声采样铺底，无打击乐，奠定夜晚感伤的基调。\n* **0:17 节点起**：经典的 Trap / R&B 鼓组进入，包含下潜明显的 808 低音（Sub-bass）、利落的拍手/军鼓（Clap/Snare）以及细碎且多滚奏（Rolls）的高频闭镲（Hi-hats）。\n* **段落结构**：采用“前奏 - 副歌 - 主歌 - 过渡 - 副歌 - 主歌 - 过渡 - 副歌 - 尾奏”的典型流行说唱结构。段落间的转换主要依赖鼓组的进出、808 低音的顿音切断以及人声切片过渡。\n* **2:51 之后**：打击乐节奏抽离，编曲重回空间垫音与键盘和弦，整体能量衰退直至结束。\n\n#### 3. 清晰度（Clarity）\n* **整体平衡**：主唱人声与伴奏层级分明，人声始终处于前景中心位置，即使在 808 低音和高频踩镲较密集时，人声词句与旋律线条依然具备良好的辨识度。\n* **频段分布**：高频（踩镲与人声齿音边缘）明亮；低频（808 与底鼓）较丰满；中频空间留给人声表现，未出现明显的乐器严重互掩现象。副歌多声部与混响叠加时，边缘略有软化，但整体层次依然稳定。\n\n---\n\n### 二、 推测原因（Suspected Causes，与听觉观察分开）\n\n* **人声音效处理**：听感上的现代流行说唱音色，推测使用了音高修正插件（如 Auto-tune 等）并设定了较快的响应速度，同时辅以较大幅度的动态压缩使响度均匀，并通过立体声延时（Delay）与板式/大混响（Reverb）烘托空旷孤独感。\n* **编曲与混音处理**：各乐器与人声分离清晰，推测混音阶段对伴奏中频进行了一定避让（如 EQ 衰减），并对底鼓与 808 进行了侧链或分频雕刻，使得低频具备冲击力而不至于掩蔽主唱中低频频段。\n\n---\n\n### 三、 评估局限与不可测说明（Limitations）\n\n* **无法进行绝对测量**：仅凭听觉分析，无法获取精确的声压级/响度数值（如 LUFS、dBFS）、具体频段均衡值（EQ 具体 Hz/dB）以及精确的立体声宽度角度。\n* **单文件评估**：本次仅提供单一音频（附件 1），不涉及与其他音频的响度匹配比较。\n* **非客观评价**：音乐风格、声效修饰深度及审美取向因人而异，此处不提供通用的品质优劣评分，亦不对音频的混音工程规格做绝对认证。\n",
+        "usage": {
+          "completion_tokens": 3687,
+          "prompt_tokens": 3449,
+          "total_tokens": 7136
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-c18d8e286a9f\", \"inputs\": [{\"path\": \"C:\\\\Users\\\\stanc\\\\Music\\\\OSN_Captian_Aioz_LBI\\\\test\\\\BK-【凌晨三點 3AM】(audio).mp3\", \"sha256\": \"3437d6ea96d858a50d6e1ad08988cff6ed817b9e542d9e9e4cbf0fc8c768271f\", \"bytes\": 6426476, \"format\": \"mp3\"}], \"observations\": \"针对所提供的音频文件（附件 1），在人声、编曲及清晰度方面的具体分析如下：\\n\\n---\\n\\n### 一、 听觉观察（Audible Observations）\\n\\n#### 1. 人声（Vocals）\\n* **0:00 - 0:17（前奏）**：以氛围感人声切片/采样铺底，带有明显的环境空间效果与低通滤波感。\\n* **0:17 - 0:34（副歌）**：主唱男声进入，呈现旋律说唱（Melodic Rap / Emo Rap）风格。人声经由数字调音修饰，带有平滑的音高修正质感；声线居中，伴有立体声延时与混响尾音。\\n* **0:34 - 0:51（主歌 1）**：转为节奏紧凑的半说半唱律动，咬字相对密集，动态平稳，辅以微弱的伴唱/叠轨作为支撑。\\n* **0:51 - 1:08（过渡段/Pre-chorus）**：人声表现更偏抒情旋律化，情感起伏增加，句尾延音有明显空间扩散感。\\n* **1:08 - 1:43（副歌与重复）**：主旋律重复，加入更多声部层叠与即兴垫音（Ad-libs），声音厚度有所提升。\\n* **1:43 - 2:00（主歌 2）**：保持说唱叙事节奏，人声位置稳定，与背景打击乐紧密咬合。\\n* **2:51 - 3:20（尾奏）**：人声逐渐淡出，以回声、短句重复与呼应为主，最后（约 3:15 处）以一段干声人声语音标签（Voice Tag）收尾。\\n\\n#### 2. 编曲（Arrangement）\\n* **0:00 - 0:17**：氛围化合成器/电钢琴和弦与人声采样铺底，无打击乐，奠定夜晚感伤的基调。\\n* **0:17 节点起**：经典的 Trap / R&B 鼓组进入，包含下潜明显的 808 低音（Sub-bass）、利落的拍手/军鼓（Clap/Snare）以及细碎且多滚奏（Rolls）的高频闭镲（Hi-hats）。\\n* **段落结构**：采用“前奏 - 副歌 - 主歌 - 过渡 - 副歌 - 主歌 - 过渡 - 副歌 - 尾奏”的典型流行说唱结构。段落间的转换主要依赖鼓组的进出、808 低音的顿音切断以及人声切片过渡。\\n* **2:51 之后**：打击乐节奏抽离，编曲重回空间垫音与键盘和弦，整体能量衰退直至结束。\\n\\n#### 3. 清晰度（Clarity）\\n* **整体平衡**：主唱人声与伴奏层级分明，人声始终处于前景中心位置，即使在 808 低音和高频踩镲较密集时，人声词句与旋律线条依然具备良好的辨识度。\\n* **频段分布**：高频（踩镲与人声齿音边缘）明亮；低频（808 与底鼓）较丰满；中频空间留给人声表现，未出现明显的乐器严重互掩现象。副歌多声部与混响叠加时，边缘略有软化，但整体层次依然稳定。\\n\\n---\\n\\n### 二、 推测原因（Suspected Causes，与听觉观察分开）\\n\\n* **人声音效处理**：听感上的现代流行说唱音色，推测使用了音高修正插件（如 Auto-tune 等）并设定了较快的响应速度，同时辅以较大幅度的动态压缩使响度均匀，并通过立体声延时（Delay）与板式/大混响（Reverb）烘托空旷孤独感。\\n* **编曲与混音处理**：各乐器与人声分离清晰，推测混音阶段对伴奏中频进行了一定避让（如 EQ 衰减），并对底鼓与 808 进行了侧链或分频雕刻，使得低频具备冲击力而不至于掩蔽主唱中低频频段。\\n\\n---\\n\\n### 三、 评估局限与不可测说明（Limitations）\\n\\n* **无法进行绝对测量**：仅凭听觉分析，无法获取精确的声压级/响度数值（如 LUFS、dBFS）、具体频段均衡值（EQ 具体 Hz/dB）以及精确的立体声宽度角度。\\n* **单文件评估**：本次仅提供单一音频（附件 1），不涉及与其他音频的响度匹配比较。\\n* **非客观评价**：音乐风格、声效修饰深度及审美取向因人而异，此处不提供通用的品质优劣评分，亦不对音频的混音工程规格做绝对认证。\\n\", \"usage\": {\"completion_tokens\": 3687, \"prompt_tokens\": 3449, \"total_tokens\": 7136}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 27.524,
+      "expected_outcome_matches": true
+    }
+  ],
+  "scope": "Live transport and refusal observations; not calibrated music-quality certification.",
+  "automatic_retry": false,
+  "concurrency": 1,
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 76,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "high"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "summary": {
+    "calls": 3,
+    "errors": 2,
+    "unexpected_outcomes": 0,
+    "known_provider_tokens": 7136,
+    "failed_usage": "Unknown here; inspect correlated bridge logs. Do not count missing usage as zero.",
+    "latency_seconds": [
+      0.003,
+      0.027,
+      27.524
+    ]
+  }
+}
