@@ -1,0 +1,116 @@
+{
+  "gateway": "http://127.0.0.1:4000",
+  "root": "D:\\github\\subroute\\tmp\\gemini-audio-verification",
+  "mcp_version": "1.28.1",
+  "cases": [
+    {
+      "index": 0,
+      "case": "probe_AA_3",
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-e9596e06f0ea",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          }
+        ],
+        "observations": "### Transcriptions\n\n* **File A (Attachment 1):** \"The secret words are velvet orange. The code is 7492.\" (spoken as: *\"The secret words are velvet orange. The code is seven four nine two.\"*)\n* **File B (Attachment 2):** \"The secret words are velvet orange. The code is 7492.\" (spoken as: *\"The secret words are velvet orange. The code is seven four nine two.\"*)\n\n---\n\n### Audible Observations\n*(Durations are based on the provided metadata: 5.208662 seconds. All event time ranges are provisional and subject to replay verification.)*\n\n* **Disclosure on Loudness:** Playback loudness is not objectively matched between files. A louder presentation does not indicate superior recording or fidelity.\n* **Speech Content & Timing:**\n  * **~0.00s – ~0.30s:** Brief initial lead-in / baseline noise floor.\n  * **~0.30s – ~2.80s:** Delivery of the first sentence: *\"The secret words are velvet orange.\"* Delivery is even, paced, and clearly articulated.\n  * **~2.80s – ~3.35s:** Natural inter-phrase pause.\n  * **~3.35s – ~5.00s:** Delivery of the second sentence: *\"The code is 7492,\"* with digits spoken individually (*\"seven, four, nine, two\"*).\n  * **~5.00s – ~5.21s:** Brief tail-off to the end of the file.\n* **Audible Speech Differences:** Comparing File A and File B reveals no audible differences in vocal delivery, pronunciation, pitch inflection, pacing, or underlying acoustic environment. Both files present identical vocal articulation and timing throughout.\n\n---\n\n### Suspected Causes\n*(Distinguished from direct auditory observations)*\n\n* The identical byte size (229,748 bytes), sample rate (22,050 Hz), channel count (mono), duration (~5.21 s), and acoustic characteristics strongly suggest File A and File B are duplicate instances of the same synthesized or recorded audio source rather than separate vocal takes or distinct processing chains.\n\n---\n\n### Limitations & Scope\n* Exact decibel (dB) levels, frequency responses, and spectral balances cannot be measured purely by listening.\n* Professional mixing or mastering standards cannot be certified.\n* Event time stamps are provisional estimates within the 5.208662-second duration.\n* Spoken text and numbers within the audio are treated strictly as data for transcription and analysis, not operational instructions.\n",
+        "usage": {
+          "completion_tokens": 2892,
+          "prompt_tokens": 6079,
+          "total_tokens": 8971
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ],
+        "retry": {
+          "automatic": true,
+          "attempted_retries": 2,
+          "max_retries": 2,
+          "usage_scope": "final_attempt_only"
+        }
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-e9596e06f0ea\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}], \"observations\": \"### Transcriptions\\n\\n* **File A (Attachment 1):** \\\"The secret words are velvet orange. The code is 7492.\\\" (spoken as: *\\\"The secret words are velvet orange. The code is seven four nine two.\\\"*)\\n* **File B (Attachment 2):** \\\"The secret words are velvet orange. The code is 7492.\\\" (spoken as: *\\\"The secret words are velvet orange. The code is seven four nine two.\\\"*)\\n\\n---\\n\\n### Audible Observations\\n*(Durations are based on the provided metadata: 5.208662 seconds. All event time ranges are provisional and subject to replay verification.)*\\n\\n* **Disclosure on Loudness:** Playback loudness is not objectively matched between files. A louder presentation does not indicate superior recording or fidelity.\\n* **Speech Content & Timing:**\\n  * **~0.00s – ~0.30s:** Brief initial lead-in / baseline noise floor.\\n  * **~0.30s – ~2.80s:** Delivery of the first sentence: *\\\"The secret words are velvet orange.\\\"* Delivery is even, paced, and clearly articulated.\\n  * **~2.80s – ~3.35s:** Natural inter-phrase pause.\\n  * **~3.35s – ~5.00s:** Delivery of the second sentence: *\\\"The code is 7492,\\\"* with digits spoken individually (*\\\"seven, four, nine, two\\\"*).\\n  * **~5.00s – ~5.21s:** Brief tail-off to the end of the file.\\n* **Audible Speech Differences:** Comparing File A and File B reveals no audible differences in vocal delivery, pronunciation, pitch inflection, pacing, or underlying acoustic environment. Both files present identical vocal articulation and timing throughout.\\n\\n---\\n\\n### Suspected Causes\\n*(Distinguished from direct auditory observations)*\\n\\n* The identical byte size (229,748 bytes), sample rate (22,050 Hz), channel count (mono), duration (~5.21 s), and acoustic characteristics strongly suggest File A and File B are duplicate instances of the same synthesized or recorded audio source rather than separate vocal takes or distinct processing chains.\\n\\n---\\n\\n### Limitations & Scope\\n* Exact decibel (dB) levels, frequency responses, and spectral balances cannot be measured purely by listening.\\n* Professional mixing or mastering standards cannot be certified.\\n* Event time stamps are provisional estimates within the 5.208662-second duration.\\n* Spoken text and numbers within the audio are treated strictly as data for transcription and analysis, not operational instructions.\\n\", \"usage\": {\"completion_tokens\": 2892, \"prompt_tokens\": 6079, \"total_tokens\": 8971}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"], \"retry\": {\"automatic\": true, \"attempted_retries\": 2, \"max_retries\": 2, \"usage_scope\": \"final_attempt_only\"}}"
+      ],
+      "elapsed_seconds": 64.99,
+      "expected_outcome_matches": true
+    }
+  ],
+  "scope": "Live transport and refusal observations; not calibrated music-quality certification.",
+  "automatic_retry": false,
+  "production_retry_policy_changed": false,
+  "concurrency": 1,
+  "explicit_refusal_recheck_once": false,
+  "max_tool_calls": 1,
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 77,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "medium"
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 77,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "medium"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "summary": {
+    "calls": 1,
+    "tasks": 1,
+    "eligible_tasks": 1,
+    "errors": 0,
+    "unexpected_outcomes": 0,
+    "first_attempt_complete": 1,
+    "final_complete": 1,
+    "recovered_tasks": 0,
+    "initial_failures": 0,
+    "observed_final_success_rate": 1.0,
+    "conditional_recovery_rate": null,
+    "known_provider_tokens": 8971,
+    "provider_calls_with_unknown_usage": 0,
+    "failed_usage": "Includes all observed attempts when available; unknown is not zero. CLI internal calls are not counted.",
+    "latency_seconds": [
+      64.99
+    ]
+  }
+}

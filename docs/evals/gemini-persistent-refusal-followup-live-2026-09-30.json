@@ -1,0 +1,793 @@
+{
+  "gateway": "http://127.0.0.1:4000",
+  "root": "D:\\github\\subroute\\tmp\\gemini-audio-verification",
+  "mcp_version": "1.28.1",
+  "cases": [
+    {
+      "index": 0,
+      "case": "probe_AB_3",
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind-b.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-087a3bd3ad30",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+            "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+            "bytes": 226886,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.143764172335601
+          }
+        ],
+        "observations": "### Disclosures & Input Metadata\n- **File A (attachment-1.wav):** Mono, 22,050 Hz, duration: ~5.21 seconds (5.208662 s).\n- **File B (attachment-2.wav):** Mono, 22,050 Hz, duration: ~5.14 seconds (5.143764 s).\n- **Loudness notice:** Loudness between the two files is not calibrated or matched; differences in volume should not be equated with differences in quality.\n- **Timing notice:** Event time ranges are provisional approximations within the supplied durations and should be verified by replay.\n\n---\n\n### Transcriptions\n\n- **File A:**  \n  *\"The secret words are velvet orange. The code is 7 4 9 2.\"* (spoken as: *\"seven four nine two\"*)\n\n- **File B:**  \n  *\"The secret words are silver river. The code is 5 8 2 1.\"* (spoken as: *\"five eight two one\"*)\n\n---\n\n### Audible Observations\n\n#### File A (attachment-1.wav)\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\n- **0.40s – 2.50s:** A synthetic male-sounding voice speaks: *\"The secret words are velvet orange.\"*\n- **2.50s – 3.10s:** Inter-phrase pause.\n- **3.10s – 4.90s:** Voice speaks: *\"The code is seven four nine two.\"*\n- **4.90s – 5.21s:** Trailing silence to file end.\n\n#### File B (attachment-2.wav)\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\n- **0.40s – 2.40s:** A voice with matching tonal characteristics speaks: *\"The secret words are silver river.\"*\n- **2.40s – 3.00s:** Inter-phrase pause.\n- **3.00s – 4.85s:** Voice speaks: *\"The code is five eight two one.\"*\n- **4.85s – 5.14s:** Trailing silence to file end.\n\n#### Audible Speech Differences\n- **Lexical Content:**\n  - File A identifies the secret words as **\"velvet orange\"**, whereas File B states **\"silver river\"**.\n  - File A delivers the four-digit sequence **\"7 4 9 2\"**, whereas File B delivers **\"5 8 2 1\"**.\n- **Timing & Prosody:**\n  - Both recordings share nearly identical sentence structure, pacing, pitch inflection, and pause durations, differing only in the phonetic duration of the differing words and digits.\n\n---\n\n### Suspected Causes\n- The high consistency in vocal timbre, cadence, and phoneme generation suggests both files were generated using the same text-to-speech (TTS) engine and voice model, with varying prompt text.\n\n---\n\n### Limitations\n- Exact decibel levels, precise spectral distribution, and absolute frequency responses cannot be measured purely by ear.\n- The underlying synthesis engine, model version, and exact sample generation parameters cannot be verified from listening alone.\n",
+        "usage": {
+          "completion_tokens": 2947,
+          "prompt_tokens": 6701,
+          "total_tokens": 9648
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-087a3bd3ad30\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind-b.wav\", \"sha256\": \"df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89\", \"bytes\": 226886, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.143764172335601}], \"observations\": \"### Disclosures & Input Metadata\\n- **File A (attachment-1.wav):** Mono, 22,050 Hz, duration: ~5.21 seconds (5.208662 s).\\n- **File B (attachment-2.wav):** Mono, 22,050 Hz, duration: ~5.14 seconds (5.143764 s).\\n- **Loudness notice:** Loudness between the two files is not calibrated or matched; differences in volume should not be equated with differences in quality.\\n- **Timing notice:** Event time ranges are provisional approximations within the supplied durations and should be verified by replay.\\n\\n---\\n\\n### Transcriptions\\n\\n- **File A:**  \\n  *\\\"The secret words are velvet orange. The code is 7 4 9 2.\\\"* (spoken as: *\\\"seven four nine two\\\"*)\\n\\n- **File B:**  \\n  *\\\"The secret words are silver river. The code is 5 8 2 1.\\\"* (spoken as: *\\\"five eight two one\\\"*)\\n\\n---\\n\\n### Audible Observations\\n\\n#### File A (attachment-1.wav)\\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\\n- **0.40s – 2.50s:** A synthetic male-sounding voice speaks: *\\\"The secret words are velvet orange.\\\"*\\n- **2.50s – 3.10s:** Inter-phrase pause.\\n- **3.10s – 4.90s:** Voice speaks: *\\\"The code is seven four nine two.\\\"*\\n- **4.90s – 5.21s:** Trailing silence to file end.\\n\\n#### File B (attachment-2.wav)\\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\\n- **0.40s – 2.40s:** A voice with matching tonal characteristics speaks: *\\\"The secret words are silver river.\\\"*\\n- **2.40s – 3.00s:** Inter-phrase pause.\\n- **3.00s – 4.85s:** Voice speaks: *\\\"The code is five eight two one.\\\"*\\n- **4.85s – 5.14s:** Trailing silence to file end.\\n\\n#### Audible Speech Differences\\n- **Lexical Content:**\\n  - File A identifies the secret words as **\\\"velvet orange\\\"**, whereas File B states **\\\"silver river\\\"**.\\n  - File A delivers the four-digit sequence **\\\"7 4 9 2\\\"**, whereas File B delivers **\\\"5 8 2 1\\\"**.\\n- **Timing & Prosody:**\\n  - Both recordings share nearly identical sentence structure, pacing, pitch inflection, and pause durations, differing only in the phonetic duration of the differing words and digits.\\n\\n---\\n\\n### Suspected Causes\\n- The high consistency in vocal timbre, cadence, and phoneme generation suggests both files were generated using the same text-to-speech (TTS) engine and voice model, with varying prompt text.\\n\\n---\\n\\n### Limitations\\n- Exact decibel levels, precise spectral distribution, and absolute frequency responses cannot be measured purely by ear.\\n- The underlying synthesis engine, model version, and exact sample generation parameters cannot be verified from listening alone.\\n\", \"usage\": {\"completion_tokens\": 2947, \"prompt_tokens\": 6701, \"total_tokens\": 9648}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 25.341,
+      "attempts": [
+        {
+          "is_error": false,
+          "structured_content": {
+            "schema_version": "gemini-listening-v1",
+            "status": "complete",
+            "backend": "gemini-subscription",
+            "response_id": "chatcmpl-agy-087a3bd3ad30",
+            "inputs": [
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              },
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+                "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+                "bytes": 226886,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.143764172335601
+              }
+            ],
+            "observations": "### Disclosures & Input Metadata\n- **File A (attachment-1.wav):** Mono, 22,050 Hz, duration: ~5.21 seconds (5.208662 s).\n- **File B (attachment-2.wav):** Mono, 22,050 Hz, duration: ~5.14 seconds (5.143764 s).\n- **Loudness notice:** Loudness between the two files is not calibrated or matched; differences in volume should not be equated with differences in quality.\n- **Timing notice:** Event time ranges are provisional approximations within the supplied durations and should be verified by replay.\n\n---\n\n### Transcriptions\n\n- **File A:**  \n  *\"The secret words are velvet orange. The code is 7 4 9 2.\"* (spoken as: *\"seven four nine two\"*)\n\n- **File B:**  \n  *\"The secret words are silver river. The code is 5 8 2 1.\"* (spoken as: *\"five eight two one\"*)\n\n---\n\n### Audible Observations\n\n#### File A (attachment-1.wav)\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\n- **0.40s – 2.50s:** A synthetic male-sounding voice speaks: *\"The secret words are velvet orange.\"*\n- **2.50s – 3.10s:** Inter-phrase pause.\n- **3.10s – 4.90s:** Voice speaks: *\"The code is seven four nine two.\"*\n- **4.90s – 5.21s:** Trailing silence to file end.\n\n#### File B (attachment-2.wav)\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\n- **0.40s – 2.40s:** A voice with matching tonal characteristics speaks: *\"The secret words are silver river.\"*\n- **2.40s – 3.00s:** Inter-phrase pause.\n- **3.00s – 4.85s:** Voice speaks: *\"The code is five eight two one.\"*\n- **4.85s – 5.14s:** Trailing silence to file end.\n\n#### Audible Speech Differences\n- **Lexical Content:**\n  - File A identifies the secret words as **\"velvet orange\"**, whereas File B states **\"silver river\"**.\n  - File A delivers the four-digit sequence **\"7 4 9 2\"**, whereas File B delivers **\"5 8 2 1\"**.\n- **Timing & Prosody:**\n  - Both recordings share nearly identical sentence structure, pacing, pitch inflection, and pause durations, differing only in the phonetic duration of the differing words and digits.\n\n---\n\n### Suspected Causes\n- The high consistency in vocal timbre, cadence, and phoneme generation suggests both files were generated using the same text-to-speech (TTS) engine and voice model, with varying prompt text.\n\n---\n\n### Limitations\n- Exact decibel levels, precise spectral distribution, and absolute frequency responses cannot be measured purely by ear.\n- The underlying synthesis engine, model version, and exact sample generation parameters cannot be verified from listening alone.\n",
+            "usage": {
+              "completion_tokens": 2947,
+              "prompt_tokens": 6701,
+              "total_tokens": 9648
+            },
+            "limitations": [
+              "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+              "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+              "Audio is transmitted to Google's Subscription service; this is not offline inference."
+            ]
+          },
+          "text": [
+            "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-087a3bd3ad30\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind-b.wav\", \"sha256\": \"df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89\", \"bytes\": 226886, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.143764172335601}], \"observations\": \"### Disclosures & Input Metadata\\n- **File A (attachment-1.wav):** Mono, 22,050 Hz, duration: ~5.21 seconds (5.208662 s).\\n- **File B (attachment-2.wav):** Mono, 22,050 Hz, duration: ~5.14 seconds (5.143764 s).\\n- **Loudness notice:** Loudness between the two files is not calibrated or matched; differences in volume should not be equated with differences in quality.\\n- **Timing notice:** Event time ranges are provisional approximations within the supplied durations and should be verified by replay.\\n\\n---\\n\\n### Transcriptions\\n\\n- **File A:**  \\n  *\\\"The secret words are velvet orange. The code is 7 4 9 2.\\\"* (spoken as: *\\\"seven four nine two\\\"*)\\n\\n- **File B:**  \\n  *\\\"The secret words are silver river. The code is 5 8 2 1.\\\"* (spoken as: *\\\"five eight two one\\\"*)\\n\\n---\\n\\n### Audible Observations\\n\\n#### File A (attachment-1.wav)\\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\\n- **0.40s – 2.50s:** A synthetic male-sounding voice speaks: *\\\"The secret words are velvet orange.\\\"*\\n- **2.50s – 3.10s:** Inter-phrase pause.\\n- **3.10s – 4.90s:** Voice speaks: *\\\"The code is seven four nine two.\\\"*\\n- **4.90s – 5.21s:** Trailing silence to file end.\\n\\n#### File B (attachment-2.wav)\\n- **0.00s – 0.40s:** Lead-in silence / low baseline floor.\\n- **0.40s – 2.40s:** A voice with matching tonal characteristics speaks: *\\\"The secret words are silver river.\\\"*\\n- **2.40s – 3.00s:** Inter-phrase pause.\\n- **3.00s – 4.85s:** Voice speaks: *\\\"The code is five eight two one.\\\"*\\n- **4.85s – 5.14s:** Trailing silence to file end.\\n\\n#### Audible Speech Differences\\n- **Lexical Content:**\\n  - File A identifies the secret words as **\\\"velvet orange\\\"**, whereas File B states **\\\"silver river\\\"**.\\n  - File A delivers the four-digit sequence **\\\"7 4 9 2\\\"**, whereas File B delivers **\\\"5 8 2 1\\\"**.\\n- **Timing & Prosody:**\\n  - Both recordings share nearly identical sentence structure, pacing, pitch inflection, and pause durations, differing only in the phonetic duration of the differing words and digits.\\n\\n---\\n\\n### Suspected Causes\\n- The high consistency in vocal timbre, cadence, and phoneme generation suggests both files were generated using the same text-to-speech (TTS) engine and voice model, with varying prompt text.\\n\\n---\\n\\n### Limitations\\n- Exact decibel levels, precise spectral distribution, and absolute frequency responses cannot be measured purely by ear.\\n- The underlying synthesis engine, model version, and exact sample generation parameters cannot be verified from listening alone.\\n\", \"usage\": {\"completion_tokens\": 2947, \"prompt_tokens\": 6701, \"total_tokens\": 9648}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+          ],
+          "elapsed_seconds": 25.341
+        }
+      ],
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 1,
+      "case": "probe_AA_3",
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "is_error": true,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "refused",
+        "backend": "gemini-subscription",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          }
+        ],
+        "error": {
+          "code": "provider_content_filter",
+          "message": "litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=d43e03fd70b44bc49b5229decfa2703b returned 502: provider_content_filter phase=after_attachment_reads conversation_id=d0f4c002-fb65-45c9-9467-dbe84b06b61f provider_usage=5932,456,6388 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException -",
+          "http_status": 502,
+          "automatic_retry": false,
+          "phase": "after_attachment_reads",
+          "request_id": "d43e03fd70b44bc49b5229decfa2703b",
+          "conversation_id": "d0f4c002-fb65-45c9-9467-dbe84b06b61f"
+        },
+        "usage": {
+          "prompt_tokens": 5932,
+          "completion_tokens": 456,
+          "total_tokens": 6388
+        }
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"refused\", \"backend\": \"gemini-subscription\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}], \"error\": {\"code\": \"provider_content_filter\", \"message\": \"litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=d43e03fd70b44bc49b5229decfa2703b returned 502: provider_content_filter phase=after_attachment_reads conversation_id=d0f4c002-fb65-45c9-9467-dbe84b06b61f provider_usage=5932,456,6388 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\\nAvailable Model Group Fallbacks=None\\nError doing the fallback: litellm.BadGatewayError: AntigravityException -\", \"http_status\": 502, \"automatic_retry\": false, \"phase\": \"after_attachment_reads\", \"request_id\": \"d43e03fd70b44bc49b5229decfa2703b\", \"conversation_id\": \"d0f4c002-fb65-45c9-9467-dbe84b06b61f\"}, \"usage\": {\"prompt_tokens\": 5932, \"completion_tokens\": 456, \"total_tokens\": 6388}}"
+      ],
+      "elapsed_seconds": 26.651,
+      "attempts": [
+        {
+          "is_error": true,
+          "structured_content": {
+            "schema_version": "gemini-listening-v1",
+            "status": "refused",
+            "backend": "gemini-subscription",
+            "inputs": [
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              },
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              }
+            ],
+            "error": {
+              "code": "provider_content_filter",
+              "message": "litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=b0cdc178b3b64f97a45cf41b0faffce6 returned 502: provider_content_filter phase=after_attachment_reads conversation_id=6ad73c15-0877-4d63-aaa1-ec7c49b03f90 provider_usage=3742,456,4198 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException -",
+              "http_status": 502,
+              "automatic_retry": false,
+              "phase": "after_attachment_reads",
+              "request_id": "b0cdc178b3b64f97a45cf41b0faffce6",
+              "conversation_id": "6ad73c15-0877-4d63-aaa1-ec7c49b03f90"
+            },
+            "usage": {
+              "prompt_tokens": 3742,
+              "completion_tokens": 456,
+              "total_tokens": 4198
+            }
+          },
+          "text": [
+            "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"refused\", \"backend\": \"gemini-subscription\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}], \"error\": {\"code\": \"provider_content_filter\", \"message\": \"litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=b0cdc178b3b64f97a45cf41b0faffce6 returned 502: provider_content_filter phase=after_attachment_reads conversation_id=6ad73c15-0877-4d63-aaa1-ec7c49b03f90 provider_usage=3742,456,4198 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\\nAvailable Model Group Fallbacks=None\\nError doing the fallback: litellm.BadGatewayError: AntigravityException -\", \"http_status\": 502, \"automatic_retry\": false, \"phase\": \"after_attachment_reads\", \"request_id\": \"b0cdc178b3b64f97a45cf41b0faffce6\", \"conversation_id\": \"6ad73c15-0877-4d63-aaa1-ec7c49b03f90\"}, \"usage\": {\"prompt_tokens\": 3742, \"completion_tokens\": 456, \"total_tokens\": 4198}}"
+          ],
+          "elapsed_seconds": 10.643
+        },
+        {
+          "is_error": true,
+          "structured_content": {
+            "schema_version": "gemini-listening-v1",
+            "status": "refused",
+            "backend": "gemini-subscription",
+            "inputs": [
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              },
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              }
+            ],
+            "error": {
+              "code": "provider_content_filter",
+              "message": "litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=d43e03fd70b44bc49b5229decfa2703b returned 502: provider_content_filter phase=after_attachment_reads conversation_id=d0f4c002-fb65-45c9-9467-dbe84b06b61f provider_usage=5932,456,6388 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException -",
+              "http_status": 502,
+              "automatic_retry": false,
+              "phase": "after_attachment_reads",
+              "request_id": "d43e03fd70b44bc49b5229decfa2703b",
+              "conversation_id": "d0f4c002-fb65-45c9-9467-dbe84b06b61f"
+            },
+            "usage": {
+              "prompt_tokens": 5932,
+              "completion_tokens": 456,
+              "total_tokens": 6388
+            }
+          },
+          "text": [
+            "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"refused\", \"backend\": \"gemini-subscription\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}], \"error\": {\"code\": \"provider_content_filter\", \"message\": \"litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=d43e03fd70b44bc49b5229decfa2703b returned 502: provider_content_filter phase=after_attachment_reads conversation_id=d0f4c002-fb65-45c9-9467-dbe84b06b61f provider_usage=5932,456,6388 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\\nAvailable Model Group Fallbacks=None\\nError doing the fallback: litellm.BadGatewayError: AntigravityException -\", \"http_status\": 502, \"automatic_retry\": false, \"phase\": \"after_attachment_reads\", \"request_id\": \"d43e03fd70b44bc49b5229decfa2703b\", \"conversation_id\": \"d0f4c002-fb65-45c9-9467-dbe84b06b61f\"}, \"usage\": {\"prompt_tokens\": 5932, \"completion_tokens\": 456, \"total_tokens\": 6388}}"
+          ],
+          "elapsed_seconds": 15.008
+        }
+      ],
+      "recheck_inputs_match": true,
+      "expected_outcome_matches": false
+    },
+    {
+      "index": 2,
+      "case": "probe_AA_2",
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-ca0a5f504ddb",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          }
+        ],
+        "observations": "### Transcriptions\n\n* **File A (Audio attachment 1):**  \n  \"The secret words are velvet orange. The code is 7492.\"\n\n* **File B (Audio attachment 2):**  \n  \"The secret words are velvet orange. The code is 7492.\"\n\n---\n\n### Comparative Disclosure & Setup\n* **Loudness matching:** Loudness between the files is not matched; increased loudness is not equated with higher quality.\n* **Duration:** Both files have a supplied duration of approximately 5.21 seconds (5.208662 seconds).\n* **Time range note:** All noted time ranges are provisional estimates within the 5.21-second duration and should be verified by replaying.\n\n---\n\n### Audible Observations (with Time Ranges)\n* **0.00s – 2.80s:** A spoken voice delivers the phrase: *\"The secret words are velvet orange.\"* Cadence, tone, and pacing are identical in both File A and File B.\n* **2.80s – 3.20s:** A brief pause separates the two spoken sentences in both files.\n* **3.20s – 5.00s:** The voice speaks the second sentence: *\"The code is 7492\"* (spoken digit-by-digit: *seven four nine two*).\n* **Audible Speech Differences:** Comparing File A and File B across the entire 5.21 seconds reveals no audible differences in wording, pronunciation, delivery timing, pitch, or vocal timbre.\n\n---\n\n### Suspected Causes\n* Given that both files share the exact same byte length (229,748 bytes), sample rate (22,050 Hz), duration (5.208662 seconds), and audible waveform characteristics, File A and File B are suspected to be duplicate copies or identical exports of the same recorded/synthesized audio file.\n\n---\n\n### Limitations\n* Exact EQ curves, decibel (dB) levels, frequency responses, and harmonic distortion cannot be measured purely by ear.\n* Exact microsecond start/end timestamps of individual phonemes cannot be certified without digital waveform editing tools.\n* Beyond audible perception, imperceptible bit-level variations or metadata header differences cannot be assessed by listening alone.\n",
+        "usage": {
+          "completion_tokens": 2569,
+          "prompt_tokens": 3825,
+          "total_tokens": 6394
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-ca0a5f504ddb\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}], \"observations\": \"### Transcriptions\\n\\n* **File A (Audio attachment 1):**  \\n  \\\"The secret words are velvet orange. The code is 7492.\\\"\\n\\n* **File B (Audio attachment 2):**  \\n  \\\"The secret words are velvet orange. The code is 7492.\\\"\\n\\n---\\n\\n### Comparative Disclosure & Setup\\n* **Loudness matching:** Loudness between the files is not matched; increased loudness is not equated with higher quality.\\n* **Duration:** Both files have a supplied duration of approximately 5.21 seconds (5.208662 seconds).\\n* **Time range note:** All noted time ranges are provisional estimates within the 5.21-second duration and should be verified by replaying.\\n\\n---\\n\\n### Audible Observations (with Time Ranges)\\n* **0.00s – 2.80s:** A spoken voice delivers the phrase: *\\\"The secret words are velvet orange.\\\"* Cadence, tone, and pacing are identical in both File A and File B.\\n* **2.80s – 3.20s:** A brief pause separates the two spoken sentences in both files.\\n* **3.20s – 5.00s:** The voice speaks the second sentence: *\\\"The code is 7492\\\"* (spoken digit-by-digit: *seven four nine two*).\\n* **Audible Speech Differences:** Comparing File A and File B across the entire 5.21 seconds reveals no audible differences in wording, pronunciation, delivery timing, pitch, or vocal timbre.\\n\\n---\\n\\n### Suspected Causes\\n* Given that both files share the exact same byte length (229,748 bytes), sample rate (22,050 Hz), duration (5.208662 seconds), and audible waveform characteristics, File A and File B are suspected to be duplicate copies or identical exports of the same recorded/synthesized audio file.\\n\\n---\\n\\n### Limitations\\n* Exact EQ curves, decibel (dB) levels, frequency responses, and harmonic distortion cannot be measured purely by ear.\\n* Exact microsecond start/end timestamps of individual phonemes cannot be certified without digital waveform editing tools.\\n* Beyond audible perception, imperceptible bit-level variations or metadata header differences cannot be assessed by listening alone.\\n\", \"usage\": {\"completion_tokens\": 2569, \"prompt_tokens\": 3825, \"total_tokens\": 6394}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 32.953,
+      "attempts": [
+        {
+          "is_error": true,
+          "structured_content": {
+            "schema_version": "gemini-listening-v1",
+            "status": "refused",
+            "backend": "gemini-subscription",
+            "inputs": [
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              },
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              }
+            ],
+            "error": {
+              "code": "provider_content_filter",
+              "message": "litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=e81d2795a3be4a01923c29588f2a3964 returned 502: provider_content_filter phase=after_attachment_reads conversation_id=861c2292-be36-4b86-aa25-13e0506f3b11 provider_usage=6113,620,6733 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException -",
+              "http_status": 502,
+              "automatic_retry": false,
+              "phase": "after_attachment_reads",
+              "request_id": "e81d2795a3be4a01923c29588f2a3964",
+              "conversation_id": "861c2292-be36-4b86-aa25-13e0506f3b11"
+            },
+            "usage": {
+              "prompt_tokens": 6113,
+              "completion_tokens": 620,
+              "total_tokens": 6733
+            }
+          },
+          "text": [
+            "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"refused\", \"backend\": \"gemini-subscription\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}], \"error\": {\"code\": \"provider_content_filter\", \"message\": \"litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=e81d2795a3be4a01923c29588f2a3964 returned 502: provider_content_filter phase=after_attachment_reads conversation_id=861c2292-be36-4b86-aa25-13e0506f3b11 provider_usage=6113,620,6733 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\\nAvailable Model Group Fallbacks=None\\nError doing the fallback: litellm.BadGatewayError: AntigravityException -\", \"http_status\": 502, \"automatic_retry\": false, \"phase\": \"after_attachment_reads\", \"request_id\": \"e81d2795a3be4a01923c29588f2a3964\", \"conversation_id\": \"861c2292-be36-4b86-aa25-13e0506f3b11\"}, \"usage\": {\"prompt_tokens\": 6113, \"completion_tokens\": 620, \"total_tokens\": 6733}}"
+          ],
+          "elapsed_seconds": 10.655
+        },
+        {
+          "is_error": false,
+          "structured_content": {
+            "schema_version": "gemini-listening-v1",
+            "status": "complete",
+            "backend": "gemini-subscription",
+            "response_id": "chatcmpl-agy-ca0a5f504ddb",
+            "inputs": [
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              },
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              }
+            ],
+            "observations": "### Transcriptions\n\n* **File A (Audio attachment 1):**  \n  \"The secret words are velvet orange. The code is 7492.\"\n\n* **File B (Audio attachment 2):**  \n  \"The secret words are velvet orange. The code is 7492.\"\n\n---\n\n### Comparative Disclosure & Setup\n* **Loudness matching:** Loudness between the files is not matched; increased loudness is not equated with higher quality.\n* **Duration:** Both files have a supplied duration of approximately 5.21 seconds (5.208662 seconds).\n* **Time range note:** All noted time ranges are provisional estimates within the 5.21-second duration and should be verified by replaying.\n\n---\n\n### Audible Observations (with Time Ranges)\n* **0.00s – 2.80s:** A spoken voice delivers the phrase: *\"The secret words are velvet orange.\"* Cadence, tone, and pacing are identical in both File A and File B.\n* **2.80s – 3.20s:** A brief pause separates the two spoken sentences in both files.\n* **3.20s – 5.00s:** The voice speaks the second sentence: *\"The code is 7492\"* (spoken digit-by-digit: *seven four nine two*).\n* **Audible Speech Differences:** Comparing File A and File B across the entire 5.21 seconds reveals no audible differences in wording, pronunciation, delivery timing, pitch, or vocal timbre.\n\n---\n\n### Suspected Causes\n* Given that both files share the exact same byte length (229,748 bytes), sample rate (22,050 Hz), duration (5.208662 seconds), and audible waveform characteristics, File A and File B are suspected to be duplicate copies or identical exports of the same recorded/synthesized audio file.\n\n---\n\n### Limitations\n* Exact EQ curves, decibel (dB) levels, frequency responses, and harmonic distortion cannot be measured purely by ear.\n* Exact microsecond start/end timestamps of individual phonemes cannot be certified without digital waveform editing tools.\n* Beyond audible perception, imperceptible bit-level variations or metadata header differences cannot be assessed by listening alone.\n",
+            "usage": {
+              "completion_tokens": 2569,
+              "prompt_tokens": 3825,
+              "total_tokens": 6394
+            },
+            "limitations": [
+              "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+              "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+              "Audio is transmitted to Google's Subscription service; this is not offline inference."
+            ]
+          },
+          "text": [
+            "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-ca0a5f504ddb\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}], \"observations\": \"### Transcriptions\\n\\n* **File A (Audio attachment 1):**  \\n  \\\"The secret words are velvet orange. The code is 7492.\\\"\\n\\n* **File B (Audio attachment 2):**  \\n  \\\"The secret words are velvet orange. The code is 7492.\\\"\\n\\n---\\n\\n### Comparative Disclosure & Setup\\n* **Loudness matching:** Loudness between the files is not matched; increased loudness is not equated with higher quality.\\n* **Duration:** Both files have a supplied duration of approximately 5.21 seconds (5.208662 seconds).\\n* **Time range note:** All noted time ranges are provisional estimates within the 5.21-second duration and should be verified by replaying.\\n\\n---\\n\\n### Audible Observations (with Time Ranges)\\n* **0.00s – 2.80s:** A spoken voice delivers the phrase: *\\\"The secret words are velvet orange.\\\"* Cadence, tone, and pacing are identical in both File A and File B.\\n* **2.80s – 3.20s:** A brief pause separates the two spoken sentences in both files.\\n* **3.20s – 5.00s:** The voice speaks the second sentence: *\\\"The code is 7492\\\"* (spoken digit-by-digit: *seven four nine two*).\\n* **Audible Speech Differences:** Comparing File A and File B across the entire 5.21 seconds reveals no audible differences in wording, pronunciation, delivery timing, pitch, or vocal timbre.\\n\\n---\\n\\n### Suspected Causes\\n* Given that both files share the exact same byte length (229,748 bytes), sample rate (22,050 Hz), duration (5.208662 seconds), and audible waveform characteristics, File A and File B are suspected to be duplicate copies or identical exports of the same recorded/synthesized audio file.\\n\\n---\\n\\n### Limitations\\n* Exact EQ curves, decibel (dB) levels, frequency responses, and harmonic distortion cannot be measured purely by ear.\\n* Exact microsecond start/end timestamps of individual phonemes cannot be certified without digital waveform editing tools.\\n* Beyond audible perception, imperceptible bit-level variations or metadata header differences cannot be assessed by listening alone.\\n\", \"usage\": {\"completion_tokens\": 2569, \"prompt_tokens\": 3825, \"total_tokens\": 6394}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+          ],
+          "elapsed_seconds": 21.298
+        }
+      ],
+      "recheck_inputs_match": true,
+      "expected_outcome_matches": true
+    },
+    {
+      "index": 3,
+      "case": "probe_AB_2",
+      "tool": "compare_audio",
+      "arguments": {
+        "a_path": "blind.wav",
+        "b_path": "blind-b.wav",
+        "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+        "focus": [
+          "audible speech differences"
+        ]
+      },
+      "is_error": false,
+      "structured_content": {
+        "schema_version": "gemini-listening-v1",
+        "status": "complete",
+        "backend": "gemini-subscription",
+        "response_id": "chatcmpl-agy-4ce42421565b",
+        "inputs": [
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+            "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+            "bytes": 229748,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.208662131519274
+          },
+          {
+            "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+            "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+            "bytes": 226886,
+            "format": "wav",
+            "sample_rate": 22050,
+            "channels": 1,
+            "duration_seconds": 5.143764172335601
+          }
+        ],
+        "observations": "### Transcriptions\n\n* **File A (Audio attachment 1):**  \n  > \"The secret words are velvet orange. The code is 7492.\" *(Spoken as: \"seven four nine two\")*\n\n* **File B (Audio attachment 2):**  \n  > \"The secret words are silver river. The code is 5821.\" *(Spoken as: \"five eight two one\")*\n\n---\n\n### Audible Observations\n\n*(Disclosure: Loudness is not matched between files; no assumption is made equating loudness with higher quality. Timings are provisional and within the supplied durations of 5.21 seconds for File A and 5.14 seconds for File B.)*\n\n* **File A (attachment 1, supplied duration: ~5.21 s):**\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\n  * **0.30 s – 2.40 s:** First spoken phrase: *\"The secret words are velvet orange.\"*\n  * **2.40 s – 3.00 s:** Brief conversational pause between sentences.\n  * **3.00 s – 4.90 s:** Second spoken phrase: *\"The code is 7492\"* (articulated as discrete digits: *seven, four, nine, two*).\n  * **4.90 s – 5.21 s:** Trailing room silence to the end of the file.\n\n* **File B (attachment 2, supplied duration: ~5.14 s):**\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\n  * **0.30 s – 2.35 s:** First spoken phrase: *\"The secret words are silver river.\"*\n  * **2.35 s – 2.95 s:** Brief conversational pause between sentences.\n  * **2.95 s – 4.85 s:** Second spoken phrase: *\"The code is 5821\"* (articulated as discrete digits: *five, eight, two, one*).\n  * **4.85 s – 5.14 s:** Trailing room silence to the end of the file.\n\n* **Audible Speech Differences:**\n  * **Lexical variation:** File A features the target phrase *\"velvet orange\"* and the numeric sequence *\"7 4 9 2\"*, whereas File B features *\"silver river\"* and the numeric sequence *\"5 8 2 1\"*.\n  * **Phonetic & temporal profile:** The structural delivery, tone, and pacing are nearly identical, with minor variations in syllable cadence corresponding directly to the different phonetic lengths of the spoken words and numbers.\n\n---\n\n### Suspected Causes\n\n* **Phonetic composition:** The slight timing differences in phrase boundaries (e.g., File A spanning ~5.21 s vs. File B spanning ~5.14 s) are consistent with differing syllable lengths between \"velvet orange\" / \"7492\" and \"silver river\" / \"5821\".\n* **Consistent voice profile:** The identical vocal quality, baseline pitch, and pacing between both files suggest they were produced by the same speaker or synthesized using the same text-to-speech (TTS) voice model under identical acoustic parameters.\n\n---\n\n### Limitations\n\n* Absolute loudness, exact frequency curves, and dynamic range values cannot be measured or certified by auditory listening alone.\n* Event time stamps are provisional approximations and should be verified with a dedicated waveform editor.\n* Whether the recordings originate from a natural human voice or a synthetic text-to-speech engine cannot be conclusively established solely from listening.\n",
+        "usage": {
+          "completion_tokens": 2798,
+          "prompt_tokens": 5896,
+          "total_tokens": 8694
+        },
+        "limitations": [
+          "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+          "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+          "Audio is transmitted to Google's Subscription service; this is not offline inference."
+        ]
+      },
+      "text": [
+        "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-4ce42421565b\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind-b.wav\", \"sha256\": \"df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89\", \"bytes\": 226886, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.143764172335601}], \"observations\": \"### Transcriptions\\n\\n* **File A (Audio attachment 1):**  \\n  > \\\"The secret words are velvet orange. The code is 7492.\\\" *(Spoken as: \\\"seven four nine two\\\")*\\n\\n* **File B (Audio attachment 2):**  \\n  > \\\"The secret words are silver river. The code is 5821.\\\" *(Spoken as: \\\"five eight two one\\\")*\\n\\n---\\n\\n### Audible Observations\\n\\n*(Disclosure: Loudness is not matched between files; no assumption is made equating loudness with higher quality. Timings are provisional and within the supplied durations of 5.21 seconds for File A and 5.14 seconds for File B.)*\\n\\n* **File A (attachment 1, supplied duration: ~5.21 s):**\\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\\n  * **0.30 s – 2.40 s:** First spoken phrase: *\\\"The secret words are velvet orange.\\\"*\\n  * **2.40 s – 3.00 s:** Brief conversational pause between sentences.\\n  * **3.00 s – 4.90 s:** Second spoken phrase: *\\\"The code is 7492\\\"* (articulated as discrete digits: *seven, four, nine, two*).\\n  * **4.90 s – 5.21 s:** Trailing room silence to the end of the file.\\n\\n* **File B (attachment 2, supplied duration: ~5.14 s):**\\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\\n  * **0.30 s – 2.35 s:** First spoken phrase: *\\\"The secret words are silver river.\\\"*\\n  * **2.35 s – 2.95 s:** Brief conversational pause between sentences.\\n  * **2.95 s – 4.85 s:** Second spoken phrase: *\\\"The code is 5821\\\"* (articulated as discrete digits: *five, eight, two, one*).\\n  * **4.85 s – 5.14 s:** Trailing room silence to the end of the file.\\n\\n* **Audible Speech Differences:**\\n  * **Lexical variation:** File A features the target phrase *\\\"velvet orange\\\"* and the numeric sequence *\\\"7 4 9 2\\\"*, whereas File B features *\\\"silver river\\\"* and the numeric sequence *\\\"5 8 2 1\\\"*.\\n  * **Phonetic & temporal profile:** The structural delivery, tone, and pacing are nearly identical, with minor variations in syllable cadence corresponding directly to the different phonetic lengths of the spoken words and numbers.\\n\\n---\\n\\n### Suspected Causes\\n\\n* **Phonetic composition:** The slight timing differences in phrase boundaries (e.g., File A spanning ~5.21 s vs. File B spanning ~5.14 s) are consistent with differing syllable lengths between \\\"velvet orange\\\" / \\\"7492\\\" and \\\"silver river\\\" / \\\"5821\\\".\\n* **Consistent voice profile:** The identical vocal quality, baseline pitch, and pacing between both files suggest they were produced by the same speaker or synthesized using the same text-to-speech (TTS) voice model under identical acoustic parameters.\\n\\n---\\n\\n### Limitations\\n\\n* Absolute loudness, exact frequency curves, and dynamic range values cannot be measured or certified by auditory listening alone.\\n* Event time stamps are provisional approximations and should be verified with a dedicated waveform editor.\\n* Whether the recordings originate from a natural human voice or a synthetic text-to-speech engine cannot be conclusively established solely from listening.\\n\", \"usage\": {\"completion_tokens\": 2798, \"prompt_tokens\": 5896, \"total_tokens\": 8694}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+      ],
+      "elapsed_seconds": 15.586,
+      "attempts": [
+        {
+          "is_error": false,
+          "structured_content": {
+            "schema_version": "gemini-listening-v1",
+            "status": "complete",
+            "backend": "gemini-subscription",
+            "response_id": "chatcmpl-agy-4ce42421565b",
+            "inputs": [
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+                "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+                "bytes": 229748,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.208662131519274
+              },
+              {
+                "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+                "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+                "bytes": 226886,
+                "format": "wav",
+                "sample_rate": 22050,
+                "channels": 1,
+                "duration_seconds": 5.143764172335601
+              }
+            ],
+            "observations": "### Transcriptions\n\n* **File A (Audio attachment 1):**  \n  > \"The secret words are velvet orange. The code is 7492.\" *(Spoken as: \"seven four nine two\")*\n\n* **File B (Audio attachment 2):**  \n  > \"The secret words are silver river. The code is 5821.\" *(Spoken as: \"five eight two one\")*\n\n---\n\n### Audible Observations\n\n*(Disclosure: Loudness is not matched between files; no assumption is made equating loudness with higher quality. Timings are provisional and within the supplied durations of 5.21 seconds for File A and 5.14 seconds for File B.)*\n\n* **File A (attachment 1, supplied duration: ~5.21 s):**\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\n  * **0.30 s – 2.40 s:** First spoken phrase: *\"The secret words are velvet orange.\"*\n  * **2.40 s – 3.00 s:** Brief conversational pause between sentences.\n  * **3.00 s – 4.90 s:** Second spoken phrase: *\"The code is 7492\"* (articulated as discrete digits: *seven, four, nine, two*).\n  * **4.90 s – 5.21 s:** Trailing room silence to the end of the file.\n\n* **File B (attachment 2, supplied duration: ~5.14 s):**\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\n  * **0.30 s – 2.35 s:** First spoken phrase: *\"The secret words are silver river.\"*\n  * **2.35 s – 2.95 s:** Brief conversational pause between sentences.\n  * **2.95 s – 4.85 s:** Second spoken phrase: *\"The code is 5821\"* (articulated as discrete digits: *five, eight, two, one*).\n  * **4.85 s – 5.14 s:** Trailing room silence to the end of the file.\n\n* **Audible Speech Differences:**\n  * **Lexical variation:** File A features the target phrase *\"velvet orange\"* and the numeric sequence *\"7 4 9 2\"*, whereas File B features *\"silver river\"* and the numeric sequence *\"5 8 2 1\"*.\n  * **Phonetic & temporal profile:** The structural delivery, tone, and pacing are nearly identical, with minor variations in syllable cadence corresponding directly to the different phonetic lengths of the spoken words and numbers.\n\n---\n\n### Suspected Causes\n\n* **Phonetic composition:** The slight timing differences in phrase boundaries (e.g., File A spanning ~5.21 s vs. File B spanning ~5.14 s) are consistent with differing syllable lengths between \"velvet orange\" / \"7492\" and \"silver river\" / \"5821\".\n* **Consistent voice profile:** The identical vocal quality, baseline pitch, and pacing between both files suggest they were produced by the same speaker or synthesized using the same text-to-speech (TTS) voice model under identical acoustic parameters.\n\n---\n\n### Limitations\n\n* Absolute loudness, exact frequency curves, and dynamic range values cannot be measured or certified by auditory listening alone.\n* Event time stamps are provisional approximations and should be verified with a dedicated waveform editor.\n* Whether the recordings originate from a natural human voice or a synthetic text-to-speech engine cannot be conclusively established solely from listening.\n",
+            "usage": {
+              "completion_tokens": 2798,
+              "prompt_tokens": 5896,
+              "total_tokens": 8694
+            },
+            "limitations": [
+              "Listening observations are not calibrated DSP measurements or professional mixing certification.",
+              "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
+              "Audio is transmitted to Google's Subscription service; this is not offline inference."
+            ]
+          },
+          "text": [
+            "{\"schema_version\": \"gemini-listening-v1\", \"status\": \"complete\", \"backend\": \"gemini-subscription\", \"response_id\": \"chatcmpl-agy-4ce42421565b\", \"inputs\": [{\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind.wav\", \"sha256\": \"57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3\", \"bytes\": 229748, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.208662131519274}, {\"path\": \"D:\\\\github\\\\subroute\\\\tmp\\\\gemini-audio-verification\\\\blind-b.wav\", \"sha256\": \"df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89\", \"bytes\": 226886, \"format\": \"wav\", \"sample_rate\": 22050, \"channels\": 1, \"duration_seconds\": 5.143764172335601}], \"observations\": \"### Transcriptions\\n\\n* **File A (Audio attachment 1):**  \\n  > \\\"The secret words are velvet orange. The code is 7492.\\\" *(Spoken as: \\\"seven four nine two\\\")*\\n\\n* **File B (Audio attachment 2):**  \\n  > \\\"The secret words are silver river. The code is 5821.\\\" *(Spoken as: \\\"five eight two one\\\")*\\n\\n---\\n\\n### Audible Observations\\n\\n*(Disclosure: Loudness is not matched between files; no assumption is made equating loudness with higher quality. Timings are provisional and within the supplied durations of 5.21 seconds for File A and 5.14 seconds for File B.)*\\n\\n* **File A (attachment 1, supplied duration: ~5.21 s):**\\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\\n  * **0.30 s – 2.40 s:** First spoken phrase: *\\\"The secret words are velvet orange.\\\"*\\n  * **2.40 s – 3.00 s:** Brief conversational pause between sentences.\\n  * **3.00 s – 4.90 s:** Second spoken phrase: *\\\"The code is 7492\\\"* (articulated as discrete digits: *seven, four, nine, two*).\\n  * **4.90 s – 5.21 s:** Trailing room silence to the end of the file.\\n\\n* **File B (attachment 2, supplied duration: ~5.14 s):**\\n  * **0.00 s – 0.30 s:** Initial lead-in silence / ambient floor.\\n  * **0.30 s – 2.35 s:** First spoken phrase: *\\\"The secret words are silver river.\\\"*\\n  * **2.35 s – 2.95 s:** Brief conversational pause between sentences.\\n  * **2.95 s – 4.85 s:** Second spoken phrase: *\\\"The code is 5821\\\"* (articulated as discrete digits: *five, eight, two, one*).\\n  * **4.85 s – 5.14 s:** Trailing room silence to the end of the file.\\n\\n* **Audible Speech Differences:**\\n  * **Lexical variation:** File A features the target phrase *\\\"velvet orange\\\"* and the numeric sequence *\\\"7 4 9 2\\\"*, whereas File B features *\\\"silver river\\\"* and the numeric sequence *\\\"5 8 2 1\\\"*.\\n  * **Phonetic & temporal profile:** The structural delivery, tone, and pacing are nearly identical, with minor variations in syllable cadence corresponding directly to the different phonetic lengths of the spoken words and numbers.\\n\\n---\\n\\n### Suspected Causes\\n\\n* **Phonetic composition:** The slight timing differences in phrase boundaries (e.g., File A spanning ~5.21 s vs. File B spanning ~5.14 s) are consistent with differing syllable lengths between \\\"velvet orange\\\" / \\\"7492\\\" and \\\"silver river\\\" / \\\"5821\\\".\\n* **Consistent voice profile:** The identical vocal quality, baseline pitch, and pacing between both files suggest they were produced by the same speaker or synthesized using the same text-to-speech (TTS) voice model under identical acoustic parameters.\\n\\n---\\n\\n### Limitations\\n\\n* Absolute loudness, exact frequency curves, and dynamic range values cannot be measured or certified by auditory listening alone.\\n* Event time stamps are provisional approximations and should be verified with a dedicated waveform editor.\\n* Whether the recordings originate from a natural human voice or a synthetic text-to-speech engine cannot be conclusively established solely from listening.\\n\", \"usage\": {\"completion_tokens\": 2798, \"prompt_tokens\": 5896, \"total_tokens\": 8694}, \"limitations\": [\"Listening observations are not calibrated DSP measurements or professional mixing certification.\", \"Comparison files are not loudness matched; no automatic processing or DAW edits are performed.\", \"Audio is transmitted to Google's Subscription service; this is not offline inference.\"]}"
+          ],
+          "elapsed_seconds": 15.586
+        }
+      ],
+      "expected_outcome_matches": true
+    }
+  ],
+  "scope": "Live transport and refusal observations; not calibrated music-quality certification.",
+  "automatic_retry": true,
+  "production_retry_policy_changed": false,
+  "concurrency": 1,
+  "explicit_refusal_recheck_once": true,
+  "max_tool_calls": 8,
+  "attempt_ledger": [
+    {
+      "index": 0,
+      "case": "probe_AB_3",
+      "is_error": false,
+      "elapsed_seconds": 25.341,
+      "status": "complete",
+      "error": null,
+      "inputs": [
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        },
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+          "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+          "bytes": 226886,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.143764172335601
+        }
+      ],
+      "usage": {
+        "completion_tokens": 2947,
+        "prompt_tokens": 6701,
+        "total_tokens": 9648
+      },
+      "client_error": null
+    },
+    {
+      "index": 1,
+      "case": "probe_AA_3",
+      "is_error": true,
+      "elapsed_seconds": 10.643,
+      "status": "refused",
+      "error": {
+        "code": "provider_content_filter",
+        "message": "litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=b0cdc178b3b64f97a45cf41b0faffce6 returned 502: provider_content_filter phase=after_attachment_reads conversation_id=6ad73c15-0877-4d63-aaa1-ec7c49b03f90 provider_usage=3742,456,4198 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException -",
+        "http_status": 502,
+        "automatic_retry": false,
+        "phase": "after_attachment_reads",
+        "request_id": "b0cdc178b3b64f97a45cf41b0faffce6",
+        "conversation_id": "6ad73c15-0877-4d63-aaa1-ec7c49b03f90"
+      },
+      "inputs": [
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        },
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 3742,
+        "completion_tokens": 456,
+        "total_tokens": 4198
+      },
+      "client_error": null
+    },
+    {
+      "index": 1,
+      "case": "probe_AA_3",
+      "is_error": true,
+      "elapsed_seconds": 15.008,
+      "status": "refused",
+      "error": {
+        "code": "provider_content_filter",
+        "message": "litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=d43e03fd70b44bc49b5229decfa2703b returned 502: provider_content_filter phase=after_attachment_reads conversation_id=d0f4c002-fb65-45c9-9467-dbe84b06b61f provider_usage=5932,456,6388 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException -",
+        "http_status": 502,
+        "automatic_retry": false,
+        "phase": "after_attachment_reads",
+        "request_id": "d43e03fd70b44bc49b5229decfa2703b",
+        "conversation_id": "d0f4c002-fb65-45c9-9467-dbe84b06b61f"
+      },
+      "inputs": [
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        },
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 5932,
+        "completion_tokens": 456,
+        "total_tokens": 6388
+      },
+      "client_error": null
+    },
+    {
+      "index": 2,
+      "case": "probe_AA_2",
+      "is_error": true,
+      "elapsed_seconds": 10.655,
+      "status": "refused",
+      "error": {
+        "code": "provider_content_filter",
+        "message": "litellm.BadGatewayError: AntigravityException - Antigravity bridge request_id=e81d2795a3be4a01923c29588f2a3964 returned 502: provider_content_filter phase=after_attachment_reads conversation_id=861c2292-be36-4b86-aa25-13e0506f3b11 provider_usage=6113,620,6733 completed_reads=2No fallback model group found for lookup_groups=gemini-subscription. Fallbacks=[{'auto': ['auto-gemini-subscription']}, {'auto-gemini-subscription': ['auto-codex-luna']}]. Received Model Group=gemini-subscription\nAvailable Model Group Fallbacks=None\nError doing the fallback: litellm.BadGatewayError: AntigravityException -",
+        "http_status": 502,
+        "automatic_retry": false,
+        "phase": "after_attachment_reads",
+        "request_id": "e81d2795a3be4a01923c29588f2a3964",
+        "conversation_id": "861c2292-be36-4b86-aa25-13e0506f3b11"
+      },
+      "inputs": [
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        },
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 6113,
+        "completion_tokens": 620,
+        "total_tokens": 6733
+      },
+      "client_error": null
+    },
+    {
+      "index": 2,
+      "case": "probe_AA_2",
+      "is_error": false,
+      "elapsed_seconds": 21.298,
+      "status": "complete",
+      "error": null,
+      "inputs": [
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        },
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        }
+      ],
+      "usage": {
+        "completion_tokens": 2569,
+        "prompt_tokens": 3825,
+        "total_tokens": 6394
+      },
+      "client_error": null
+    },
+    {
+      "index": 3,
+      "case": "probe_AB_2",
+      "is_error": false,
+      "elapsed_seconds": 15.586,
+      "status": "complete",
+      "error": null,
+      "inputs": [
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind.wav",
+          "sha256": "57bf8a39bb187402633d78af07d1752bc449f7c659b0a4eee66cc3c3e23128e3",
+          "bytes": 229748,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.208662131519274
+        },
+        {
+          "path": "D:\\github\\subroute\\tmp\\gemini-audio-verification\\blind-b.wav",
+          "sha256": "df9d795e909bb6f6acc5826852effd893feaa4ef7cebbfc8e9b6147d300cec89",
+          "bytes": 226886,
+          "format": "wav",
+          "sample_rate": 22050,
+          "channels": 1,
+          "duration_seconds": 5.143764172335601
+        }
+      ],
+      "usage": {
+        "completion_tokens": 2798,
+        "prompt_tokens": 5896,
+        "total_tokens": 8694
+      },
+      "client_error": null
+    }
+  ],
+  "policy_before": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 77,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "medium"
+  },
+  "tools": [
+    "analyze_audio",
+    "compare_audio"
+  ],
+  "policy_after": {
+    "active_model": "openrouter",
+    "mode": "force",
+    "policy_version": 77,
+    "advisor_model": "codex-gpt-6.1-sol-advisor",
+    "reasoning_effort": null,
+    "advisor_reasoning_effort": "medium"
+  },
+  "readiness": 200,
+  "policy_unchanged": true,
+  "summary": {
+    "calls": 6,
+    "tasks": 4,
+    "eligible_tasks": 4,
+    "errors": 3,
+    "unexpected_outcomes": 1,
+    "first_attempt_complete": 2,
+    "final_complete": 3,
+    "recovered_tasks": 1,
+    "initial_failures": 2,
+    "observed_final_success_rate": 0.75,
+    "conditional_recovery_rate": 0.5,
+    "known_provider_tokens": 42055,
+    "provider_calls_with_unknown_usage": 0,
+    "failed_usage": "Includes all observed attempts when available; unknown is not zero. CLI internal calls are not counted.",
+    "latency_seconds": [
+      15.586,
+      25.341,
+      26.651,
+      32.953
+    ]
+  }
+}

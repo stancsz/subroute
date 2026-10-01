@@ -1,9 +1,13 @@
 import asyncio
+import base64
+import io
 import json
 import re
+import wave
 
 import httpx
 import pytest
+from litellm.exceptions import ContentPolicyViolationError
 
 from subroute.handlers import antigravity
 
@@ -18,6 +22,36 @@ TOOLS = [{
         "additionalProperties": False,
     },
 }]
+
+
+def tiny_wav_attachment():
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(b"\x00\x00" * 1600)
+    return {"type": "input_audio", "input_audio": {
+        "data": base64.b64encode(output.getvalue()).decode("ascii"), "format": "wav",
+    }}
+
+
+@pytest.mark.parametrize("with_audio", [True, False])
+def test_only_explicit_audio_filter_refusal_uses_litellm_content_policy_type(monkeypatch, with_audio):
+    async def refuse(*args, **kwargs):
+        raise antigravity.AntigravityBridgeError(
+            502, "provider_content_filter phase=after_attachment_reads", code="provider_content_filter",
+        )
+
+    monkeypatch.setattr(antigravity, "invoke_agy", refuse)
+    content = [tiny_wav_attachment()] if with_audio else "hello"
+    messages = [{"role": "user", "content": content}]
+    if with_audio:
+        expected = ContentPolicyViolationError
+    else:
+        expected = antigravity.CustomLLMError
+    with pytest.raises(expected):
+        asyncio.run(antigravity.AntigravityLLM._complete("gemini-3.8-flash", messages, {}))
 
 
 @pytest.mark.parametrize("content", [
@@ -472,23 +506,28 @@ def test_bridge_failure_carries_transport_request_id(monkeypatch):
     assert f"request_id={captured['request_id']}" in str(caught.value)
 
 
-@pytest.mark.parametrize("usage,expected", [
-    ({"input_tokens": 10, "output_tokens": 2, "total_tokens": 15}, "provider_usage=10,2,15"),
-    ({"input_tokens": True, "output_tokens": 2, "total_tokens": 15}, None),
-    ({"input_tokens": -1, "output_tokens": 2, "total_tokens": 15}, None),
-    (None, None),
+@pytest.mark.parametrize("usage,completed_reads,expected_usage,expected_reads", [
+    ({"input_tokens": 10, "output_tokens": 2, "total_tokens": 15}, 1, "provider_usage=10,2,15", "completed_reads=1"),
+    ({"input_tokens": True, "output_tokens": 2, "total_tokens": 15}, True, None, None),
+    ({"input_tokens": -1, "output_tokens": 2, "total_tokens": 15}, -1, None, None),
+    (None, "1", None, None),
 ])
-def test_filter_error_preserves_only_validated_provider_usage(monkeypatch, usage, expected):
+def test_filter_error_preserves_only_validated_diagnostics(monkeypatch, usage, completed_reads, expected_usage, expected_reads):
     client_type = httpx.AsyncClient
     def respond(req):
         return httpx.Response(502, json={"detail": "provider_content_filter phase=after_attachment_reads conversation_id=fixture",
-                                      "code": "provider_content_filter", "provider_usage": usage})
+                                      "code": "provider_content_filter", "provider_usage": usage,
+                                      "completed_reads": completed_reads})
     monkeypatch.setenv("ANTIGRAVITY_BRIDGE_URL", "http://fixture")
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
     with pytest.raises(antigravity.AntigravityBridgeError) as caught:
         asyncio.run(antigravity.invoke_agy("gemini-3.8-flash", "listen"))
     assert caught.value.status_code == 502
-    if expected:
-        assert expected in str(caught.value)
+    if expected_usage:
+        assert expected_usage in str(caught.value)
     else:
         assert "provider_usage=" not in str(caught.value)
+    if expected_reads:
+        assert expected_reads in str(caught.value)
+    else:
+        assert "completed_reads=" not in str(caught.value)

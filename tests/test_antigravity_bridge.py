@@ -47,6 +47,24 @@ def test_quoting_a_filter_message_in_an_answer_is_not_a_refusal():
     assert bridge._response_text(payload) == content
 
 
+def test_audio_refusal_keeps_exact_completed_attachment_count():
+    paths = ["/tmp/a.wav", "/tmp/b.wav"]
+    stdout = "\n".join([
+        json.dumps({"event": "step_update", "step_update": {
+            "step_type": "tool", "tool_name": "view_file", "state": "DONE",
+            "tool_info": {"parameters": {"AbsolutePath": paths[0]}},
+        }}),
+        json.dumps({"event": "result", "result": {
+            "status": "SUCCESS", "response": "This request was blocked by Gemini's filters.",
+            "conversation_id": "fixture",
+        }}),
+    ])
+    with pytest.raises(bridge.ProviderRefused) as caught:
+        bridge._audio_reads(stdout, paths)
+    assert caught.value.completed_reads == 1
+    assert caught.value.phase == "after_attachment_reads"
+
+
 @pytest.mark.parametrize("options", [{}, {"advisor": True}, {"json_schema": {"type": "object"}}])
 def test_captured_provider_refusal_is_502_for_every_target_mode(monkeypatch, capsys, options):
     usage = {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}

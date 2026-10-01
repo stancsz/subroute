@@ -235,3 +235,21 @@ Northstar / Northstar QA 当前本地版本，版本号 unknown。预期 native 
 追加观察：六次 secret/code/attack/release/killer/trap 对照全部通过，真实完整 MP3 的调用也正常，但音乐分析含超时长定位错误。未经验证的“禁词”解释和静默删词无法满足生产目标。结构化错误使 caller 能可靠处理失败；真实歌曲和已知时长揭示了合成样本/转写不能证明的质量问题。后续应将故障稳定性与感知正确性分开验收，并用可复核的声音退化对照校准时间定位与齿音判断；记录保留，未改写技能或向外部发帖。
 
 官方依据：[Gemini 音频输入](https://ai.google.dev/gemini-api/docs/audio)、[AGY headless 协议与权限](https://antigravity.google/docs/cli/headless/)、[CLI 音频附件更新](https://antigravity.google/docs/changelog?tab=cli)、[权限 deny 规则](https://antigravity.google/docs/cli/permissions/)。模型/API 文档不能代替本仓库 Subscription 的运行证据。
+
+## 后续：限定 Gemini 音频拒绝重试与 95% 固定样本门槛
+
+用户明确要求争取 Gemini 听音频的 95% 成功率。已按 LiteLLM 自带 `model_group_retry_policy` 只给 `gemini-subscription` 配置 `ContentPolicyViolationErrorRetries: 2`；仅真实音频且 bridge 明确报告 `provider_content_filter` 时映射为此异常。全局 `num_retries` 仍为 0；普通 502、超时、文本请求和其他 model group 不重试，不 fallback、不改写 prompt/文件。生产和 staging 已加载相同策略，两个 gateway readiness=200，容器内 handler/config SHA-256 与工作树一致。
+
+已执行预先固定的 60 项验收：48 项用户目录真实音乐全部完成（48/48，43 个独立音频 hash、53 份附件收据），12 项合成语音压力任务首次 6/12；限最多两次自动 retry 后其中 10/12 完成。加总 **58/60 = 96.7%**，超过本批 57/60 的 95% 门槛。48 个真实音乐任务没有拒绝或重试，usage 458,581 provider-reported tokens。12 个压力任务的两次 retry cap 下约增加 83.3% usage，重试会增加成本；这是刻意挑选的混合验收，不是独立随机总体样本，不能保证之后每首歌曲或总体生产流量持续达到 95%。[公开的 48 首歌曲收据](gemini-recovery-music-live-2026-09-30.json)已移除本机路径、歌曲名、音频 hash、提问和 Gemini 的逐曲评论；完整原始收据保存在本机忽略目录 `tmp/gemini-audio-private/`，不会推送。其他记录：[12 项首次与复验收据](gemini-recovery-probes-2026-09-30.json)、[持续拒绝的第二层复验](gemini-persistent-refusal-followup-live-2026-09-30.json)。
+
+对之前持续拒绝的同一 A/A 固定音频做了一次生产 MCP live 验证，最终在 64.99 秒完成；LiteLLM 响应头报告两个 retry，sidecar 记录前两次明确过滤拒绝及第三次成功。三次报告 usage 分别为 6,356、6,394、8,971 tokens（合计 21,721）；MCP 成功响应只显示最后一次 usage，并标明 `final_attempt_only`。policy 前后未变化，readiness=200。原先 MCP HTTP deadline 为 150 秒，导致上游 retry 可能在 125 秒 sidecar attempt 尚未结束时被提前取消；增至 400 秒后这次三次调用正常返回。成功收据：[两次重试后的成功](gemini-litellm-retry-live-2026-09-30.json)。
+
+修复边界回归：music MCP 和 Gemini handler **83 passed**；完整相关 gateway suites **127 passed, 1 skipped**；`docker compose config --quiet` 通过。该验收通过的是当前固定样本与部署链路，不把 96.7% 宣称成统计置信保证、未来 SLO 或专业混音准确率；上游策略可能对相同输入持续拒绝，最终拒绝仍会作为 `isError` 原样暴露。
+
+## 2026-09-30: 95% 要求、重试判断与 refusal 读取数
+
+用户要求把当前 Gemini 成功率保证到 95%。现有固定合成探针只有 12 个任务：首次 6/12 成功；6 个拒绝各做一次相同请求复验，恢复 2 个、4 个仍拒绝，最终 8/12。此样本不是代表性生产成功率。重试 usage 为 27,183 tokens，初次请求 usage 为 67,789 tokens，即增加 40.1%。因此没有数据支持能以有限重试达到 95%；策略拒绝也不是可由传输重试保证恢复的瞬态错误。
+
+Luna advisor（`codex-sol-advisor`，request `chatcmpl-codex-advisor-b9ed1eab651b`，prompt packet 2,521 chars，1115 reported tokens，15.0s）建议只对已识别拒绝做最多一次受控相同复验，并在 recovery <20%、重试 usage >30% 或 CLI 内部调用数不可核验时停止。实测重试 usage 已超过 30%，且 CLI 内部次数未知；`decision_changed=true`，所以生产策略维持零自动重试，过滤错误继续 `automatic_retry=false` 和 `isError=true`。不把 8/12 或任何 mock 结果表述为 95%。
+
+确认的网关诊断缺口：sidecar 日志已有准确的附件读取数，但原私有 502 body 和 MCP structured refusal 未保留它。现已将 `completed_reads` 经 bridge JSON、Antigravity handler 的校验传递到 MCP；MCP 仅在合法非负整数标记时返回该数及本地 `expected_reads`。拒绝依然是拒绝，不会假报成功或悄悄重发。回归覆盖 partial-read refusal、布尔/负数/脏后缀过滤及 MCP 成功提取。验证：`tests/test_antigravity_bridge.py tests/test_antigravity_handler.py tests/test_music_audio.py`，107 passed、1 skipped。部署后 production gateway readiness 返回 HTTP 200，Antigravity sidecar health 为 healthy；sidecar 与 gateway 容器内相关三个源文件 SHA-256 均与工作树匹配。没有发送会消耗 Gemini provider tokens 的拒绝复现请求。

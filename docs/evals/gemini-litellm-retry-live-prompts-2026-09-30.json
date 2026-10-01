@@ -1,0 +1,14 @@
+[
+  {
+    "case": "probe_AA_3",
+    "tool": "compare_audio",
+    "arguments": {
+      "a_path": "blind.wav",
+      "b_path": "blind.wav",
+      "question": "Transcribe the spoken words in BOTH files. Label them A and B. Do not guess.",
+      "focus": [
+        "audible speech differences"
+      ]
+    }
+  }
+]

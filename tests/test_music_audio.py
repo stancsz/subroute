@@ -14,7 +14,7 @@ from fastapi import HTTPException
 
 from subroute.audio import audio_route, decode_audio
 from subroute.handlers import antigravity
-from subroute.music_mcp import create_server, read_asset
+from subroute.music_mcp import create_server, failure, read_asset
 from subroute.plugins.dynamic_router import DynamicRoutingPlugin
 from subroute.plugins.advisor_plugin import AdvisorPlugin
 from test_dynamic_routing import make_control_plane
@@ -171,6 +171,7 @@ def test_mcp_tool_sends_actual_binary_to_gateway_and_checks_terminal_result(tmp_
     path.write_bytes(decode_audio(sample()))
     client_type = httpx.AsyncClient
     calls = []
+    timeouts = []
     def transport(req):
         payload = json.loads(req.content)
         assert payload["model"] == "gemini-subscription"
@@ -178,7 +179,10 @@ def test_mcp_tool_sends_actual_binary_to_gateway_and_checks_terminal_result(tmp_
         assert decode_audio(audio) == path.read_bytes()
         calls.append(payload)
         return httpx.Response(200, json={"id": "fixture", "model": "gemini-subscription", "choices": [{"finish_reason": "stop", "message": {"content": "heard"}}], "usage": {"total_tokens": 12}})
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(transport), **kwargs))
+    def client(**kwargs):
+        timeouts.append(kwargs["timeout"])
+        return client_type(transport=httpx.MockTransport(transport), **kwargs)
+    monkeypatch.setattr(httpx, "AsyncClient", client)
     server = create_server(tmp_path, "http://fixture")
     async def run():
         tools = await server.list_tools()
@@ -186,7 +190,59 @@ def test_mcp_tool_sends_actual_binary_to_gateway_and_checks_terminal_result(tmp_
         return await server.call_tool("analyze_audio", {"asset_path": "sample.wav", "question": "Describe", "focus": ["vocals"]})
     result = asyncio.run(run())
     assert len(calls) == 1
+    assert timeouts == [400]
     assert "heard" in str(result)
+
+
+def test_mcp_success_reports_litellm_retry_count_and_final_attempt_usage(tmp_path, monkeypatch):
+    (tmp_path / "sample.wav").write_bytes(decode_audio(sample()))
+    client_type = httpx.AsyncClient
+    def respond(req):
+        return httpx.Response(200, headers={"x-litellm-attempted-retries": "2"}, json={
+            "id": "fixture", "model": "gemini-subscription",
+            "choices": [{"finish_reason": "stop", "message": {"content": "heard"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        })
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
+    result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
+        "asset_path": "sample.wav", "question": "Listen", "focus": ["clarity"]}))
+    assert result.structuredContent["retry"] == {
+        "automatic": True, "attempted_retries": 2, "max_retries": 2,
+        "usage_scope": "final_attempt_only",
+    }
+
+
+def test_refusal_reports_exhausted_litellm_retries_without_claiming_success():
+    result = failure("provider_content_filter",
+        "provider_content_filter phase=after_attachment_reads LiteLLM Retried: 2 times provider_usage=10,2,12",
+        [{"path": "a.wav"}], 400)
+    assert result.isError
+    assert result.structuredContent["status"] == "refused"
+    assert result.structuredContent["error"]["automatic_retry"] is True
+    assert result.structuredContent["error"]["retry_count"] == 2
+    assert result.structuredContent["error"]["provider_usage_scope"] == "last_attempt_only"
+    assert result.structuredContent["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+
+
+def test_gemini_retry_policy_is_scoped_to_content_policy_exceptions_and_group():
+    import yaml
+    from litellm.exceptions import BadGatewayError, ContentPolicyViolationError
+    from litellm.router_utils.get_retry_from_policy import get_num_retries_from_retry_policy
+
+    config = yaml.safe_load((Path(__file__).parents[1] / "config/litellm.yaml").read_text(encoding="utf-8"))
+    settings = config["router_settings"]
+    assert settings["num_retries"] == 0
+    policies = settings["model_group_retry_policy"]
+    assert set(policies) == {"gemini-subscription"}
+    assert policies["gemini-subscription"] == {"ContentPolicyViolationErrorRetries": 2}
+    policy_error = ContentPolicyViolationError(message="blocked", model="fixture", llm_provider="antigravity")
+    generic_502 = BadGatewayError(message="temporary gateway error", model="fixture", llm_provider="antigravity")
+    assert get_num_retries_from_retry_policy(policy_error, model_group="gemini-subscription",
+        model_group_retry_policy=policies) == 2
+    assert get_num_retries_from_retry_policy(generic_502, model_group="gemini-subscription",
+        model_group_retry_policy=policies) is None
+    assert get_num_retries_from_retry_policy(policy_error, model_group="codex-luna",
+        model_group_retry_policy=policies) is None
 
 
 def test_mcp_provider_refusal_is_a_tool_error_without_retry(tmp_path, monkeypatch):
@@ -196,7 +252,7 @@ def test_mcp_provider_refusal_is_a_tool_error_without_retry(tmp_path, monkeypatc
     def transport(req):
         calls.append(req)
         return httpx.Response(502, json={"error": {"message":
-            "Antigravity bridge returned 502: provider_content_filter phase=after_attachment_reads conversation_id=fixture"}})
+            "Antigravity bridge returned 502: provider_content_filter phase=after_attachment_reads conversation_id=fixture completed_reads=1"}})
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(transport), **kwargs))
     server = create_server(tmp_path, "http://fixture")
     result = asyncio.run(server.call_tool("analyze_audio", {"asset_path": "sample.wav", "question": "Describe", "focus": ["vocals"]}))
@@ -204,6 +260,8 @@ def test_mcp_provider_refusal_is_a_tool_error_without_retry(tmp_path, monkeypatc
     assert result.structuredContent["status"] == "refused"
     assert result.structuredContent["error"]["code"] == "provider_content_filter"
     assert result.structuredContent["error"]["phase"] == "after_attachment_reads"
+    assert result.structuredContent["error"]["completed_reads"] == 1
+    assert result.structuredContent["error"]["expected_reads"] == 1
     assert result.structuredContent["usage"] is None
     assert len(calls) == 1
 
@@ -242,6 +300,21 @@ def test_refused_usage_survives_the_public_error_message(tmp_path, monkeypatch):
         "asset_path": "sample.wav", "question": "Listen", "focus": ["clarity"]}))
     assert result.isError and result.structuredContent["status"] == "refused"
     assert result.structuredContent["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 15}
+
+
+@pytest.mark.parametrize("marker,expected", [("completed_reads=2", 2), ("completed_reads=-1", None),
+                                                ("completed_reads=2x", None), ("completed_reads=True", None)])
+def test_refusal_completed_reads_requires_a_nonnegative_integer(tmp_path, monkeypatch, marker, expected):
+    (tmp_path / "sample.wav").write_bytes(decode_audio(sample()))
+    client_type = httpx.AsyncClient
+    def respond(req):
+        return httpx.Response(502, json={"error": {"message": f"provider_content_filter phase=after_attachment_reads {marker}"}})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
+    result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
+        "asset_path": "sample.wav", "question": "Listen", "focus": ["clarity"]}))
+    reads = result.structuredContent["error"].get("completed_reads")
+    assert reads == expected
+    assert result.structuredContent["error"].get("expected_reads") == (1 if expected is not None else None)
 
 
 @pytest.mark.parametrize("outcome,code", [

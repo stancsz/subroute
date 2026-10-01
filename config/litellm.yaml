@@ -311,8 +311,13 @@ model_list:
 
 router_settings:
   # Keep ordinary model requests fail-closed. Only explicit `auto` requests
-  # move to the next configured provider after a provider error.
+  # move to the next configured provider after a provider error. Audio-only
+  # provider_content_filter refusals are typed as ContentPolicyViolationError
+  # by the Antigravity handler and receive at most two same-input retries.
   num_retries: 0
+  model_group_retry_policy:
+    gemini-subscription:
+      ContentPolicyViolationErrorRetries: 2
   fallbacks:
     - auto: [auto-gemini-subscription]
     - auto-gemini-subscription: [auto-codex-luna]

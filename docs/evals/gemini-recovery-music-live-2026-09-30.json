@@ -1,0 +1,472 @@
+{
+  "schema_version": "gemini-music-live-summary-v1",
+  "scope": "Redacted public summary of the fixed real-music MCP verification batch. The full receipt remains in the local ignored tmp/ directory.",
+  "provider": "Gemini Subscription through the production Subroute gateway",
+  "attempts": {
+    "tasks": 48,
+    "completed": 48,
+    "errors": 0,
+    "unexpected_outcomes": 0,
+    "provider_calls_with_unknown_usage": 0,
+    "retries_observed": 0,
+    "policy_unchanged": true,
+    "readiness_http": 200,
+    "one_recheck_if_refused_enabled_in_verifier": true,
+    "production_litellm_retry_policy_during_batch": "not enabled yet; this batch observed no refusals and no retries"
+  },
+  "audio_inputs": {
+    "attachments": 53,
+    "unique_audio_hashes": 43,
+    "all_receipts_matched_local_inputs": true,
+    "all_cases_matched_expected_outcomes": true
+  },
+  "provider_reported_usage": {
+    "tokens": 458581,
+    "scope": "sum of successful provider usage reported for this batch"
+  },
+  "latency_seconds": {
+    "min": 24.479,
+    "max": 50.659
+  },
+  "cases": [
+    {
+      "case": "case-001",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 40.709,
+      "provider_reported_tokens": 9086
+    },
+    {
+      "case": "case-002",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 28.169,
+      "provider_reported_tokens": 7182
+    },
+    {
+      "case": "case-003",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 36.843,
+      "provider_reported_tokens": 8987
+    },
+    {
+      "case": "case-004",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 39.697,
+      "provider_reported_tokens": 10582
+    },
+    {
+      "case": "case-005",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 44.051,
+      "provider_reported_tokens": 11080
+    },
+    {
+      "case": "case-006",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 34.742,
+      "provider_reported_tokens": 8859
+    },
+    {
+      "case": "case-007",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 28.424,
+      "provider_reported_tokens": 7852
+    },
+    {
+      "case": "case-008",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 32.308,
+      "provider_reported_tokens": 7370
+    },
+    {
+      "case": "case-009",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 45.391,
+      "provider_reported_tokens": 11116
+    },
+    {
+      "case": "case-010",
+      "tool": "compare_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 2,
+      "elapsed_seconds": 41.792,
+      "provider_reported_tokens": 11446
+    },
+    {
+      "case": "case-011",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 30.788,
+      "provider_reported_tokens": 8159
+    },
+    {
+      "case": "case-012",
+      "tool": "compare_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 2,
+      "elapsed_seconds": 50.584,
+      "provider_reported_tokens": 12532
+    },
+    {
+      "case": "case-013",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 33.11,
+      "provider_reported_tokens": 8821
+    },
+    {
+      "case": "case-014",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 50.659,
+      "provider_reported_tokens": 9864
+    },
+    {
+      "case": "case-015",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 36.249,
+      "provider_reported_tokens": 10280
+    },
+    {
+      "case": "case-016",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 24.479,
+      "provider_reported_tokens": 7489
+    },
+    {
+      "case": "case-017",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 34.915,
+      "provider_reported_tokens": 9776
+    },
+    {
+      "case": "case-018",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 39.887,
+      "provider_reported_tokens": 10712
+    },
+    {
+      "case": "case-019",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 37.801,
+      "provider_reported_tokens": 8125
+    },
+    {
+      "case": "case-020",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 43.924,
+      "provider_reported_tokens": 10765
+    },
+    {
+      "case": "case-021",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 27.28,
+      "provider_reported_tokens": 7738
+    },
+    {
+      "case": "case-022",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 35.529,
+      "provider_reported_tokens": 8889
+    },
+    {
+      "case": "case-023",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 28.643,
+      "provider_reported_tokens": 8332
+    },
+    {
+      "case": "case-024",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 31.976,
+      "provider_reported_tokens": 8141
+    },
+    {
+      "case": "case-025",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 37.72,
+      "provider_reported_tokens": 9656
+    },
+    {
+      "case": "case-026",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 36.969,
+      "provider_reported_tokens": 9971
+    },
+    {
+      "case": "case-027",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 31.811,
+      "provider_reported_tokens": 8293
+    },
+    {
+      "case": "case-028",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 34.986,
+      "provider_reported_tokens": 8841
+    },
+    {
+      "case": "case-029",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 49.618,
+      "provider_reported_tokens": 9922
+    },
+    {
+      "case": "case-030",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 40.544,
+      "provider_reported_tokens": 7944
+    },
+    {
+      "case": "case-031",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 34.234,
+      "provider_reported_tokens": 9489
+    },
+    {
+      "case": "case-032",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 39.666,
+      "provider_reported_tokens": 9268
+    },
+    {
+      "case": "case-033",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 32.252,
+      "provider_reported_tokens": 9259
+    },
+    {
+      "case": "case-034",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 47.979,
+      "provider_reported_tokens": 9785
+    },
+    {
+      "case": "case-035",
+      "tool": "compare_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 2,
+      "elapsed_seconds": 43.107,
+      "provider_reported_tokens": 11431
+    },
+    {
+      "case": "case-036",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 38.948,
+      "provider_reported_tokens": 10404
+    },
+    {
+      "case": "case-037",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 29.743,
+      "provider_reported_tokens": 8312
+    },
+    {
+      "case": "case-038",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 27.841,
+      "provider_reported_tokens": 7287
+    },
+    {
+      "case": "case-039",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 41.864,
+      "provider_reported_tokens": 10964
+    },
+    {
+      "case": "case-040",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 35.11,
+      "provider_reported_tokens": 9675
+    },
+    {
+      "case": "case-041",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 35.149,
+      "provider_reported_tokens": 9177
+    },
+    {
+      "case": "case-042",
+      "tool": "compare_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 2,
+      "elapsed_seconds": 44.626,
+      "provider_reported_tokens": 13862
+    },
+    {
+      "case": "case-043",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 36.698,
+      "provider_reported_tokens": 10587
+    },
+    {
+      "case": "case-044",
+      "tool": "compare_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 2,
+      "elapsed_seconds": 35.573,
+      "provider_reported_tokens": 12126
+    },
+    {
+      "case": "case-045",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 30.384,
+      "provider_reported_tokens": 8309
+    },
+    {
+      "case": "case-046",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 32.993,
+      "provider_reported_tokens": 9051
+    },
+    {
+      "case": "case-047",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 47.025,
+      "provider_reported_tokens": 12769
+    },
+    {
+      "case": "case-048",
+      "tool": "analyze_audio",
+      "status": "complete",
+      "completed": true,
+      "attachments": 1,
+      "elapsed_seconds": 37.802,
+      "provider_reported_tokens": 9016
+    }
+  ],
+  "redactions": [
+    "local filenames and paths",
+    "audio hashes",
+    "questions and focus strings",
+    "model observations and response text",
+    "provider response IDs"
+  ]
+}

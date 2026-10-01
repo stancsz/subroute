@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 import jsonschema
 from litellm import CustomLLM
+from litellm.exceptions import ContentPolicyViolationError
 from litellm.llms.custom_llm import CustomLLMError
 from litellm.types.utils import GenericStreamingChunk, ModelResponse, Usage
 from referencing import Registry
@@ -50,9 +51,10 @@ class _ToolOutputError(Exception):
 class AntigravityBridgeError(RuntimeError):
     """A non-success response from the private Compose CLI bridge."""
 
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(self, status_code: int, detail: str, code: str | None = None) -> None:
         super().__init__(detail)
         self.status_code = status_code
+        self.code = code
 
 
 class AntigravityRequestTooLargeError(ValueError):
@@ -196,9 +198,13 @@ async def invoke_agy(
                     keys = ("input_tokens", "output_tokens", "total_tokens")
                     if isinstance(refused_usage, dict) and all(type(refused_usage.get(key)) is int and refused_usage[key] >= 0 for key in keys):
                         detail += " provider_usage=" + ",".join(str(refused_usage[key]) for key in keys)
+                    completed_reads = error_payload.get("completed_reads")
+                    if type(completed_reads) is int and completed_reads >= 0:
+                        detail += f" completed_reads={completed_reads}"
                 raise AntigravityBridgeError(
                     response.status_code,
                     f"Antigravity bridge request_id={bridge_request_id} returned {response.status_code}: {detail}",
+                    code="provider_content_filter" if isinstance(error_payload, dict) and error_payload.get("code") == "provider_content_filter" else None,
                 )
             try:
                 result = response.json()
@@ -481,6 +487,13 @@ class AntigravityLLM(CustomLLM):
                 "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
             }]
         except AntigravityBridgeError as exc:
+            # LiteLLM's model-group RetryPolicy can then retry only this explicit
+            # audio refusal class. Generic 502s and non-audio refusals keep the
+            # existing fail-closed mapping and are not retried.
+            if exc.code == "provider_content_filter" and attachments:
+                raise ContentPolicyViolationError(
+                    message=str(exc), model=model, llm_provider="antigravity",
+                ) from exc
             raise CustomLLMError(status_code=exc.status_code, message=str(exc)) from exc
         except (_ToolOutputError, jsonschema.ValidationError) as exc:
             raise CustomLLMError(status_code=502, message=str(exc)) from exc

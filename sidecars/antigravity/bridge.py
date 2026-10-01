@@ -417,6 +417,7 @@ class Handler(BaseHTTPRequestHandler):
                            request_id, model, str(exc), exc.completed_reads, exc.result.get("usage"))
             self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc), "code": "provider_content_filter",
                                               "phase": exc.phase, "conversation_id": exc.result.get("conversation_id"),
+                                              "completed_reads": exc.completed_reads,
                                               "provider_usage": exc.result.get("usage")})
         except RuntimeError as exc:
             logger.warning("AGY request failed request_id=%s model=%r error=%s", request_id, model, str(exc)[:300])

@@ -22,6 +22,12 @@ from mutagen.mp3 import MPEGInfo
 from subroute.audio import MAX_AUDIO_BYTES, decode_audio
 
 
+# One provider attempt is bounded by the bridge's 125 s CLI deadline plus
+# transport overhead. Allow all three LiteLLM attempts to finish and return
+# their terminal status instead of cancelling a permitted retry mid-flight.
+GEMINI_AUDIO_REQUEST_TIMEOUT_SECONDS = 400
+
+
 def tool_result(report: dict, *, error: bool = False) -> CallToolResult:
     return CallToolResult(content=[TextContent(type="text", text=json.dumps(report, ensure_ascii=False))],
                           structuredContent=report, isError=error)
@@ -30,11 +36,22 @@ def tool_result(report: dict, *, error: bool = False) -> CallToolResult:
 def failure(code: str, detail: str, inputs: list[dict], http_status: int | None = None) -> CallToolResult:
     diagnostic = {"code": code, "message": detail[:600], "http_status": http_status,
                   "automatic_retry": False}
+    retry_match = re.search(r"\bLiteLLM Retried: (\d+) times\b", detail) if code == "provider_content_filter" else None
+    if retry_match:
+        retry_count = int(retry_match.group(1))
+        if 0 < retry_count <= 2:
+            diagnostic["automatic_retry"] = True
+            diagnostic["retry_count"] = retry_count
+            diagnostic["provider_usage_scope"] = "last_attempt_only"
     # These fields originate in our bridge's diagnostic, not model-generated text.
     for field in ("phase", "request_id", "conversation_id"):
         match = re.search(rf"\b{field}=([A-Za-z0-9_-]+)", detail)
         if match:
             diagnostic[field] = match.group(1)
+    match = re.search(r"\bcompleted_reads=(\d+)(?![A-Za-z0-9_])", detail) if code == "provider_content_filter" else None
+    if match:
+        diagnostic["completed_reads"] = int(match.group(1))
+        diagnostic["expected_reads"] = len(inputs)
     usage = None
     # LiteLLM can append "No fallback..." directly after the message without
     # whitespace; a word boundary after the last digit would lose valid usage.
@@ -116,7 +133,7 @@ def create_server(root: Path, gateway_url: str, api_key: str | None = None) -> F
         )
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
-            async with httpx.AsyncClient(timeout=150, follow_redirects=False) as client:
+            async with httpx.AsyncClient(timeout=GEMINI_AUDIO_REQUEST_TIMEOUT_SECONDS, follow_redirects=False) as client:
                 response = await client.post(
                     gateway_url.rstrip("/") + "/v1/chat/completions",
                     headers=headers,
@@ -144,12 +161,18 @@ def create_server(root: Path, gateway_url: str, api_key: str | None = None) -> F
                 return failure("invalid_response", "gateway did not return completed text with provider usage", receipts)
             response_id = result["id"]
         except httpx.TimeoutException:
-            return failure("gateway_timeout", "gateway request timed out; no automatic retry", receipts)
+            return failure("gateway_timeout", "gateway exceeded the 400-second audio request deadline", receipts)
         except httpx.RequestError as exc:
             return failure("gateway_unavailable", f"gateway connection failed: {type(exc).__name__}", receipts)
         except (ValueError, KeyError, IndexError, TypeError, AttributeError):
             return failure("invalid_response", "gateway returned malformed completion data", receipts)
-        return tool_result({
+        retry_count = 0
+        raw_retry_count = response.headers.get("x-litellm-attempted-retries")
+        if raw_retry_count is not None:
+            if not raw_retry_count.isdecimal() or int(raw_retry_count) > 2:
+                return failure("invalid_response", "gateway returned an invalid retry count", receipts, response.status_code)
+            retry_count = int(raw_retry_count)
+        report = {
             "schema_version": "gemini-listening-v1", "status": "complete",
             "backend": "gemini-subscription", "response_id": response_id,
             "inputs": receipts, "observations": content,
@@ -157,7 +180,11 @@ def create_server(root: Path, gateway_url: str, api_key: str | None = None) -> F
             "limitations": ["Listening observations are not calibrated DSP measurements or professional mixing certification.",
                              "Comparison files are not loudness matched; no automatic processing or DAW edits are performed.",
                              "Audio is transmitted to Google's Subscription service; this is not offline inference."],
-        })
+        }
+        if retry_count:
+            report["retry"] = {"automatic": True, "attempted_retries": retry_count,
+                               "max_retries": 2, "usage_scope": "final_attempt_only"}
+        return tool_result(report)
 
     @server.tool(annotations=annotations, structured_output=True)
     async def analyze_audio(asset_path: str, question: str, focus: list[str]) -> Annotated[CallToolResult, dict[str, Any]]:
