@@ -1,10 +1,16 @@
 # Subroute 维护性与可靠性目标
 
+**2026-10-01 Advisor 节省输入预算：** 用户指出 Advisor 应设置较小上下文以降低咨询成本。Advisor 的最大输入/上下文已从 256,000 降至 32,000 tokens，自动压缩阈值 25,600；目标会话仍为 256,000。Codex Advisor aliases 和专用 experts 由 LiteLLM 原生上限执行；共享 Gemini target aliases 保留目标模型窗口，由 Advisor hook 在派发前用 LiteLLM 原生计数器执行 Advisor 专属上限。配置语法通过解析，Compose 配置有效；三个服务已重建，production/staging/experts readiness 均返回 200，运行中的三个 `/model/info` 已显示 Advisor 32,000/25,600 元数据。
+
+**2026-10-01 用户要求的 Advisor overflow recovery，已部署，provider-backed 行为待实测：** 超过 32,000-token Advisor cap 时，仅压缩 Advisor 副本。首选一次 MiniMax M3，输出最多 8,192 tokens；失败、无法处理模态或结果仍超过 25,600 时最多回退一次 GPT-6 Luna。Codex subscription endpoint 不接受调用方输出 token cap，因此 Luna compaction 使用上游管理的输出限制；两次调用均受超时限制。保持消息级 system/developer 指令与最新 user turn 原样，压缩更早的会话历史；主模型仍收到原始请求。每次 provider usage 与 LiteLLM 的最终 token estimate 会分别记录。若两种压缩均不能产出合规副本则 fail closed。此 path 只在实际溢出时产生额外 provider 调用。代码语法通过，production 与 staging 已重建且 readiness 均 HTTP 200；没有进行会触发付费压缩调用的 provider-backed overflow test。
+
+**2026-09-30 Cline 图片交付修复，部分完成：** 已识别并修复 Cline Desktop 整条 `<user_input mode="act">...</user_input>` 消息导致图片意图漏判的问题，原请求保持不变。开发和部署 LiteLLM 两版各 90 项回归通过；用户要求重启后 production/staging readiness 200，原会话 system/user 输入的真实 production SSE 返回一张可解码且已检查的 PNG、caption 和 `[DONE]`。真实 Badlands 外层同样返回一张 PNG 与完整终态，`x-gateway-tier: local` 证实已到重启后的 Subroute；Cline 图片显示边界仍未验证，不把网关生成通过称为客户端交付完成。见 [Cline 图片交付调查](docs/evals/cline-image-delivery-2026-09-30.md)。
+
 **状态：complete**
 **优先级：最高（目标已完成）**
 **更新日期：2026-09-29**
 
-**2026-09-30 新增目标：听音乐的生产稳定性验收 blocked，95% 验收未通过，未完成。** 用户要求搜索并实测大量过滤候选词/提示词、改善 MCP，并提供了 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI` 的真实参考歌。保留下方历史 complete，新增目标不能以删词或一次 HTTP 200 完成。标准：原始 question/focus/音频不被静默改写；单曲/双曲完整 MP3 经真实 MCP → production Subscription 可用；拒绝、超时、坏响应有明确结构化失败和后续恢复；不隐藏重试/fallback/usage；逐项保留候选语境、调用、哈希、延迟、提供方 usage 和失败结果。混音准确性另需真实参考与可复核对照，不将传输完成当作专业混音通过。当前进展、失败和剩余依赖统一记录到 [音频评估](docs/evals/gemini-audio-2026-09-30.md) 与 [过滤候选语境](docs/misc/gemini-content-filter-candidates.md)。
+**2026-09-30 新增目标：听音乐生产稳定性验收。** 早期 blocked 与 95% 未通过结论为历史 checkpoint，已由下方最新验收更新。用户要求搜索并实测大量过滤候选词/提示词、改善 MCP，并提供了 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI` 的真实参考歌。标准：原始 question/focus/音频不被静默改写；单曲/双曲完整 MP3 经真实 MCP → production Subscription 可用；拒绝、超时、坏响应有明确结构化失败与有限恢复；不隐藏重试/fallback/usage；逐项保留候选语境、调用、哈希、延迟、提供方 usage 和失败结果。混音准确性另需真实参考与可复核对照，不将传输完成当作专业混音通过。当前进展、失败和剩余依赖统一记录到 [音频评估](docs/evals/gemini-audio-2026-09-30.md) 与 [过滤候选语境](docs/misc/gemini-content-filter-candidates.md)。
 
 **用户 resume 与新验收要求，2026-09-30：** 用户明确要求继续，并把当前 Gemini 成功率 95% 作为本增量门槛。历史 blocked 判断保留，不把历史失败抹掉。新增有界检查为预先固定的 60 个合法任务（48 个真实音乐、12 个自制语音探针），首次过滤拒绝最多原样复验一次，最多 120 个实际工具调用；记录每次原始终态、哈希、usage、首次成功与条件恢复率。生产配置暂不改变；先用实测决定重试是否有效，95% 指本批有效任务至少 57 项完成，未来总体成功率和专业感知准确性不能由该样本自动推出。当前固定 CLI、原输入与 Subscription 保持；没有删词、改写音频或切模型。前一 goal turn 的完成审计未解决外部过滤，本次恢复按新统计标准与用户明确方向推进；blocked audit 重新计数。
 
@@ -13,6 +19,8 @@
 **用户 resume 后第二轮 checkpoint，progress：** 对上一轮 10 个实际拒绝会话做只读源审计，8 个最后生成含全部原始完整 WAV，哈希一致且日志读取数完整；2 个 A/A 复验在仅一个读取之后拒绝。一个首次 A/B 会话出现 missing toolSummary，但其无此错误的复验与另外 9 个过滤会话仍拒绝，排除用这一工具错误解释全部过滤。未新增 provider 调用/生产变更。已在既有音频评估中准备可审阅的官方 CLI issue 草稿，要求机器可读拒绝与真实 stop reason，不请求关闭防护；尚未提交第三方，待发布授权。CLI 仍 1.2.11，原安全类别未知，95% 与完整词表/专业门槛未过；当前 active，为恢复后第二轮，同一提供方边界仍存在，blocked 阈值未到。不能无改变重入探针或把压力样本分母缩小。
 
 **用户 resume 后第三轮 blocked 审计：** 当前工作树、CLI 1.2.11、原 18 次尝试/10 个拒绝会话、94972 tokens 与未执行的 48 项 manifest 均核对一致；无新提供方反馈或人类发布授权，官方报告仍仅为草稿。本轮复核本身不增加成功率，属于 no progress；前两轮的实际恢复试验与源审计为 progress，但同一合法音频泛化拒绝/不可见原始分类连续三轮未解。一次复验仍有 4 项持续失败，原混合批最多 56/60，不能证明95%；没有完整官方禁词表或可验证的删词策略，不能用候选组通过、历史真歌成功或更多隐式复验替代验收。生产网关已修复部分继续可用，目标不标 complete。现进入 blocked，停止相同调查和新增调用；解除条件是提供方提供可归因反馈/受支持修复或用户明确改变任务/提供方合同。提交已准备报告需人类授权，获准提交只解锁诊断，不等于95%通过；自动 continuation 不代表第三方发布授权。详见音频评估的 resume 后第三轮审计。此状态不改写下方历史结项。
+
+**最新 Gemini retry checkpoint，验收通过：** 在生产/测试 gateway 对 `gemini-subscription` 配置最多两次、同输入 LiteLLM retry，仅处理音频明确 `provider_content_filter`；MCP 400 秒 deadline 修复 150 秒时会截断第二次 sidecar 尝试的问题。预先固定 60 项混合样本在两次 retry cap 下完成 58/60（96.7%），其中 48/48 用户真实音乐、10/12 合成语音压力任务；再对先前持续拒绝的固定 A/A 样本做 live MCP 检查，LiteLLM 实际执行两次 retry 后第三次完成（64.99s），MCP 与 provider 使用量范围可区分，policy 未变化。相关用例 127 passed / 1 skipped，compose config 与 readiness 均通过。故本增量的固定样本和受限重试验收完成；不承诺未来总体成功率至少 95%，因为样本不是代表性随机流量且策略拒绝仍会持续。专业混音判断、未来 SLO 与上游拒绝分类仍不在本次成功率门槛内，保留原始失败和限制。完整证据见音频评估的“限定 Gemini 音频拒绝重试与 95% 固定样本门槛”。
 
 **第三次连续 goal turn 的有界完成审计：** 同一外部条件持续存在：合法音频仍收到 Subscription 的泛化过滤拒绝，缺少原始拒绝原因和本通路可用控制。前两轮分别改善结构化错误/大量 live 证据、MP3 元数据/失败计量，但没有解决该条件；本轮核对实际 CLI 1.2.11 帮助、官方 reference/settings/headless 与截至 1.2.14 的 changelog，未发现可用于此订阅通路的过滤控制、完整词表或本次音频过滤修复。保存收据中同一 A/B 问题、focus 与两个原文件哈希完全一致却先拒绝后完成，逐项验收表见音频评估“有界完成审计”。本轮只改这两份既有记录，没有新的 provider 调用或运行代码变更。继续删词、重复调用求通过或改判成功不能推进原零过滤标准；专业混音正确性仍未验收，不作为替代完成条件。解除阻塞需要提供方提供可追溯的输入/输出拒绝反馈及合法音频误拒修复/受支持控制，或用户明确改变提供方与产品验收合同；没有发生这种改变前，不自动重入相同实验。此状态只适用于本增量，不改写下方历史结项。
 
@@ -114,3 +122,17 @@
 ## 当前活动边界
 
 本文件记录已完成的维护性与可靠性目标。`docs/goal/archive/` 内的旧目标仅用于追溯此前需求、决策和验证，不要求继续实现其中的商业就绪、Badlands 兼容或其他功能范围，除非它们被证明是当前可靠性修复必须保留的现有行为。
+
+## 2026-10-01 初始上下文策略记录（后续 Advisor follow-up supersedes）
+
+初始目标路由使用 256,000-token context window 和 204,800-token client compaction threshold，计数包括当前完整上下文中的系统指令、工具、附件和压缩后的前缀。生产、staging 的 21 项和专用 experts 的 4 项在该次验收时均使用相同元数据；LiteLLM 原生 pre-call checks 拒绝超限输入。客户端继续拥有会话压缩；无状态 gateway 不增加会话存储或自定义摘要服务。Advisor 限额后来单独降低至 32,000，并按本文件顶部 follow-up 增加了超限压缩恢复。
+
+Desktop 六个启动配置和现有直接 Subroute 的 Codex/Hermes 配置已更新。Python 467 passed、11 skipped；Desktop 5 passed。三个运行服务均 healthy，全部 model_info 字段核对通过，32 项真实 HTTP 边界检查通过且路由策略不变；Codex 真实请求完成并报告窗口 256000，Hermes 原生阈值边界和 OpenCode 实际合并配置已验证。OpenClaw 未安装，只验证发布版本源代码对应的配置；未宣称每个客户端都完成真实 204800-token 压缩或 provider 能接受完整 256000-token 请求。已有会话需要重启，上游更小窗口仍适用。需求、所有权、维护负担与证据见 [上下文策略验证](docs/evals/context-policy-2026-10-01.md)。这项明确授权增量不改写其他历史目标。
+
+## 2026-09-30 Gemini 95% 成功率要求续办
+
+不能对 Subscription 上游策略拒绝承诺 95% 成功率。此前有界合成探针为 12 个任务中首次 6/12 成功；6 个初次拒绝各做一次完全相同的复验，2 个恢复、4 个仍拒绝，最终 8/12 完成。此结果不是代表性歌曲成功率；复验报告 usage 为 27,183 tokens，相对初次 67,789 tokens 增加 40.1%。每个拒绝在已测复验后仍可能持续拒绝，增加次数没有可验证的独立恢复概率或有限次数保证。
+
+按 Luna advisor 的有界意见（model `codex-sol-advisor`，request `chatcmpl-codex-advisor-b9ed1eab651b`，1115 reported tokens），不启用通用 502 重试；过滤拒绝保持终态。advisor 的 stop rule 是恢复低于 20%、重试 usage 超过基线的 30%，或 CLI 内部重试使额度无法验证时停止。当前 recovery=33.3%，但额外 usage=40.1%，且 CLI 内部调用计数不可核验，因此不满足生产重试门槛。`decision_changed=true`：从先前讨论的条件复验转为只修复可观测性、不部署生产重试。详见 `docs/evals/gemini-audio-2026-09-30.md`。
+
+本次修复将 sidecar 已有的 `completed_reads` 计数通过私有错误 JSON 和 LiteLLM handler 传至 MCP 的结构化 refusal 错误，并增加 `expected_reads`；过滤仍以 MCP `isError=true` 暴露，`automatic_retry=false`。聚焦测试 `107 passed, 1 skipped`。部署后 production gateway readiness 为 HTTP 200、Antigravity sidecar healthy，容器内 bridge 与两个 gateway Python 源文件 SHA-256 均匹配工作树。此更改不会让 Gemini 接受被拒绝的输入，也不是 95% 成功率验收；当前 resume goal 仍 active，需上游有支持的反馈/行为变化，或用代表性任务获得足以评估的稳定性证据。

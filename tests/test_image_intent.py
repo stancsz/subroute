@@ -16,6 +16,7 @@ from test_codex_images import image_event, terminal, Stream, PNG
     "帮我生成一张蓝色机器人的图片", "请画一只猫", "制作一张音乐节海报",
     "Let's generate a picture of the moon.",
     "I want to generate an image of the moon.",
+    '<user_input mode="act">create a photo for an anime</user_input>',
 ])
 def test_clear_intent(text):
     assert clear_image_request(text)
@@ -30,6 +31,10 @@ def test_clear_intent(text):
     "Draw conclusions from the report.", "What is in this photo?", "不要生成图片",
     "Generate a Python script to create an image.", "An image of a cat is attached.",
     "Explain 'generate an image'.",
+    '<user_input mode="act">Analyze this photo.</user_input>',
+    '<user_input mode="act">"create a photo for an anime"</user_input>',
+    '<document>create a photo for an anime</document>',
+    'Explain <user_input mode="act">create a photo for an anime</user_input>',
 ])
 def test_non_generation_intent(text):
     assert not clear_image_request(text)
@@ -103,7 +108,7 @@ def test_intent_through_real_proxy_all_protocols(monkeypatch, tmp_path, protocol
         data["messages"] = [
             {"role": "user", "content": "My favorite color is blue."},
             {"role": "assistant", "content": "Understood."},
-            {"role": "user", "content": "Generate an image of a small bird in my favorite color."},
+            {"role": "user", "content": '<user_input mode="act">create a photo for an anime</user_input>'},
         ]
     with _configured_proxy(dynamic_routing_plugin=plugin) as (client, *_):
         response = client.post(path, json=data)
@@ -126,6 +131,7 @@ def test_intent_through_real_proxy_all_protocols(monkeypatch, tmp_path, protocol
             assert "Here is your image." in json.dumps(completed["output"])
     else:
         assert "favorite color is blue" in json.dumps(calls[0]["input"])
+        assert '<user_input mode="act">create a photo for an anime</user_input>' in str(calls[0]["input"])
 
 
 @pytest.mark.parametrize("protocol", ["chat", "responses", "messages"])

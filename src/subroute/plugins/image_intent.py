@@ -62,6 +62,11 @@ def latest_user_text(data: dict) -> str:
 
 
 def clear_image_request(text: str) -> bool:
+    # Cline Desktop encloses the actual user turn in this transport envelope.
+    # Unwrap only a whole-message envelope, not arbitrary XML/document content.
+    wrapped = re.fullmatch(r'\s*<user_input mode="(?:act|plan|yolo)">([\s\S]*)</user_input>\s*', text)
+    if wrapped:
+        text = wrapped.group(1)
     text = re.sub(r"```[\s\S]*?```|`[^`]*`", "", text)
     text = re.sub(r'''"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|(?<!\w)'[^'\n]+'(?!\w)''', "", text)
     for sentence in re.split(r"[\n.!?。！？]+", text):

@@ -7,6 +7,9 @@ const execFileAsync = promisify(execFile);
 
 const MODEL = "current";
 const PROFILE = "subroute";
+// Session budgets apply to every model selected behind the gateway alias.
+const CONTEXT_WINDOW = 256000;
+const COMPACT_THRESHOLD = 204800;
 const AGENTS = {
   claude: { name: "Claude Code", command: "claude", protocol: "Anthropic" },
   codex: { name: "Codex", command: "codex", protocol: "Responses" },
@@ -64,6 +67,11 @@ function sessionEnv(gatewayUrl) {
     ANTHROPIC_DEFAULT_SONNET_MODEL: MODEL,
     ANTHROPIC_DEFAULT_HAIKU_MODEL: MODEL,
     CLAUDE_CODE_SUBAGENT_MODEL: MODEL,
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(CONTEXT_WINDOW),
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW: String(CONTEXT_WINDOW),
+    CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80",
+    DISABLE_AUTO_COMPACT: "",
+    DISABLE_COMPACT: "",
     DEEPSEEK_BASE_URL: openai,
     DEEPSEEK_API_KEY: "subroute-local",
     DSH_TELEMETRY_DISABLED: "1",
@@ -82,8 +90,9 @@ async function writeLaunchFile(filePath, contents) {
 
 function catalog() {
   return JSON.stringify({ models: [{
-    slug: MODEL, display_name: MODEL, description: "Subroute active model", context_window: 128000,
-    max_context_window: 128000, effective_context_window_percent: 100, shell_type: "default", visibility: "list",
+    slug: MODEL, display_name: MODEL, description: "Subroute active model", context_window: CONTEXT_WINDOW,
+    max_context_window: CONTEXT_WINDOW, auto_compact_token_limit: COMPACT_THRESHOLD,
+    effective_context_window_percent: 100, shell_type: "default", visibility: "list",
     supported_in_api: true, priority: 0, additional_speed_tiers: [], service_tiers: [],
     truncation_policy: { mode: "bytes", limit: 10000 }, input_modalities: ["text", "image"], base_instructions: "",
     default_reasoning_summary: "none", supported_reasoning_levels: [], supports_reasoning_summaries: false,
@@ -111,6 +120,9 @@ async function prepareLaunch(id, gatewayUrl, launchHome = desktopLaunchHome()) {
       `model = ${JSON.stringify(MODEL)}`,
       `model_provider = ${JSON.stringify(PROFILE)}`,
       `model_catalog_json = ${JSON.stringify(catalogPath)}`,
+      `model_context_window = ${CONTEXT_WINDOW}`,
+      `model_auto_compact_token_limit = ${COMPACT_THRESHOLD}`,
+      'model_auto_compact_token_limit_scope = "total"',
       "",
       `[model_providers.${PROFILE}]`,
       'name = "Subroute"',
@@ -123,19 +135,27 @@ async function prepareLaunch(id, gatewayUrl, launchHome = desktopLaunchHome()) {
     env.SUBROUTE_API_KEY = "subroute-local";
     // Electron may inherit TERM=dumb. Codex's interactive TUI requires a capable terminal.
     env.TERM = "xterm-256color";
-    args = ["--profile", PROFILE, "-c", `model_catalog_json=${JSON.stringify(catalogPath)}`, "--model", MODEL];
+    args = ["--profile", PROFILE, "-c", `model_catalog_json=${JSON.stringify(catalogPath)}`,
+      "-c", `model_context_window=${CONTEXT_WINDOW}`,
+      "-c", `model_auto_compact_token_limit=${COMPACT_THRESHOLD}`,
+      "-c", 'model_auto_compact_token_limit_scope="total"', "--model", MODEL];
   } else if (id === "opencode") {
     env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
       $schema: "https://opencode.ai/config.json",
-      provider: { subroute: { npm: "@ai-sdk/openai-compatible", name: "Subroute", options: { baseURL: openai }, models: { [MODEL]: { name: MODEL, limit: { context: 128000, output: 32768 }, modalities: { input: ["text", "image"], output: ["text"] } } } } },
+      provider: { subroute: { npm: "@ai-sdk/openai-compatible", name: "Subroute", options: { baseURL: openai }, models: { [MODEL]: { name: MODEL, limit: { context: CONTEXT_WINDOW, input: CONTEXT_WINDOW, output: 32768 }, modalities: { input: ["text", "image"], output: ["text"] } } } } },
       model: `subroute/${MODEL}`,
+      // OpenCode 1.x subtracts reserved from limit.input when that limit exists.
+      compaction: { auto: true, prune: false, reserved: CONTEXT_WINDOW - COMPACT_THRESHOLD },
     });
+    env.OPENCODE_DISABLE_AUTOCOMPACT = "";
     args = ["--model", `subroute/${MODEL}`];
   } else if (id === "hermes") {
     const hermesHome = path.join(launchHome, "hermes");
     await writeLaunchFile(path.join(hermesHome, "config.yaml"), [
       "model:", `  default: ${MODEL}`, "  provider: custom", `  base_url: ${JSON.stringify(openai)}`,
-      "  api_key: subroute-local", "  context_length: 128000", "",
+      "  api_key: subroute-local", `  context_length: ${CONTEXT_WINDOW}`, "",
+      "compression:", "  enabled: true", "  threshold: 0.8",
+      `  threshold_tokens: ${COMPACT_THRESHOLD}`, "  codex_gpt55_autoraise: false", "",
     ].join("\n"));
     env.HERMES_HOME = hermesHome;
     args = ["chat", "--model", MODEL, "--provider", "custom"];
@@ -145,13 +165,33 @@ async function prepareLaunch(id, gatewayUrl, launchHome = desktopLaunchHome()) {
     const patchPath = path.join(dshHome, "subroute.patch.yaml");
     await writeLaunchFile(settingsPath, [
       "llm-deepseek:", `  baseURL: ${JSON.stringify(openai)}`, "  models:", `    - id: ${MODEL}`,
-      "      name: Subroute active model", "      inputModalities: [text, image]", "      contextWindow: 128000", "      maxTokens: 32768",
+      "      name: Subroute active model", "      inputModalities: [text, image]", `      contextWindow: ${CONTEXT_WINDOW}`, "      maxTokens: 32768",
       "agent-default-model:", "  provider: deepseek-official", `  model: ${MODEL}`, "",
     ].join("\n"));
     await writeLaunchFile(patchPath, ["- id: settings", "  config:", `    path: ${JSON.stringify(settingsPath)}`, ""].join("\n"));
     env.DSH_HOME = dshHome;
     args = ["--profile", "web", "--patch", patchPath];
   } else if (id === "openclaw") {
+    const openclawHome = path.join(launchHome, "openclaw");
+    const configPath = path.join(openclawHome, "openclaw.json");
+    const agentDir = path.join(openclawHome, "agents", "main", "agent");
+    // OpenClaw 2026.9 stores reserveTokens in native agent settings, not
+    // agents.defaults.compaction (where the retired key is rejected).
+    await writeLaunchFile(path.join(agentDir, "settings.json"), JSON.stringify({
+      compaction: { enabled: true, reserveTokens: CONTEXT_WINDOW - COMPACT_THRESHOLD },
+    }, null, 2));
+    await writeLaunchFile(configPath, JSON.stringify({
+      models: { providers: { subroute: {
+        baseUrl: openai, apiKey: "subroute-local", api: "openai-completions",
+        models: [{ id: MODEL, name: "Subroute active model", contextWindow: CONTEXT_WINDOW, maxTokens: 32768 }],
+      } } },
+      agents: {
+        defaults: { model: { primary: `subroute/${MODEL}` }, compaction: { enabled: true } },
+        list: [{ id: "main", default: true, agentDir }],
+      },
+    }, null, 2));
+    env.OPENCLAW_CONFIG_PATH = configPath;
+    env.OPENCLAW_STATE_DIR = openclawHome;
     args = ["chat"];
   }
   return { ...agent, args, env, launchHome };
