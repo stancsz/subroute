@@ -12,6 +12,26 @@ from subroute.plugins.advisor_plugin import (
 )
 
 
+@pytest.fixture(autouse=True)
+def advisor_router(monkeypatch):
+    """Supply the live router services required by preconsult and advisor subcalls."""
+    from litellm.proxy import proxy_server
+
+    class Router:
+        def get_model_info(self, model):
+            return {"advisor_max_input_tokens": 32000} if model.endswith("-advisor") else {}
+
+        def get_configured_token_limits(self, model):
+            return (32000, None) if model.endswith("-advisor") else (256000, None)
+
+        def _count_pre_call_check_tokens(self, *, messages, input, request_kwargs):
+            return 1
+
+    router = Router()
+    monkeypatch.setattr(proxy_server, "llm_router", router)
+    return router
+
+
 def run(plugin: AdvisorPlugin, data: dict, call_type: str = "anthropic_messages"):
     return asyncio.run(plugin.async_pre_call_hook({}, None, data, call_type))
 
@@ -477,3 +497,89 @@ def test_advisor_subcall_never_consults_another_advisor():
     }}
     assert run(AdvisorPlugin(), data) is None
     assert "tools" not in data
+
+
+def test_advisor_compaction_falls_back_to_luna_when_minimax_summary_is_over_target(monkeypatch):
+    from litellm.types.utils import Usage
+    from litellm.proxy import proxy_server
+
+    calls = []
+
+    async def count_context(_router, _data, messages):
+        if not any(
+            message.get("role") == "assistant"
+            and "Relevant prior context" in str(message.get("content", ""))
+            for message in messages
+        ):
+            return 40000
+        return 26000 if "minimax summary" in str(messages) else 10000
+
+    async def minimax(_router, messages):
+        calls.append(("minimax", messages))
+        return "minimax summary", Usage(prompt_tokens=40000, completion_tokens=7000, total_tokens=47000)
+
+    async def luna(messages):
+        calls.append(("luna", messages))
+        return "concise Luna summary", Usage(prompt_tokens=40000, completion_tokens=900, total_tokens=40900)
+
+    monkeypatch.setattr(AdvisorPlugin, "_count_context_tokens", staticmethod(count_context))
+    monkeypatch.setattr(AdvisorPlugin, "_minimax_compaction", staticmethod(minimax))
+    monkeypatch.setattr(AdvisorPlugin, "_luna_compaction", staticmethod(luna))
+    messages = [
+        {"role": "user", "content": "earlier goal"},
+        {"role": "assistant", "content": "prior answer"},
+        {"role": "user", "content": "current question"},
+    ]
+
+    compacted, receipt = asyncio.run(AdvisorPlugin._prepare_advisor_messages(
+        proxy_server.llm_router, "codex-sol-advisor", {"model": "codex-sol-advisor"}, messages,
+    ))
+
+    assert [call[0] for call in calls] == ["minimax", "luna"]
+    assert receipt["provider"] == "codex-luna-advisor"
+    assert [attempt["status"] for attempt in receipt["attempts"]] == ["over_budget", "succeeded"]
+    assert receipt["attempts"][0]["usage_source"] == "provider"
+    assert receipt["attempts"][1]["output_tokens"] == 900
+    assert compacted[-1] is messages[-1]
+    assert "concise Luna summary" in compacted[-2]["content"]
+
+
+def test_advisor_compaction_does_not_call_providers_when_context_is_under_limit(monkeypatch):
+    from litellm.proxy import proxy_server
+
+    async def count_context(_router, _data, _messages):
+        return 32000
+
+    async def unexpected(*_args, **_kwargs):
+        pytest.fail("Compaction providers must not run under the Advisor limit")
+
+    monkeypatch.setattr(AdvisorPlugin, "_count_context_tokens", staticmethod(count_context))
+    monkeypatch.setattr(AdvisorPlugin, "_minimax_compaction", staticmethod(unexpected))
+    monkeypatch.setattr(AdvisorPlugin, "_luna_compaction", staticmethod(unexpected))
+    messages = [{"role": "user", "content": "current question"}]
+
+    compacted, receipt = asyncio.run(AdvisorPlugin._prepare_advisor_messages(
+        proxy_server.llm_router, "codex-sol-advisor", {"model": "codex-sol-advisor"}, messages,
+    ))
+
+    assert compacted is messages
+    assert receipt is None
+
+
+def test_luna_compaction_uses_supported_timeout_and_reasoning_only(monkeypatch):
+    from subroute.plugins import advisor_plugin
+
+    calls = []
+
+    async def capture(model, messages, **kwargs):
+        calls.append((model, messages, kwargs))
+        return "briefing", None
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", capture)
+    result = asyncio.run(AdvisorPlugin._luna_compaction([
+        {"role": "user", "content": "current question"},
+    ]))
+
+    assert result[0] == "briefing"
+    assert calls[0][0] == "gpt-6-luna"
+    assert calls[0][2] == {"timeout": 60.0, "reasoning_effort": "low"}

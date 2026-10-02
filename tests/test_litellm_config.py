@@ -16,6 +16,23 @@ def experts_config() -> dict:
     return yaml.safe_load(EXPERTS_CONFIG_PATH.read_text(encoding="utf-8"))
 
 
+def test_target_and_advisor_routes_declare_separate_context_policies():
+    for settings, experts in ((config(), False), (experts_config(), True)):
+        assert settings["router_settings"]["enable_pre_call_checks"] is True
+        for deployment in settings["model_list"]:
+            info = deployment["model_info"]
+            is_advisor = experts or deployment["model_name"].endswith("-advisor")
+            context = 32000 if is_advisor else 256000
+            assert info["max_input_tokens"] == context, deployment["model_name"]
+            assert info["context_window"] == context
+            assert info["auto_compact_token_limit"] == context * 0.8
+            if info.get("advisor_selectable"):
+                if info["max_input_tokens"] == 256000:
+                    assert info["advisor_max_input_tokens"] == 32000
+            assert info["auto_compact_token_limit"] == info["context_window"] * 0.8
+            assert info["compaction_scope"] == "total"
+
+
 def test_compose_isolates_mutable_state_and_pins_gateway_image():
     services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
     prod, staging = services["gateway"], services["gateway-staging"]
@@ -268,7 +285,9 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
         "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
         "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
     }
-    assert experts_config()["router_settings"] == {"num_retries": 0, "fallbacks": []}
+    assert experts_config()["router_settings"] == {
+        "num_retries": 0, "fallbacks": [], "enable_pre_call_checks": True,
+    }
     assert "callbacks" not in experts_config()["litellm_settings"]
     assert experts_config()["general_settings"]["master_key"] == "os.environ/EXPERTS_API_KEY"
     gateway_advisors = {

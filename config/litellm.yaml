@@ -3,6 +3,11 @@ model_list:
   # that coding tools should select. Add deployments rather than Python code.
   - model_name: current
     model_info:
+      <<: &context_policy
+        max_input_tokens: 256000
+        context_window: 256000
+        auto_compact_token_limit: 204800
+        compaction_scope: total
       display_name: Current model
       selectable: false
       disable_background_health_check: true
@@ -14,6 +19,7 @@ model_list:
   # then the configured Gemini and Codex subscription groups on provider error.
   - model_name: auto
     model_info:
+      <<: *context_policy
       display_name: Auto
       selectable: false
       disable_background_health_check: true
@@ -27,6 +33,7 @@ model_list:
   # directly to gemini-subscription or codex-luna remain fail-closed.
   - model_name: auto-gemini-subscription
     model_info:
+      <<: *context_policy
       display_name: "Auto fallback: Gemini 3.8 Flash"
       selectable: false
       disable_background_health_check: true
@@ -36,6 +43,7 @@ model_list:
 
   - model_name: auto-codex-luna
     model_info:
+      <<: *context_policy
       display_name: "Auto fallback: Codex Luna"
       selectable: false
       disable_background_health_check: true
@@ -51,6 +59,7 @@ model_list:
 
   - model_name: openrouter
     model_info:
+      <<: *context_policy
       display_name: MiniMax M3
       provider: OpenRouter
       source_id: openrouter
@@ -66,6 +75,8 @@ model_list:
   # In-process CustomLLM handler backed by the Compose CLI bridge sidecar.
   - model_name: gemini-subscription
     model_info:
+      <<: *context_policy
+      advisor_max_input_tokens: 32000
       display_name: Gemini 3.8 Flash
       provider: Gemini
       source_id: gemini-subscription
@@ -79,6 +90,8 @@ model_list:
 
   - model_name: gemini-subscription-3.7-flash
     model_info:
+      <<: *context_policy
+      advisor_max_input_tokens: 32000
       display_name: Gemini 3.7 Flash
       provider: Gemini
       source_id: gemini-subscription
@@ -92,6 +105,8 @@ model_list:
 
   - model_name: gemini-subscription-3.6-flash
     model_info:
+      <<: *context_policy
+      advisor_max_input_tokens: 32000
       display_name: Gemini 3.6 Flash
       provider: Gemini
       source_id: gemini-subscription
@@ -105,6 +120,8 @@ model_list:
 
   - model_name: gemini-subscription-pro
     model_info:
+      <<: *context_policy
+      advisor_max_input_tokens: 32000
       display_name: Gemini 3.1 Pro
       provider: Gemini
       source_id: gemini-subscription
@@ -121,6 +138,7 @@ model_list:
   # conversion. The deployment hook rereads the Codex auth file per dispatch.
   - model_name: codex-subscription
     model_info:
+      <<: *context_policy
       display_name: GPT-6 Sol
       provider: OpenAI
       source_id: openai-subscription
@@ -139,6 +157,7 @@ model_list:
 
   - model_name: codex-astra
     model_info:
+      <<: *context_policy
       display_name: GPT-6 Astra
       provider: OpenAI
       source_id: openai-subscription
@@ -157,6 +176,7 @@ model_list:
 
   - model_name: codex-terra
     model_info:
+      <<: *context_policy
       display_name: GPT-5.6 Terra
       provider: OpenAI
       source_id: openai-subscription
@@ -175,6 +195,7 @@ model_list:
 
   - model_name: codex-luna
     model_info:
+      <<: *context_policy
       display_name: GPT-6 Luna
       provider: OpenAI
       source_id: openai-subscription
@@ -193,6 +214,7 @@ model_list:
 
   - model_name: codex-reserve
     model_info:
+      <<: *context_policy
       display_name: GPT-5.6 Luna (reserve-capable)
       provider: OpenAI
       source_id: openai-subscription
@@ -211,6 +233,11 @@ model_list:
 
   - model_name: codex-gpt-6.1-sol-advisor
     model_info:
+      <<: &advisor_context_policy
+        max_input_tokens: 32000
+        context_window: 32000
+        auto_compact_token_limit: 25600
+        compaction_scope: total
       display_name: GPT-6.1 Sol
       provider: OpenAI
       source_id: openai-subscription
@@ -225,6 +252,7 @@ model_list:
 
   - model_name: codex-sol-advisor
     model_info:
+      <<: *advisor_context_policy
       display_name: GPT-6 Sol
       provider: OpenAI
       source_id: openai-subscription
@@ -239,6 +267,7 @@ model_list:
 
   - model_name: codex-astra-advisor
     model_info:
+      <<: *advisor_context_policy
       display_name: GPT-6 Astra
       provider: OpenAI
       source_id: openai-subscription
@@ -253,6 +282,7 @@ model_list:
 
   - model_name: codex-luna-advisor
     model_info:
+      <<: *advisor_context_policy
       display_name: GPT-6 Luna
       provider: OpenAI
       source_id: openai-subscription
@@ -269,6 +299,7 @@ model_list:
 
   - model_name: minimax
     model_info:
+      <<: *context_policy
       display_name: MiniMax M3
       provider: MiniMax
       source_id: minimax
@@ -283,6 +314,7 @@ model_list:
   # adapters. Override the base URLs when starting the gateway if necessary.
   - model_name: freetoken
     model_info:
+      <<: *context_policy
       display_name: Endpoint default model
       provider: FreeToken
       source_id: freetoken
@@ -299,6 +331,7 @@ model_list:
 
   - model_name: desktop
     model_info:
+      <<: *context_policy
       display_name: Qwen 2.5 Coder
       provider: Ollama
       source_id: ollama
@@ -310,6 +343,7 @@ model_list:
       api_base: os.environ/OLLAMA_API_BASE
 
 router_settings:
+  enable_pre_call_checks: true
   # Keep ordinary model requests fail-closed. Only explicit `auto` requests
   # move to the next configured provider after a provider error. Audio-only
   # provider_content_filter refusals are typed as ContentPolicyViolationError

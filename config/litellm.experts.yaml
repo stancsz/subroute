@@ -3,6 +3,11 @@
 model_list:
   - model_name: codex-luna-advisor
     model_info:
+      <<: &context_policy
+        max_input_tokens: 32000
+        context_window: 32000
+        auto_compact_token_limit: 25600
+        compaction_scope: total
       display_name: GPT-6 Luna Advisor
       capabilities: [text, vision]
       selectable: false
@@ -14,6 +19,7 @@ model_list:
 
   - model_name: codex-sol-advisor
     model_info:
+      <<: *context_policy
       display_name: GPT-6 Sol Advisor
       capabilities: [text, vision]
       selectable: false
@@ -24,6 +30,7 @@ model_list:
 
   - model_name: codex-astra-advisor
     model_info:
+      <<: *context_policy
       display_name: GPT-6 Astra Advisor
       capabilities: [text, vision]
       selectable: false
@@ -34,6 +41,7 @@ model_list:
 
   - model_name: codex-gpt-6.1-sol-advisor
     model_info:
+      <<: *context_policy
       display_name: GPT-6.1 Sol Advisor
       capabilities: [text, vision]
       selectable: false
@@ -43,6 +51,7 @@ model_list:
       allowed_openai_params: [reasoning_effort]
 
 router_settings:
+  enable_pre_call_checks: true
   # An expert consultation succeeds once or fails visibly. Never retry or fall
   # through to another model, because that would hide both cost and provenance.
   num_retries: 0

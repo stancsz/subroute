@@ -25,7 +25,9 @@ def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=Non
     client_type = httpx.AsyncClient
     monkeypatch.setattr(advisor, "read_codex_credentials", lambda: ("fixture", "fixture"))
     monkeypatch.setattr(advisor.httpx, "AsyncClient", lambda **kw: client_type(transport=transport, **kw))
-    return asyncio.run(advisor.call_codex_streaming_collect("luna", [{"role": "user", "content": "hello"}], reasoning_effort=effort))
+    return asyncio.run(advisor.call_codex_streaming_collect(
+        "luna", [{"role": "user", "content": "hello"}], reasoning_effort=effort,
+    ))
 
 
 DELTA = {"type": "response.output_text.delta", "delta": "partial"}

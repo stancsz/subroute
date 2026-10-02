@@ -1,0 +1,386 @@
+{
+  "checked_at_utc": "2026-10-02T02:47:13.901986+00:00",
+  "policy": {
+    "max_input_tokens": 256000,
+    "context_window": 256000,
+    "auto_compact_token_limit": 204800,
+    "compaction_scope": "total"
+  },
+  "gateways": [
+    {
+      "port": 4000,
+      "readiness": 200,
+      "models": [
+        "current",
+        "auto",
+        "auto-gemini-subscription",
+        "auto-codex-luna",
+        "openrouter",
+        "gemini-subscription",
+        "gemini-subscription-3.7-flash",
+        "gemini-subscription-3.6-flash",
+        "gemini-subscription-pro",
+        "codex-subscription",
+        "codex-astra",
+        "codex-terra",
+        "codex-luna",
+        "codex-reserve",
+        "codex-gpt-6.1-sol-advisor",
+        "codex-sol-advisor",
+        "codex-astra-advisor",
+        "codex-luna-advisor",
+        "minimax",
+        "freetoken",
+        "desktop"
+      ],
+      "all_policy_fields_match": true
+    },
+    {
+      "port": 4005,
+      "readiness": 200,
+      "models": [
+        "current",
+        "auto",
+        "auto-gemini-subscription",
+        "auto-codex-luna",
+        "openrouter",
+        "gemini-subscription",
+        "gemini-subscription-3.7-flash",
+        "gemini-subscription-3.6-flash",
+        "gemini-subscription-pro",
+        "codex-subscription",
+        "codex-astra",
+        "codex-terra",
+        "codex-luna",
+        "codex-reserve",
+        "codex-gpt-6.1-sol-advisor",
+        "codex-sol-advisor",
+        "codex-astra-advisor",
+        "codex-luna-advisor",
+        "minimax",
+        "freetoken",
+        "desktop"
+      ],
+      "all_policy_fields_match": true
+    },
+    {
+      "port": 4040,
+      "readiness": 200,
+      "models": [
+        "codex-luna-advisor",
+        "codex-sol-advisor",
+        "codex-astra-advisor",
+        "codex-gpt-6.1-sol-advisor"
+      ],
+      "all_policy_fields_match": true
+    }
+  ],
+  "http_cases": [
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "current",
+      "status": 400,
+      "seconds": 0.157,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "auto",
+      "status": 400,
+      "seconds": 0.278,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "auto-gemini-subscription",
+      "status": 404,
+      "seconds": 0.075,
+      "expected_private_alias_rejection": true,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "auto-codex-luna",
+      "status": 404,
+      "seconds": 0.075,
+      "expected_private_alias_rejection": true,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "openrouter",
+      "status": 400,
+      "seconds": 0.139,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "gemini-subscription",
+      "status": 400,
+      "seconds": 0.14,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "gemini-subscription-3.7-flash",
+      "status": 400,
+      "seconds": 0.171,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "gemini-subscription-3.6-flash",
+      "status": 400,
+      "seconds": 0.136,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "gemini-subscription-pro",
+      "status": 400,
+      "seconds": 0.168,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-subscription",
+      "status": 400,
+      "seconds": 0.142,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-astra",
+      "status": 400,
+      "seconds": 0.191,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-terra",
+      "status": 400,
+      "seconds": 0.134,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-luna",
+      "status": 400,
+      "seconds": 0.138,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-reserve",
+      "status": 400,
+      "seconds": 0.138,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-gpt-6.1-sol-advisor",
+      "status": 404,
+      "seconds": 0.073,
+      "expected_private_alias_rejection": true,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-sol-advisor",
+      "status": 404,
+      "seconds": 0.071,
+      "expected_private_alias_rejection": true,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-astra-advisor",
+      "status": 404,
+      "seconds": 0.075,
+      "expected_private_alias_rejection": true,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-luna-advisor",
+      "status": 404,
+      "seconds": 0.08,
+      "expected_private_alias_rejection": true,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "minimax",
+      "status": 400,
+      "seconds": 0.144,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "freetoken",
+      "status": 400,
+      "seconds": 0.16,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "desktop",
+      "status": 400,
+      "seconds": 0.148,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/responses",
+      "model": "current",
+      "status": 400,
+      "seconds": 0.123,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/messages",
+      "model": "current",
+      "status": 400,
+      "seconds": 0.097,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4005,
+      "endpoint": "/v1/chat/completions",
+      "model": "current",
+      "status": 400,
+      "seconds": 0.083,
+      "expected_private_alias_rejection": false,
+      "passed": true
+    },
+    {
+      "port": 4000,
+      "endpoint": "/v1/chat/completions",
+      "model": "current",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "port": 4000,
+      "endpoint": "/v1/chat/completions",
+      "model": "auto",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "port": 4000,
+      "endpoint": "/v1/responses",
+      "model": "current",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "port": 4000,
+      "endpoint": "/v1/messages",
+      "model": "current",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "port": 4040,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-luna-advisor",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "port": 4040,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-sol-advisor",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "port": 4040,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-astra-advisor",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "port": 4040,
+      "endpoint": "/v1/chat/completions",
+      "model": "codex-gpt-6.1-sol-advisor",
+      "status": 400,
+      "passed": true
+    }
+  ],
+  "routing_policy_unchanged": true,
+  "routing_snapshot": {
+    "4000": {
+      "active_model": "openrouter",
+      "mode": "force",
+      "policy_version": 80,
+      "advisor_model": "codex-gpt-6.1-sol-advisor",
+      "reasoning_effort": null,
+      "advisor_reasoning_effort": "low"
+    },
+    "4005": {
+      "active_model": "codex-luna",
+      "mode": "force",
+      "policy_version": 480,
+      "advisor_model": "gemini-subscription",
+      "reasoning_effort": "high",
+      "advisor_reasoning_effort": null
+    }
+  },
+  "codex_runtime": {
+    "version": "0.154.0",
+    "model_context_window": 256000,
+    "turn_completed": true,
+    "input_tokens": 9732,
+    "cached_input_tokens": 146,
+    "output_tokens": 45,
+    "reasoning_output_tokens": 40
+  },
+  "verification_boundaries": [
+    "No full-length live compaction cycle in every client",
+    "OpenClaw runtime not installed",
+    "Upstream physical context capacity unchanged",
+    "Gateway checks estimated input, not input plus requested output"
+  ]
+}
