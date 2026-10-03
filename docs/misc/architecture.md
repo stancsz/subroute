@@ -36,7 +36,7 @@ This repository owns:
 - a small, reviewable LiteLLM configuration, including the explicit `auto`
   fallback chain MiniMax M3 → Gemini 3.8 Flash → Codex Luna
 - explicit public model aliases
-- fail-closed routing for fixed models, with the explicit `auto` fallback chain
+- fail-closed routing by default, with explicit target and Advisor fallback chains
 - acceptance tests that prevent protocol and provider abstractions from
   growing back into the project
 - a callback that injects LiteLLM's built-in Advisor tool on the Anthropic
@@ -46,9 +46,11 @@ This repository owns:
 
 The dynamic routing callback precedes the Advisor callback. A request for
 `current` resolves to the selected model; `auto` remains a LiteLLM model group
-whose provider errors use the configured fallback chain. Private fallback groups
-keep those transitions scoped to `auto`, so direct Gemini and Codex model
-requests still fail closed. The same policy snapshot decides
+whose provider errors use the configured fallback chain. Explicit fallback
+chains also cover MiniMax, OpenRouter, and Xiaomi target aliases. Advisor
+failover uses a private Gemini alias plus GPT-6.1 Sol, so advisor errors do not
+change ordinary Gemini target behavior. Other direct model requests still fail
+closed. The same policy snapshot decides
 whether to consult an advisor. An empty advisor selection disables consultation. Rewrites carry requested and resolved model names, routing mode, and
 policy version as audit metadata. Existing in-flight requests are never
 retargeted.

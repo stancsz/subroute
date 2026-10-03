@@ -47,6 +47,15 @@ ANTIGRAVITY_ADVISOR_MODELS = {
     "gemini-subscription-3.6-flash": "gemini-3.6-flash",
     "gemini-subscription-pro": "gemini-3.1-pro",
 }
+ADVISOR_PROVIDER_FALLBACKS = {
+    "gemini-subscription": "codex-gpt-6.1-sol-advisor",
+    "codex-gpt-6.1-sol-advisor": "gemini-subscription",
+}
+ADVISOR_TOOL_MODEL_ALIASES = {
+    # The public Gemini alias is also a target model, so advisor calls use a
+    # private LiteLLM group to keep fallback policy scoped to consultation.
+    "gemini-subscription": "gemini-3.8-flash-advisor",
+}
 logger = logging.getLogger(__name__)
 _SECRET_FIELD = re.compile(
     r"(?i)\b(authorization|api[\s_-]?key|access[\s_-]?token|refresh[\s_-]?token|token|password)(['\"]?\s*[:=]\s*['\"]?)([^'\"\s,;}\]]+)"
@@ -287,6 +296,22 @@ class AdvisorPlugin(CustomLogger):
             reasoning_effort="low",
         )
 
+    @staticmethod
+    async def _invoke_advisor(
+        model: str, messages: list[dict[str, Any]], effort: str | None,
+    ) -> tuple[str, Any]:
+        if model in ANTIGRAVITY_ADVISOR_MODELS:
+            return await invoke_agy(
+                model_with_effort(ANTIGRAVITY_ADVISOR_MODELS[model], effort),
+                prompt_from_messages(messages), advisor=True,
+            )
+        if model in ADVISOR_MODEL_NAMES:
+            return await call_codex_streaming_collect(
+                ADVISOR_MODEL_NAMES[model], messages,
+                **({"reasoning_effort": effort} if effort is not None else {}),
+            )
+        raise ValueError(f"Unsupported Advisor model: {model}")
+
     @classmethod
     async def _prepare_advisor_messages(
         cls, router: Any, model: str, data: dict, messages: list[dict[str, Any]],
@@ -474,6 +499,8 @@ class AdvisorPlugin(CustomLogger):
             router = proxy_server.llm_router
             consultation_id = uuid.uuid4().hex
             advisor_messages = messages
+            resolved_advisor_model = advisor_model
+            fallback_attempt: dict[str, str] | None = None
             try:
                 if router is None:
                     raise RuntimeError("Advisor context limit is unavailable")
@@ -495,26 +522,37 @@ class AdvisorPlugin(CustomLogger):
                         compaction["provider"], compaction["original_estimated_tokens"],
                         compaction["final_estimated_tokens"], compaction["attempts"],
                     )
-                if advisor_model in ANTIGRAVITY_ADVISOR_MODELS:
-                    advice, usage = await invoke_agy(
-                        model_with_effort(ANTIGRAVITY_ADVISOR_MODELS[advisor_model], advisor_effort),
-                        prompt_from_messages(advisor_messages),
-                        advisor=True,
+                try:
+                    advice, usage = await self._invoke_advisor(
+                        advisor_model, advisor_messages, advisor_effort,
                     )
-                else:
-                    advice, usage = await call_codex_streaming_collect(
-                        ADVISOR_MODEL_NAMES[advisor_model], advisor_messages,
-                        **({"reasoning_effort": advisor_effort} if advisor_effort is not None else {}),
+                except Exception as first_error:
+                    fallback_model = ADVISOR_PROVIDER_FALLBACKS.get(advisor_model)
+                    if fallback_model is None:
+                        raise
+                    fallback_attempt = {
+                        "failed_model": advisor_model,
+                        "reason": _safe_error_reason(first_error),
+                    }
+                    logger.warning(
+                        "advisor fallback request_id=%s consultation_id=%s failed_model=%s fallback_model=%s reason=%s",
+                        data.get("litellm_call_id"), consultation_id, advisor_model,
+                        fallback_model, fallback_attempt["reason"],
                     )
+                    advice, usage = await self._invoke_advisor(
+                        fallback_model, advisor_messages, advisor_effort,
+                    )
+                    resolved_advisor_model = fallback_model
             except ContextWindowExceededError:
                 raise
-            except (RuntimeError, TimeoutError, ValueError) as exc:
+            except Exception as exc:
                 reason = _safe_error_reason(exc)
                 gateway_request_id = data.get("litellm_call_id")
                 metadata["gateway_advisor"] = {
                     "status": "failed", "model": advisor_model,
                     "consultation_id": consultation_id, "reason": reason,
                     "gateway_request_id": gateway_request_id,
+                    **({"fallback_attempt": fallback_attempt} if fallback_attempt else {}),
                 }
                 if isinstance(exc, AdvisorContextCompactionError):
                     metadata["gateway_advisor_compaction"] = {
@@ -578,10 +616,12 @@ class AdvisorPlugin(CustomLogger):
             ]
             metadata["gateway_advisor"] = {
                 "status": "advice_injected", "model": advisor_model,
+                "resolved_model": resolved_advisor_model,
                 "consultation_id": consultation_id, "usage_source": "provider",
                 "input_tokens": usage.prompt_tokens,
                 "output_tokens": usage.completion_tokens,
                 "reasoning_effort": advisor_effort,
+                **({"fallback_attempt": fallback_attempt} if fallback_attempt else {}),
             }
             if metadata.get("gateway_advisor_compaction"):
                 metadata["gateway_advisor"]["compaction"] = metadata["gateway_advisor_compaction"]
@@ -607,7 +647,7 @@ class AdvisorPlugin(CustomLogger):
                 {
                     "type": ADVISOR_TOOL_TYPE,
                     "name": "advisor",
-                    "model": advisor_model,
+                    "model": ADVISOR_TOOL_MODEL_ALIASES.get(advisor_model, advisor_model),
                     "max_uses": self.max_uses,
                     "caching": {"type": "ephemeral", "ttl": "5m"},
                 }

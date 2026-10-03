@@ -1,5 +1,7 @@
 # Subroute 维护性与可靠性目标
 
+**2026-10-03 用户要求的 provider failover，源码配置已更新，运行验证待做：** 从用户当前所选模型开始，MiniMax、OpenRouter、Xiaomi MiMo 按此顺序尝试，每个 provider 至多一次；MiMo Pro 代表 Xiaomi fallback，GPT-6 Luna 是最后选项。Advisor 的 GPT-6.1 Sol 与 Gemini 3.8 Flash 互为一次 fallback，默认均为 low reasoning effort，默认选择 GPT-6.1 Sol；Gemini 使用私有 advisor alias，避免改变公共 Gemini target 请求。README、Compose 初始化默认值及 Advisor 控制器均已同步。没有增加通用重试、未运行测试或 provider 请求；部署和真实失败条件下的 fallback 尚未验证。失败尝试可能产生费用，响应 usage 仅代表 LiteLLM 最终成功尝试。
+
 **2026-10-01 Advisor 节省输入预算：** 用户指出 Advisor 应设置较小上下文以降低咨询成本。Advisor 的最大输入/上下文已从 256,000 降至 32,000 tokens，自动压缩阈值 25,600；目标会话仍为 256,000。Codex Advisor aliases 和专用 experts 由 LiteLLM 原生上限执行；共享 Gemini target aliases 保留目标模型窗口，由 Advisor hook 在派发前用 LiteLLM 原生计数器执行 Advisor 专属上限。配置语法通过解析，Compose 配置有效；三个服务已重建，production/staging/experts readiness 均返回 200，运行中的三个 `/model/info` 已显示 Advisor 32,000/25,600 元数据。
 
 **2026-10-01 用户要求的 Advisor overflow recovery，已部署，provider-backed 行为待实测：** 超过 32,000-token Advisor cap 时，仅压缩 Advisor 副本。首选一次 MiniMax M3，输出最多 8,192 tokens；失败、无法处理模态或结果仍超过 25,600 时最多回退一次 GPT-6 Luna。Codex subscription endpoint 不接受调用方输出 token cap，因此 Luna compaction 使用上游管理的输出限制；两次调用均受超时限制。保持消息级 system/developer 指令与最新 user turn 原样，压缩更早的会话历史；主模型仍收到原始请求。每次 provider usage 与 LiteLLM 的最终 token estimate 会分别记录。若两种压缩均不能产出合规副本则 fail closed。此 path 只在实际溢出时产生额外 provider 调用。代码语法通过，production 与 staging 已重建且 readiness 均 HTTP 200；没有进行会触发付费压缩调用的 provider-backed overflow test。
@@ -62,7 +64,7 @@
 
 - LiteLLM 继续负责公开协议、流式转换、标准 provider adapter、重试和 advisor orchestration。只有经运行版本确认存在具体缺口时，才保留窄的自定义实现，并记录其用途与退役条件。
 - 保持 Docker Compose 生产、staging、PostgreSQL 和 Antigravity Subscription sidecar 的既有角色。除非有当前证据证明某项运行角色造成故障，否则不得用主机进程或删服务作为清理方式。
-- 不静默丢弃内容、改写指令角色、放宽调用限制、伪造成功、掩盖错误或增加隐藏重试、fallback/provider 调用。用户明确要求且调用方可见的 `auto` 优先级 fallback 链是唯一例外；每次失败转发都由 LiteLLM 管理并保留实际失败，不用于 `current` 或固定模型请求。任何有意翻译或能力限制都必须可见且有回归证据。
+- 不静默丢弃内容、改写指令角色、放宽调用限制、伪造成功、掩盖错误或增加隐藏重试、fallback/provider 调用。用户明确要求的 `auto`、MiniMax/OpenRouter/Xiaomi target 与指定 Advisor fallback 链是例外；target fallback 由 LiteLLM 管理，Advisor pre-consult fallback 明确记录实际失败和最终 Advisor。任何有意翻译或能力限制都必须可见且有回归证据。
 - Provider 工作必须有并发上限、超时和取消后的子进程/连接清理；成功只在确认 provider 的 terminal completion 后报告。
 - 保持生产和 staging 状态、配置、凭据与数据库的已声明边界。不得把当前共享状态描述成完全隔离。
 - 不为假设中的未来需求新增服务、依赖、数据库、配置项或抽象。每项改动都要说明消除的具体失败机制及必须保留的行为。

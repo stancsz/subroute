@@ -65,9 +65,9 @@ Base URL: http://127.0.0.1:4000/v1
 Model:    auto
 ```
 
-`auto` tries MiniMax M3 first, then Gemini 3.8 Flash through the subscription integration, then Codex Luna through the subscription integration if the preceding provider returns an error. This is request-time fallback, so a failed upstream attempt may still incur provider cost. Use `current` to follow the route selected in the control desk, or select a specific model alias to keep a fixed route. Available models are listed in this checkout's [`config/litellm.yaml`](config/litellm.yaml).
+`auto` tries MiniMax M3 first, then Gemini 3.8 Flash through the subscription integration, then Codex Luna through the subscription integration if the preceding provider returns an error. Selecting MiniMax, OpenRouter, or either Xiaomi MiMo route also enables ordered fallback across those routes, with GPT-6 Luna last. A provider failure can still incur cost. Use `current` to follow the route selected in the control desk. Other fixed model aliases remain fail-closed. Available models are listed in this checkout's [`config/litellm.yaml`](config/litellm.yaml).
 
-Xiaomi MiMo Token Plan exposes `mimo-v2.6-pro` and `mimo-v2.6-flash` through the supplied OpenAI-compatible endpoint. Set `XIAOMI_TOKENPLAN_API_KEY` in the Compose environment (for example, in the ignored repository-root `.env` file) to enable these routes.
+Xiaomi MiMo Token Plan exposes the V2.6 Pro/Flash, V2.5 Pro/base, ASR, and three TTS models through the supplied OpenAI-compatible endpoint. Set `XIAOMI_TOKENPLAN_API_KEY` in the Compose environment (for example, in the ignored repository-root `.env` file) to enable these routes. MiMo ASR and TTS use Xiaomi's Chat Completions format at `/v1/chat/completions`; they are not compatible with LiteLLM's standard `/v1/audio/transcriptions` or `/v1/audio/speech` request formats. TTS requests put the spoken text in an `assistant` message and specify output options in `audio`; ASR requests pass `input_audio` in a user message and may set `asr_options`.
 
 ### Use the Electron app
 
@@ -91,14 +91,14 @@ docker compose up -d gateway-staging
 
 ## Routing, without surprises
 
-The production desk is set to **OpenRouter MiniMax M3**, **GPT-6 Luna Advisor**, and **high Advisor reasoning effort**. All OpenAI Advisor routes use GPT-6 or newer: Luna, Sol, Astra and GPT-6.1 Sol. These are selectable models, not a model lock. New routing state defaults to OpenRouter and Luna/high. `ACTIVE_MODEL` and `ADVISOR_MODEL` override initialization; persisted state takes precedence on subsequent starts, including explicitly disabled advisors and saved effort. Production retains its saved `force` mode; staging retains its own policy.
+All OpenAI Advisor routes use GPT-6 or newer: Luna, Sol, Astra and GPT-6.1 Sol. These are selectable models, not a model lock. New routing state defaults to OpenRouter and GPT-6.1 Sol/low. `ACTIVE_MODEL` and `ADVISOR_MODEL` override initialization; persisted state takes precedence on subsequent starts, including explicitly disabled advisors and saved effort. Production retains its saved `force` mode; staging retains its own policy.
 
 - **`alias`** is the default. It resolves `current` and `default` using the saved route. `auto` always uses the prioritized provider chain.
 - **`force`** applies the selected route to known model requests except explicit `auto` requests and image generation.
 - **`off`** leaves model dispatch to LiteLLM.
-- **Advisor** is selected independently. It enables consultation on the Anthropic Messages API; GPT-6 Luna is available alongside the other configured advisors. `No advisor` disables it.
+- **Advisor** is selected independently. It enables consultation on the Anthropic Messages API; GPT-6 Luna is available alongside the other configured advisors. When Gemini 3.8 Flash or GPT-6.1 Sol is selected, a provider failure falls back once to the other at the same reasoning effort. `No advisor` disables it.
 
-Subroute configures no automatic retries. Only requests explicitly using `auto` fall back across providers, in the documented order. Requests using `current` or a specific model fail visibly if that route fails.
+Subroute configures no automatic retries. `auto` and the listed MiniMax/OpenRouter/Xiaomi routes use explicit LiteLLM-managed fallback chains. Advisor failover is limited to Gemini 3.8 Flash and GPT-6.1 Sol. Failed provider calls and their costs remain possible and are not hidden retries.
 
 ### Generate an image
 
@@ -210,9 +210,9 @@ API 地址： http://127.0.0.1:4000/v1
 模型：     auto
 ```
 
-`auto` 首先尝试 MiniMax M3；若服务返回错误，则依次尝试 Gemini 3.8 Flash 订阅和 Codex Luna 订阅。失败的上游尝试仍可能产生费用。使用 `current` 跟随控制台选择的路由，或选择具体模型别名以固定路由。当前模型见本仓库的 [`config/litellm.yaml`](config/litellm.yaml)。
+`auto` 首先尝试 MiniMax M3；若服务返回错误，则依次尝试 Gemini 3.8 Flash 订阅和 Codex Luna 订阅。选择 MiniMax、OpenRouter 或任一 Xiaomi MiMo 路由时，也会按这些服务的顺序回退，并以 GPT-6 Luna 作为最后选项。失败的上游尝试仍可能产生费用。使用 `current` 跟随控制台选择的路由；其他固定模型别名仍在失败时返回错误。当前模型见本仓库的 [`config/litellm.yaml`](config/litellm.yaml)。
 
-Xiaomi MiMo Token Plan 提供 `mimo-v2.6-pro` 和 `mimo-v2.6-flash` 两个 OpenAI 兼容模型路由。设置 Compose 环境变量 `XIAOMI_TOKENPLAN_API_KEY`（例如写入仓库根目录被 Git 忽略的 `.env` 文件）即可启用。
+Xiaomi MiMo Token Plan 提供 V2.6 Pro/Flash、V2.5 Pro/base、ASR 和三个 TTS 模型路由。设置 Compose 环境变量 `XIAOMI_TOKENPLAN_API_KEY`（例如写入仓库根目录被 Git 忽略的 `.env` 文件）即可启用。MiMo ASR/TTS 使用 Xiaomi 的 Chat Completions 格式 `/v1/chat/completions`，不兼容 LiteLLM 标准 `/v1/audio/transcriptions` 或 `/v1/audio/speech` 请求格式。TTS 将待播文本放入 `assistant` 消息，并通过 `audio` 指定输出；ASR 将 `input_audio` 放入 `user` 消息，可额外设置 `asr_options`。
 
 ### 使用 Electron 桌面端
 
@@ -239,9 +239,9 @@ docker compose up -d gateway-staging
 - **`alias`** 是默认模式，根据已保存的路由解析 `current` 和 `default`。`auto` 始终使用按优先级排列的服务链。
 - **`force`** 将所选路由应用到已知模型的推理请求，显式使用 `auto` 和图片生成请求除外。
 - **`off`** 将模型分发交由 LiteLLM 处理。
-- **Advisor（顾问模型）** 独立选择。选择顾问后，Anthropic Messages API 请求会启用咨询；GPT-6 Luna 可与其他已配置顾问一样选择，选择 `No advisor` 则关闭。
+- **Advisor（顾问模型）** 独立选择。选择顾问后，Anthropic Messages API 请求会启用咨询；GPT-6 Luna 可与其他已配置顾问一样选择。选择 Gemini 3.8 Flash 或 GPT-6.1 Sol 后，服务失败时会以相同 reasoning effort 尝试另一模型。选择 `No advisor` 则关闭。
 
-Subroute 默认关闭通用自动重试。Gemini 音频请求仅在 Antigravity 明确返回 `provider_content_filter` 时由 LiteLLM 最多重试两次；普通 502、超时、文本请求和其他模型仍不重试。只有明确使用 `auto` 的请求才会按文档顺序尝试备用服务。MCP 会报告重试次数；恢复响应中的 usage 仅统计最后一次 provider 调用，早先失败调用的 usage 保留在 gateway/sidecar 日志。
+Subroute 默认关闭通用自动重试。Gemini 音频请求仅在 Antigravity 明确返回 `provider_content_filter` 时由 LiteLLM 最多重试两次；普通 502、超时、文本请求和其他模型仍不重试。`auto` 以及文档列出的 MiniMax/OpenRouter/Xiaomi 路由由 LiteLLM 按顺序切换服务；Advisor 只在 Gemini 3.8 Flash 和 GPT-6.1 Sol 之间切换。MCP 会报告音频重试次数；恢复响应中的 usage 仅统计最后一次 provider 调用，早先失败调用的 usage 保留在 gateway/sidecar 日志。
 
 ### 使用边界
 

@@ -57,6 +57,21 @@ model_list:
       allowed_openai_params: [reasoning_effort]
       store: false
 
+  # Advisor-only Gemini alias keeps its fallback policy separate from the
+  # public Gemini target route.
+  - model_name: gemini-3.8-flash-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: total
+      display_name: "Advisor fallback: Gemini 3.8 Flash"
+      selectable: false
+      disable_background_health_check: true
+    litellm_params:
+      model: antigravity/gemini-3.8-flash
+      allowed_openai_params: [reasoning_effort]
+
   - model_name: openrouter
     model_info:
       <<: *context_policy
@@ -336,6 +351,101 @@ model_list:
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
       api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
 
+  - model_name: mimo-v2.5-pro
+    model_info:
+      <<: *context_policy
+      display_name: MiMo V2.5 Pro
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [text, vision, audio, video, tools, streaming]
+    litellm_params:
+      model: openai/mimo-v2.5-pro
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+
+  - model_name: mimo-v2.5
+    model_info:
+      <<: *context_policy
+      display_name: MiMo V2.5
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [text, vision, audio, video, tools, streaming]
+    litellm_params:
+      model: openai/mimo-v2.5
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+
+  - model_name: mimo-v2.5-asr
+    model_info:
+      max_input_tokens: 8000
+      context_window: 8000
+      auto_compact_token_limit: 6400
+      compaction_scope: total
+      max_tokens: 2000
+      display_name: MiMo V2.5 ASR
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [speech-recognition, streaming]
+    litellm_params:
+      model: openai/mimo-v2.5-asr
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+      allowed_openai_params: [asr_options]
+
+  - model_name: mimo-v2.5-tts
+    model_info:
+      max_input_tokens: 8000
+      context_window: 8000
+      auto_compact_token_limit: 6400
+      compaction_scope: total
+      max_tokens: 8000
+      display_name: MiMo V2.5 TTS
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [speech-synthesis, streaming]
+    litellm_params:
+      model: openai/mimo-v2.5-tts
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+
+  - model_name: mimo-v2.5-tts-voiceclone
+    model_info:
+      max_input_tokens: 8000
+      context_window: 8000
+      auto_compact_token_limit: 6400
+      compaction_scope: total
+      max_tokens: 8000
+      display_name: MiMo V2.5 TTS Voice Clone
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [speech-synthesis, voice-cloning, streaming]
+    litellm_params:
+      model: openai/mimo-v2.5-tts-voiceclone
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+
+  - model_name: mimo-v2.5-tts-voicedesign
+    model_info:
+      max_input_tokens: 8000
+      context_window: 8000
+      auto_compact_token_limit: 6400
+      compaction_scope: total
+      max_tokens: 8000
+      display_name: MiMo V2.5 TTS Voice Design
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [speech-synthesis, voice-design, streaming]
+    litellm_params:
+      model: openai/mimo-v2.5-tts-voicedesign
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+
   # Native OpenAI-compatible transports. These are configuration, not custom
   # adapters. Override the base URLs when starting the gateway if necessary.
   - model_name: freetoken
@@ -370,10 +480,9 @@ model_list:
 
 router_settings:
   enable_pre_call_checks: true
-  # Keep ordinary model requests fail-closed. Only explicit `auto` requests
-  # move to the next configured provider after a provider error. Audio-only
-  # provider_content_filter refusals are typed as ContentPolicyViolationError
-  # by the Antigravity handler and receive at most two same-input retries.
+  # Keep ordinary model requests fail-closed unless their model group has an
+  # explicit fallback below. Audio-only provider_content_filter refusals are
+  # typed as ContentPolicyViolationError and receive at most two same-input retries.
   num_retries: 0
   model_group_retry_policy:
     gemini-subscription:
@@ -381,6 +490,15 @@ router_settings:
   fallbacks:
     - auto: [auto-gemini-subscription]
     - auto-gemini-subscription: [auto-codex-luna]
+    # Selected MiniMax, OpenRouter, and Xiaomi routes fail over in order.
+    # MiMo Pro represents Xiaomi in the chain so one provider is not called twice.
+    - minimax: [openrouter, mimo-v2.6-pro, codex-luna]
+    - openrouter: [minimax, mimo-v2.6-pro, codex-luna]
+    - mimo-v2.6-pro: [minimax, openrouter, codex-luna]
+    - mimo-v2.6-flash: [minimax, openrouter, codex-luna]
+    # Keep Advisor fallback isolated from the public Gemini target alias.
+    - gemini-3.8-flash-advisor: [codex-gpt-6.1-sol-advisor]
+    - codex-gpt-6.1-sol-advisor: [gemini-3.8-flash-advisor]
 
 litellm_settings:
   callbacks:

@@ -25,6 +25,7 @@ from subroute.ui_control import register_ui_routes, source_configuration
 RoutingMode = Literal["alias", "force", "off"]
 VIRTUAL_ALIASES = frozenset({"current", "default", "auto"})
 RETIRED_MODEL_ALIASES = {"openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax"}
+FAILOVER_ADVISOR_MODELS = frozenset({"gemini-subscription", "codex-gpt-6.1-sol-advisor"})
 ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class RoutingState:
     active_model: str
     mode: RoutingMode = "alias"
     policy_version: int = 1
-    advisor_model: str | None = "codex-luna-advisor"
+    advisor_model: str | None = "codex-gpt-6.1-sol-advisor"
     reasoning_effort: str | None = None
     advisor_reasoning_effort: str | None = None
 
@@ -124,11 +125,13 @@ class RoutingControlPlane:
         if not self.state_path.exists():
             initial_model = os.getenv("ACTIVE_MODEL", "openrouter" if "openrouter" in self.allowed_models else self.choices[0].model_id)
             initial_model = RETIRED_MODEL_ALIASES.get(initial_model, initial_model)
-            advisor_model = os.getenv("ADVISOR_MODEL", "codex-luna-advisor")
+            advisor_model = os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
             state = RoutingState(
                 active_model=initial_model,
                 advisor_model=advisor_model,
-                advisor_reasoning_effort="high" if advisor_model == "codex-luna-advisor" else None,
+                advisor_reasoning_effort="low" if advisor_model == "codex-gpt-6.1-sol-advisor" else (
+                    "high" if advisor_model == "codex-luna-advisor" else None
+                ),
             )
             self._validate(state)
             self._write_atomic(state)
@@ -138,7 +141,7 @@ class RoutingControlPlane:
             active_model=raw["active_model"],
             mode=raw.get("mode", "alias"),
             policy_version=int(raw.get("policy_version", 1)),
-            advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-luna-advisor")),
+            advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")),
             reasoning_effort=raw.get("reasoning_effort"),
             advisor_reasoning_effort=raw.get("advisor_reasoning_effort"),
         )
@@ -206,11 +209,17 @@ class RoutingControlPlane:
 
     def update_advisor(self, advisor_model: str | None, **settings: Any) -> RoutingState:
         with self._lock:
+            default_effort = "low" if advisor_model in FAILOVER_ADVISOR_MODELS else None
             candidate = replace(
                 self._state,
                 advisor_model=advisor_model,
                 policy_version=self._state.policy_version + 1,
-                advisor_reasoning_effort=settings.get("reasoning_effort", self._state.advisor_reasoning_effort if advisor_model == self._state.advisor_model else None),
+                advisor_reasoning_effort=settings.get(
+                    "reasoning_effort",
+                    self._state.advisor_reasoning_effort
+                    if advisor_model == self._state.advisor_model
+                    else default_effort,
+                ),
             )
             self._validate(candidate)
             self._write_atomic(candidate)
