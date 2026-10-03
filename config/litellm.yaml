@@ -310,6 +310,32 @@ model_list:
       model: minimax/MiniMax-M3
       api_key: os.environ/MINIMAX_API_KEY
 
+  - model_name: mimo-v2.6-pro
+    model_info:
+      <<: *context_policy
+      display_name: MiMo V2.6 Pro
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [text, streaming]
+    litellm_params:
+      model: openai/mimo-v2.6-pro
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+
+  - model_name: mimo-v2.6-flash
+    model_info:
+      <<: *context_policy
+      display_name: MiMo V2.6 Flash
+      provider: Xiaomi MiMo
+      source_id: xiaomi-tokenplan
+      access: Token Plan
+      capabilities: [text, streaming]
+    litellm_params:
+      model: openai/mimo-v2.6-flash
+      api_base: https://token-plan-sgp.xiaomimimo.com/v1
+      api_key: os.environ/XIAOMI_TOKENPLAN_API_KEY
+
   # Native OpenAI-compatible transports. These are configuration, not custom
   # adapters. Override the base URLs when starting the gateway if necessary.
   - model_name: freetoken

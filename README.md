@@ -67,6 +67,8 @@ Model:    auto
 
 `auto` tries MiniMax M3 first, then Gemini 3.8 Flash through the subscription integration, then Codex Luna through the subscription integration if the preceding provider returns an error. This is request-time fallback, so a failed upstream attempt may still incur provider cost. Use `current` to follow the route selected in the control desk, or select a specific model alias to keep a fixed route. Available models are listed in this checkout's [`config/litellm.yaml`](config/litellm.yaml).
 
+Xiaomi MiMo Token Plan exposes `mimo-v2.6-pro` and `mimo-v2.6-flash` through the supplied OpenAI-compatible endpoint. Set `XIAOMI_TOKENPLAN_API_KEY` in the Compose environment (for example, in the ignored repository-root `.env` file) to enable these routes.
+
 ### Use the Electron app
 
 With the gateway running, launch the desktop control desk:
@@ -209,6 +211,8 @@ API 地址： http://127.0.0.1:4000/v1
 ```
 
 `auto` 首先尝试 MiniMax M3；若服务返回错误，则依次尝试 Gemini 3.8 Flash 订阅和 Codex Luna 订阅。失败的上游尝试仍可能产生费用。使用 `current` 跟随控制台选择的路由，或选择具体模型别名以固定路由。当前模型见本仓库的 [`config/litellm.yaml`](config/litellm.yaml)。
+
+Xiaomi MiMo Token Plan 提供 `mimo-v2.6-pro` 和 `mimo-v2.6-flash` 两个 OpenAI 兼容模型路由。设置 Compose 环境变量 `XIAOMI_TOKENPLAN_API_KEY`（例如写入仓库根目录被 Git 忽略的 `.env` 文件）即可启用。
 
 ### 使用 Electron 桌面端
 

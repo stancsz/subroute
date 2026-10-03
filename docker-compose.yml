@@ -64,6 +64,7 @@ services:
       - UI_USERNAME=${UI_USERNAME:-admin}
       - UI_PASSWORD=${UI_PASSWORD:-sk-gateway-local-dev}
       - MINIMAX_API_KEY
+      - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -99,6 +100,7 @@ services:
       - UI_USERNAME=${UI_USERNAME:-admin}
       - UI_PASSWORD=${UI_PASSWORD:-sk-gateway-local-dev}
       - MINIMAX_API_KEY
+      - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY
     extra_hosts:
       - "host.docker.internal:host-gateway"

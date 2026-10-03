@@ -3,6 +3,7 @@
     {"id": "openai-subscription", "name": "OpenAI Subscription", "kind": "subscription", "models": "ChatGPT / Codex · Sol, Astra, Terra, Luna, Reserve", "accent": "coral", "credentials": ["CODEX_AUTH_FILE"]},
     {"id": "gemini-subscription", "name": "Gemini Subscription", "kind": "subscription", "models": "gemini-subscription · advisor available", "accent": "blue"},
     {"id": "minimax", "name": "MiniMax", "kind": "api key", "models": "MiniMax M3", "accent": "gold", "credentials": ["MINIMAX_API_KEY"]},
+    {"id": "xiaomi-tokenplan", "name": "Xiaomi MiMo Token Plan", "kind": "API key", "models": "MiMo V2.6 Pro · MiMo V2.6 Flash", "accent": "blue", "credentials": ["XIAOMI_TOKENPLAN_API_KEY"]},
     {"id": "openrouter", "name": "OpenRouter", "kind": "api key", "models": "MiniMax M3", "accent": "violet", "credentials": ["OPENROUTER_API_KEY"]},
     {"id": "freetoken", "name": "FreeToken", "kind": "local endpoint", "models": "freetoken · OpenAI compatible", "accent": "blue", "credentials": ["FREETOKEN_BASE_URL", "FREETOKEN_API_KEY"]},
     {"id": "ollama", "name": "Local Ollama", "kind": "local endpoint", "models": "desktop · qwen2.5-coder", "accent": "gold", "credentials": ["OLLAMA_API_BASE"]},
