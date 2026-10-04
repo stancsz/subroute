@@ -302,11 +302,34 @@ class DynamicRoutingPlugin(CustomLogger):
             state = self.control_plane.snapshot()
             metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
             metadata["gateway_reasoning_effort"] = None
+            # MiMo's ASR model accepts input_audio on its own Chat Completions
+            # route. Preserve that explicit model choice; other audio requests
+            # use the existing Gemini subscription route below.
+            resolved_model = requested_model if requested_model == "mimo-v2.5-asr" else "gemini-subscription"
             metadata["routing"] = {
-                "requested_model": requested_model, "resolved_model": "gemini-subscription",
-                "mode": "audio_input", "policy_version": state.policy_version,
+                "requested_model": requested_model, "resolved_model": resolved_model,
+                "mode": "audio_input" if resolved_model == "gemini-subscription" else "speech_recognition",
+                "policy_version": state.policy_version,
             }
-            data["model"] = "gemini-subscription"
+            data["model"] = resolved_model
+            return data
+
+        mimo_tts_models = {
+            "mimo-v2.5-tts", "mimo-v2.5-tts-voiceclone", "mimo-v2.5-tts-voicedesign",
+        }
+        is_speech_output = (
+            (call_type == "aspeech" and requested_model == "minimax-tts")
+            or (call_type in {"completion", "acompletion"} and requested_model in mimo_tts_models)
+        )
+        if is_speech_output:
+            _, metadata = get_or_create_metadata_bucket(data)
+            state = self.control_plane.snapshot()
+            metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
+            metadata["gateway_reasoning_effort"] = None
+            metadata["routing"] = {
+                "requested_model": requested_model, "resolved_model": requested_model,
+                "mode": "speech_synthesis", "policy_version": state.policy_version,
+            }
             return data
 
         try:

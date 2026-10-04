@@ -67,7 +67,13 @@ Model:    auto
 
 `auto` tries MiniMax M3 first, then Gemini 3.8 Flash through the subscription integration, then Codex Luna through the subscription integration if the preceding provider returns an error. Selecting MiniMax, OpenRouter, or either Xiaomi MiMo route also enables ordered fallback across those routes, with GPT-6 Luna last. A provider failure can still incur cost. Use `current` to follow the route selected in the control desk. Other fixed model aliases remain fail-closed. Available models are listed in this checkout's [`config/litellm.yaml`](config/litellm.yaml).
 
-Xiaomi MiMo Token Plan exposes the V2.6 Pro/Flash, V2.5 Pro/base, ASR, and three TTS models through the supplied OpenAI-compatible endpoint. Set `XIAOMI_TOKENPLAN_API_KEY` in the Compose environment (for example, in the ignored repository-root `.env` file) to enable these routes. MiMo ASR and TTS use Xiaomi's Chat Completions format at `/v1/chat/completions`; they are not compatible with LiteLLM's standard `/v1/audio/transcriptions` or `/v1/audio/speech` request formats. TTS requests put the spoken text in an `assistant` message and specify output options in `audio`; ASR requests pass `input_audio` in a user message and may set `asr_options`.
+Speech routes are available through LiteLLM. MiniMax TTS uses LiteLLM's standard `POST /v1/audio/speech` endpoint with model `minimax-tts` and `MINIMAX_API_KEY`:
+
+```json
+{"model":"minimax-tts","input":"Hello from Subroute.","voice":"alloy"}
+```
+
+MiMo ASR uses its documented Chat Completions format, not LiteLLM's standard `/v1/audio/transcriptions` format. Send `POST /v1/chat/completions` with model `mimo-v2.5-asr`, and put an OpenAI `input_audio` block (`format` and base64 `data`) in a user message. `asr_options` can be passed as an additional request parameter. Subroute preserves this explicit ASR model and audio payload, even when the control desk forces another model, and skips the saved advisor for that speech request. Set `XIAOMI_TOKENPLAN_API_KEY` to enable MiMo routes. MiMo TTS models continue to use Xiaomi's Chat Completions format at `/v1/chat/completions`; put the spoken text in an `assistant` message and specify output options in `audio`.
 
 ### Use the Electron app
 
@@ -111,6 +117,8 @@ With direct intent and no caller tool choice, the image tool is selected. The wh
 Chat returns generated images in `choices[0].message.images` (or `delta.images` for SSE) as data URLs. Responses returns `image_generation_call.result` as base64 in its output, including the final SSE snapshot. Messages carries a Markdown image data URL in a text block, whose rendering depends on the client. Buffered and SSE conversation requests both wait for complete generation before returning image content. Captions are retained. The shared limit is one image per response, two concurrent image requests per gateway process, and 180 seconds; usage reports Luna tokens, not total image-model usage or cost.
 
 #### Cline Desktop
+
+Register the MCP server as `subroute-image-generation`, so Cline advertises `subroute-image-generation__generate_image`. When that function is advertised, direct image intent stays on the client tool path: the chat model requests the MCP tool and Subroute does not eagerly return an image in `delta.images`. The MCP tool's separate Images request always uses GPT-6 Luna, regardless of the selected chat model or saved routing policy. Explicit hosted `image_generation` tools still use the existing Luna route. Add a global Cline rule requiring the MCP tool for direct creation requests and a server-level `timeout: 240` in Cline's MCP settings. The longer timeout covers the image endpoint's 180-second generation deadline and the MCP HTTP client's 190-second deadline; the default Cline timeout is 60 seconds.
 
 Cline Desktop's OpenAI-compatible chat renderer does not display Subroute's `delta.images` field as an inline picture. Configure its MCP settings to launch `src/subroute/image_mcp.py` with this checkout's Python environment to add the `generate_image` tool. The tool calls the existing local `/v1/images/generations` endpoint and returns the PNG/JPEG/WebP through FastMCP's native image content, which Cline can render inline. After generation, expand Cline's collapsed `Worked for … and made … tool calls` activity to view the image result; the assistant's final text may only acknowledge the image. Keep the gateway available on `127.0.0.1:4000` and restart Cline Desktop after changing the MCP settings. Cline may ask to approve `generate_image` when it is first used. This is a client-specific bridge; the OpenAI and Anthropic API paths stay unchanged. See the [Cline Desktop image delivery evaluation](docs/evals/cline-image-delivery-2026-09-30.md).
 
@@ -212,7 +220,13 @@ API 地址： http://127.0.0.1:4000/v1
 
 `auto` 首先尝试 MiniMax M3；若服务返回错误，则依次尝试 Gemini 3.8 Flash 订阅和 Codex Luna 订阅。选择 MiniMax、OpenRouter 或任一 Xiaomi MiMo 路由时，也会按这些服务的顺序回退，并以 GPT-6 Luna 作为最后选项。失败的上游尝试仍可能产生费用。使用 `current` 跟随控制台选择的路由；其他固定模型别名仍在失败时返回错误。当前模型见本仓库的 [`config/litellm.yaml`](config/litellm.yaml)。
 
-Xiaomi MiMo Token Plan 提供 V2.6 Pro/Flash、V2.5 Pro/base、ASR 和三个 TTS 模型路由。设置 Compose 环境变量 `XIAOMI_TOKENPLAN_API_KEY`（例如写入仓库根目录被 Git 忽略的 `.env` 文件）即可启用。MiMo ASR/TTS 使用 Xiaomi 的 Chat Completions 格式 `/v1/chat/completions`，不兼容 LiteLLM 标准 `/v1/audio/transcriptions` 或 `/v1/audio/speech` 请求格式。TTS 将待播文本放入 `assistant` 消息，并通过 `audio` 指定输出；ASR 将 `input_audio` 放入 `user` 消息，可额外设置 `asr_options`。
+语音路由通过 LiteLLM 提供。MiniMax TTS 使用 LiteLLM 标准 `POST /v1/audio/speech`，模型为 `minimax-tts`，凭据使用 `MINIMAX_API_KEY`：
+
+```json
+{"model":"minimax-tts","input":"Hello from Subroute.","voice":"alloy"}
+```
+
+MiMo ASR 使用其 Chat Completions 格式，不是 LiteLLM 标准 `/v1/audio/transcriptions` 格式。调用 `POST /v1/chat/completions`，模型设为 `mimo-v2.5-asr`，并在 user 消息中传入 OpenAI `input_audio` block（`format` 和 base64 `data`）。也可附加 `asr_options`。Subroute 会保留显式 ASR 模型与音频，即使控制台强制了其他模型也不会改路由；本次语音请求不会调用保存的 advisor。设置 `XIAOMI_TOKENPLAN_API_KEY` 即可启用 MiMo 路由。MiMo TTS 仍使用 Xiaomi 的 `/v1/chat/completions` 格式：将待播文本放入 `assistant` 消息，并通过 `audio` 指定输出选项。
 
 ### 使用 Electron 桌面端
 

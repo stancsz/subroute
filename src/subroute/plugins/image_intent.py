@@ -10,6 +10,7 @@ import re
 from copy import deepcopy
 
 IMAGE_FUNCTIONS = frozenset({"image_generation", "generate_image", "create_image"})
+CLINE_IMAGE_FUNCTION = "subroute-image-generation__generate_image"
 CONVERSATION_CALLS = frozenset({
     "completion", "acompletion", "responses", "aresponses",
     "anthropic_messages", "aanthropic_messages",
@@ -27,13 +28,17 @@ _NEED = re.compile(rf"^i\s+(?:want|need|would\s+like)\s+(?:an?\s+)?{_VISUAL}\s+(
 _CHINESE = re.compile(r"^(?:(?:请|麻烦|帮我|给我|能不能|可以|能否|我想要|我要)\s*)*(?:生成|画|绘制|制作|设计)(?:一[张幅个]|个|张)?[^。！？\n]{0,18}(?:图片|图像|插画|照片|海报|头像|壁纸|图标|标志|图|画)|^(?:请|帮我|给我)?画(?:一[只个张幅]|个|只)")
 
 
-def image_tool(tool: object) -> bool:
+def tool_name(tool: object) -> object:
     if not isinstance(tool, dict):
-        return False
+        return None
     function = tool.get("function")
     function = function if isinstance(function, dict) else {}
-    return tool.get("type") == "image_generation" or (
-        function.get("name", tool.get("name")) in IMAGE_FUNCTIONS
+    return function.get("name", tool.get("name"))
+
+
+def image_tool(tool: object) -> bool:
+    return isinstance(tool, dict) and (
+        tool.get("type") == "image_generation" or tool_name(tool) in IMAGE_FUNCTIONS
     )
 
 
@@ -87,6 +92,11 @@ def image_request_context(data: dict, call_type: str) -> dict | None:
     hosted = [tool for tool in declared if tool.get("type") == "image_generation"]
     selected = image_tool(data.get("tool_choice"))
     intent = clear_image_request(latest_user_text(data))
+    # Cline renders this MCP tool's native image result. Keep its function call
+    # client-owned instead of eagerly returning an image in Chat's images field.
+    # The MCP tool's separate Images request is always routed to Luna.
+    if not (hosted or selected) and any(tool_name(tool) == CLINE_IMAGE_FUNCTION for tool in tools):
+        return None
     if not (hosted or selected or intent):
         return None
     if data.get("n", 1) != 1:

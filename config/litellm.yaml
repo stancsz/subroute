@@ -325,6 +325,19 @@ model_list:
       model: minimax/MiniMax-M3
       api_key: os.environ/MINIMAX_API_KEY
 
+  # LiteLLM 1.101.0 has a native MiniMax TTS provider for /v1/audio/speech.
+  - model_name: minimax-tts
+    model_info:
+      <<: *context_policy
+      display_name: MiniMax Speech 2.6 HD
+      provider: MiniMax
+      source_id: minimax
+      access: API key
+      capabilities: [speech-synthesis]
+    litellm_params:
+      model: minimax/speech-2.6-hd
+      api_key: os.environ/MINIMAX_API_KEY
+
   - model_name: mimo-v2.6-pro
     model_info:
       <<: *context_policy

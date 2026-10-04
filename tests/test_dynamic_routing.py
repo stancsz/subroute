@@ -14,7 +14,7 @@ from subroute.plugins.dynamic_router import (
 from subroute.plugins.advisor_plugin import ADVISOR_TOOL_TYPE, AdvisorPlugin
 
 
-def make_control_plane(tmp_path: Path) -> RoutingControlPlane:
+def make_control_plane(tmp_path: Path, include_speech_models: bool = False) -> RoutingControlPlane:
     config = tmp_path / "litellm.yaml"
     config.write_text(
         """model_list:
@@ -33,7 +33,7 @@ def make_control_plane(tmp_path: Path) -> RoutingControlPlane:
     model_info: {selectable: false, advisor_selectable: true}
     litellm_params: {model: antigravity/gemini}
   - model_name: codex-gpt-6.1-sol-advisor
-    model_info: {selectable: false, advisor_selectable: true}
+    model_info: {selectable: false, advisor_selectable: true, reasoning_efforts: [low, medium, high]}
     litellm_params: {model: codex-advisor/gpt-6.1-sol}
   - model_name: codex-sol-advisor
     model_info: {selectable: false, advisor_selectable: true}
@@ -47,6 +47,20 @@ def make_control_plane(tmp_path: Path) -> RoutingControlPlane:
 """,
         encoding="utf-8",
     )
+    if include_speech_models:
+        config.write_text(
+            config.read_text(encoding="utf-8")
+            + "  - model_name: mimo-v2.5-asr\n"
+              "    model_info: {capabilities: [speech-recognition]}\n"
+              "    litellm_params: {model: openai/mimo-v2.5-asr}\n"
+              "  - model_name: mimo-v2.5-tts\n"
+              "    model_info: {capabilities: [speech-synthesis]}\n"
+              "    litellm_params: {model: openai/mimo-v2.5-tts}\n"
+              "  - model_name: minimax-tts\n"
+              "    model_info: {capabilities: [speech-synthesis]}\n"
+              "    litellm_params: {model: minimax/speech-2.6-hd}\n",
+            encoding="utf-8",
+        )
     return RoutingControlPlane(config, tmp_path / "routing-state.json")
 
 

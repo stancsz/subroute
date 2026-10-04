@@ -139,6 +139,13 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     }
     assert not any(name.endswith("-guided") for name in by_name)
     assert by_name["minimax"]["litellm_params"]["model"].startswith("minimax/")
+    assert by_name["minimax-tts"]["litellm_params"] == {
+        "model": "minimax/speech-2.6-hd",
+        "api_key": "os.environ/MINIMAX_API_KEY",
+    }
+    assert "speech-synthesis" in by_name["minimax-tts"]["model_info"]["capabilities"]
+    assert by_name["mimo-v2.5-asr"]["litellm_params"]["model"] == "openai/mimo-v2.5-asr"
+    assert "speech-recognition" in by_name["mimo-v2.5-asr"]["model_info"]["capabilities"]
     assert by_name["freetoken"]["litellm_params"]["model"].startswith("openai/")
     assert by_name["desktop"]["litellm_params"] == {
         "model": "ollama/qwen2.5-coder",

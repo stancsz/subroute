@@ -56,9 +56,10 @@ def stub(monkeypatch, events):
 
 @pytest.mark.parametrize("mode", ["force", "alias", "off"])
 @pytest.mark.parametrize("model", ["minimax", "auto", "gpt-image-2", None])
-def test_image_route_precedes_every_saved_policy(tmp_path, mode, model):
+@pytest.mark.parametrize("active_model", ["minimax", "desktop"])
+def test_image_route_precedes_every_saved_policy(tmp_path, mode, model, active_model):
     control = make_control_plane(tmp_path)
-    control.update("minimax", mode)
+    control.update(active_model, mode)
     before = control.snapshot()
     plugin = DynamicRoutingPlugin(control)
     data = {"model": model, "prompt": "a circle", "quality": "low", "size": "auto"}

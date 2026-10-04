@@ -1,9 +1,10 @@
 import asyncio
 import json
+from copy import deepcopy
 
 import pytest
 
-from subroute.plugins.image_intent import clear_image_request, image_request_context
+from subroute.plugins.image_intent import CLINE_IMAGE_FUNCTION, clear_image_request, image_request_context
 from subroute.plugins.dynamic_router import DynamicRoutingPlugin
 from test_dynamic_routing import make_control_plane
 from test_codex_images import image_event, terminal, Stream, PNG
@@ -41,15 +42,16 @@ def test_non_generation_intent(text):
 
 
 @pytest.mark.parametrize("mode", ["force", "alias", "off"])
-def test_intent_exception_and_latest_turn_only(tmp_path, mode):
+@pytest.mark.parametrize("active_model", ["minimax", "desktop"])
+def test_intent_exception_and_latest_turn_only(tmp_path, mode, active_model):
     control = make_control_plane(tmp_path)
-    control.update("minimax", mode)
+    control.update(active_model, mode)
     plugin = DynamicRoutingPlugin(control)
     data = {"model": "auto", "messages": [{"role": "user", "content": "Generate an image of a bird"}]}
     result = asyncio.run(plugin.async_pre_call_hook({}, None, data, "acompletion"))
     assert result["model"] == "codex-luna"
     assert result["gateway_image_request"]["tool"] == {"type": "image_generation"}
-    assert control.snapshot().active_model == "minimax"
+    assert control.snapshot().active_model == active_model
     result["messages"].append({"role": "user", "content": "Explain caching instead."})
     result["model"] = "auto"
     result = asyncio.run(plugin.async_pre_call_hook({}, None, result, "acompletion"))
@@ -66,6 +68,119 @@ def test_tool_and_image_blocks_do_not_invent_user_intent():
     assert image_request_context({"input": "Tell me the time", "tools": [
         {"type": "function", "name": "generate_image", "parameters": {"type": "object"}},
     ]}, "aresponses") is None
+
+
+@pytest.mark.parametrize("protocol", ["acompletion", "aresponses", "anthropic_messages"])
+@pytest.mark.parametrize("mode", ["force", "alias", "off"])
+@pytest.mark.parametrize("active_model", ["minimax", "desktop"])
+@pytest.mark.parametrize("selected", [False, True])
+def test_cline_image_function_stays_client_owned(tmp_path, protocol, mode, active_model, selected):
+    schema = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}
+    if protocol == "acompletion":
+        tool = {"type": "function", "function": {"name": CLINE_IMAGE_FUNCTION, "parameters": schema}}
+        choice = {"type": "function", "function": {"name": CLINE_IMAGE_FUNCTION}} if selected else "auto"
+    elif protocol == "aresponses":
+        tool = {"type": "function", "name": CLINE_IMAGE_FUNCTION, "parameters": schema}
+        choice = {"type": "function", "name": CLINE_IMAGE_FUNCTION} if selected else "auto"
+    else:
+        tool = {"name": CLINE_IMAGE_FUNCTION, "input_schema": schema}
+        choice = {"type": "tool", "name": CLINE_IMAGE_FUNCTION} if selected else {"type": "auto"}
+    prompt = '<user_input mode="act">create a photo</user_input>'
+    data = {"model": "current", "tools": [tool], "tool_choice": choice}
+    data.update({"input": prompt} if protocol == "aresponses" else {"messages": [{"role": "user", "content": prompt}]})
+    before = deepcopy(data)
+    assert image_request_context(data, protocol) is None
+    assert data == before
+    control = make_control_plane(tmp_path)
+    control.update(active_model, mode)
+    result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, protocol))
+    assert result["model"] == ("current" if mode == "off" else active_model)
+    assert result["tools"] == before["tools"]
+    assert result["tool_choice"] == before["tool_choice"]
+    assert "gateway_image_request" not in result
+    assert control.snapshot().active_model == active_model
+
+
+@pytest.mark.parametrize("explicit", [
+    {"tools": [{"type": "image_generation"}]},
+    {"tool_choice": {"type": "function", "function": {"name": "create_image"}}},
+])
+def test_cline_function_does_not_override_explicit_hosted_generation(explicit):
+    client_tool = {"type": "function", "function": {"name": CLINE_IMAGE_FUNCTION, "parameters": {"type": "object"}}}
+    data = {"messages": [{"role": "user", "content": "Create a photo"}],
+            **deepcopy(explicit)}
+    data.setdefault("tools", []).append(client_tool)
+    context = image_request_context(data, "acompletion")
+    assert context["reason"] == "image_tool"
+    assert context["tool"] == {"type": "image_generation"}
+    assert data["tools"] == [client_tool]
+
+
+@pytest.mark.parametrize("protocol", ["chat", "responses", "messages"])
+@pytest.mark.parametrize("stream", [False, True])
+def test_cline_function_call_survives_real_proxy(monkeypatch, tmp_path, protocol, stream):
+    import test_codex_proxy_http as proxy_fixture
+    from subroute.plugins.dynamic_router import RoutingControlPlane
+
+    config = tmp_path / "routing.yaml"
+    config.write_text("""model_list:
+  - model_name: current
+    litellm_params: {model: openai/virtual}
+  - model_name: codex-luna
+    litellm_params: {model: codex-subscription/gpt-6-luna}
+  - model_name: codex-terra
+    litellm_params: {model: codex-subscription/gpt-6-terra}
+  - model_name: codex-luna-advisor
+    model_info: {selectable: false, advisor_selectable: true, reasoning_efforts: [low, high]}
+    litellm_params: {model: codex-advisor/gpt-6-luna}
+""", encoding="utf-8")
+    monkeypatch.setenv("ACTIVE_MODEL", "codex-terra")
+    monkeypatch.setenv("ADVISOR_MODEL", "codex-luna-advisor")
+    control = RoutingControlPlane(config, tmp_path / "routing-state.json")
+    control.update("codex-terra", "force")
+    before = control.snapshot()
+    original_stream = proxy_fixture.FakeStream
+    chunks = [
+        {"id": "chatcmpl-cline-fixture", "object": "chat.completion.chunk", "created": 1,
+         "model": "gpt-6-terra", "choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
+             {"index": 0, "id": "call_image", "type": "function", "function": {
+                 "name": CLINE_IMAGE_FUNCTION, "arguments": '{"prompt":"a fox"}'}}]}, "finish_reason": None}]},
+        {"id": "chatcmpl-cline-fixture", "object": "chat.completion.chunk", "created": 1,
+         "model": "gpt-6-terra", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        {"id": "chatcmpl-cline-fixture", "object": "chat.completion.chunk", "created": 1,
+         "model": "gpt-6-terra", "choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}},
+    ]
+    monkeypatch.setattr(proxy_fixture, "FakeStream", lambda: original_stream(deepcopy(chunks)))
+    path, data = proxy_fixture._request(protocol, stream)
+    schema = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}
+    data["model"] = "current"
+    prompt = '<user_input mode="act">create a photo</user_input>'
+    if protocol == "responses":
+        data["input"] = prompt
+        data["tools"] = [{"type": "function", "name": CLINE_IMAGE_FUNCTION, "parameters": schema}]
+    else:
+        data["messages"] = [{"role": "user", "content": prompt}]
+        data["tools"] = ([{"name": CLINE_IMAGE_FUNCTION, "input_schema": schema}] if protocol == "messages" else
+                         [{"type": "function", "function": {"name": CLINE_IMAGE_FUNCTION, "parameters": schema}}])
+    with proxy_fixture._configured_proxy(dynamic_routing_plugin=DynamicRoutingPlugin(control)) as (client, upstream_models, *_):
+        response = client.post(path, json=data, headers={"anthropic-version": "2023-06-01"})
+    assert response.status_code == 200, response.text[:1000]
+    assert CLINE_IMAGE_FUNCTION in response.text
+    assert "a fox" in response.text
+    assert upstream_models == ["openai/responses/gpt-6-terra"]
+    assert control.snapshot() == before
+    if not stream:
+        body = response.json()
+        if protocol == "chat":
+            assert body["choices"][0]["finish_reason"] == "tool_calls"
+            call = body["choices"][0]["message"]["tool_calls"][0]["function"]
+            assert call["name"] == CLINE_IMAGE_FUNCTION
+            assert json.loads(call["arguments"]) == {"prompt": "a fox"}
+        elif protocol == "responses":
+            assert any(item["type"] == "function_call" and item["name"] == CLINE_IMAGE_FUNCTION for item in body["output"])
+        else:
+            assert body["stop_reason"] == "tool_use"
+            assert any(item["type"] == "tool_use" and item["name"] == CLINE_IMAGE_FUNCTION for item in body["content"])
 
 
 def native_stub(monkeypatch, events=None):
@@ -205,7 +320,7 @@ def test_image_exception_skips_saved_advisor(tmp_path):
     from subroute.plugins.advisor_plugin import AdvisorPlugin
     control = make_control_plane(tmp_path)
     control.update("minimax", "force")
-    control.update_advisor("gemini-subscription")
+    control.update_advisor("codex-luna-advisor")
     data = {"model": "current", "messages": [{"role": "user", "content": "Draw a cat"}]}
     asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, "anthropic_messages"))
     before = json.dumps(data, sort_keys=True)

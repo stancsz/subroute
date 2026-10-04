@@ -52,6 +52,42 @@ def test_audio_is_explicit_gemini_exception_and_never_calls_saved_advisor(tmp_pa
     assert control.snapshot() == before
 
 
+def test_mimo_asr_alias_keeps_audio_on_its_litellm_chat_route(tmp_path):
+    control = make_control_plane(tmp_path, include_speech_models=True)
+    control.update("minimax", "force")
+    data = request()
+    data["model"] = "mimo-v2.5-asr"
+
+    result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, "acompletion"))
+
+    assert result["model"] == "mimo-v2.5-asr"
+    assert result["messages"] == request()["messages"]
+    assert result["metadata"]["routing"]["resolved_model"] == "mimo-v2.5-asr"
+    assert result["metadata"]["routing"]["mode"] == "speech_recognition"
+    assert result["metadata"]["gateway_policy"]["advisor_model"] is None
+    assert asyncio.run(AdvisorPlugin().async_pre_call_hook({}, None, result, "acompletion")) is None
+
+
+@pytest.mark.parametrize(
+    ("model", "call_type", "payload"),
+    [
+        ("minimax-tts", "aspeech", {"input": "Hello", "voice": "alloy"}),
+        ("mimo-v2.5-tts", "acompletion", {"messages": [{"role": "assistant", "content": [{"type": "text", "text": "Hello"}]}], "audio": {"voice": "default"}}),
+    ],
+)
+def test_explicit_tts_alias_survives_forced_chat_route(tmp_path, model, call_type, payload):
+    control = make_control_plane(tmp_path, include_speech_models=True)
+    control.update("minimax", "force")
+    data = {"model": model, **payload}
+
+    result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, call_type))
+
+    assert result["model"] == model
+    assert result["metadata"]["routing"]["resolved_model"] == model
+    assert result["metadata"]["routing"]["mode"] == "speech_synthesis"
+    assert result["metadata"]["gateway_policy"]["advisor_model"] is None
+
+
 def test_messages_audio_cannot_be_dropped_before_provider_dispatch(tmp_path):
     data = request()
     data["messages"][0]["content"][1] = {"type": "audio", "source": {"type": "base64", "media_type": "audio/wav", "data": sample()["data"]}}
