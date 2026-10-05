@@ -24,7 +24,10 @@ from subroute.ui_control import register_ui_routes, source_configuration
 
 RoutingMode = Literal["alias", "force", "off"]
 VIRTUAL_ALIASES = frozenset({"current", "default", "auto"})
-RETIRED_MODEL_ALIASES = {"openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax"}
+RETIRED_MODEL_ALIASES = {
+    "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
+    "codex-terra": "codex-subscription", "codex-reserve": "codex-luna",
+}
 FAILOVER_ADVISOR_MODELS = frozenset({"gemini-subscription", "codex-gpt-6.1-sol-advisor"})
 ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)

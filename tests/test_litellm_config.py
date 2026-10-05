@@ -193,16 +193,19 @@ def test_subscription_channels_stay_behind_litellm():
     assert codex["store"] is False
     assert codex["allowed_openai_params"] == ["reasoning_effort"]
     assert codex["extra_headers"]["ChatGPT-Account-ID"] == "refreshed-at-dispatch"
-    for alias in ("codex-astra", "codex-terra", "codex-luna", "codex-reserve"):
+    for alias in ("codex-gpt-6.1-sol", "codex-astra", "codex-luna"):
         params = by_name[alias]["litellm_params"]
         assert params["allowed_openai_params"] == ["reasoning_effort"]
         assert params["store"] is False
-    assert by_name["codex-reserve"]["litellm_params"]["model"] == (
-        "codex-subscription/gpt-5.6-luna"
+    assert by_name["codex-gpt-6.1-sol"]["litellm_params"]["model"] == (
+        "codex-subscription/gpt-6.1-sol"
     )
-    assert by_name["codex-reserve"]["model_info"]["display_name"] == (
-        "GPT-5.6 Luna (reserve-capable)"
+    assert by_name["codex-gpt-6.1-sol"]["model_info"]["display_name"] == (
+        "GPT-6.1 Sol"
     )
+    assert "codex-terra" not in by_name
+    assert "codex-reserve" not in by_name
+    assert not any("gpt-5" in deployment["litellm_params"]["model"] for deployment in by_name.values())
     assert by_name["codex-gpt-6.1-sol-advisor"]["litellm_params"]["model"] == "codex-advisor/gpt-6.1-sol"
     assert by_name["codex-sol-advisor"]["litellm_params"]["model"] == (
         "codex-advisor/gpt-6-sol"

@@ -162,7 +162,7 @@ def _configured_proxy(
             } for model_name, target in (
                 ("current", "gpt-6-luna"),
                 ("codex-luna", "gpt-6-luna"),
-                ("codex-terra", "gpt-6-terra"),
+                ("codex-gpt-6.1-sol", "gpt-6.1-sol"),
             )]
         router = Router(
             model_list=model_list,
@@ -280,8 +280,8 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
     litellm_params: {model: openai/virtual}
   - model_name: codex-luna
     litellm_params: {model: codex-subscription/gpt-6-luna}
-  - model_name: codex-terra
-    litellm_params: {model: codex-subscription/gpt-6-terra}
+  - model_name: codex-gpt-6.1-sol
+    litellm_params: {model: codex-subscription/gpt-6.1-sol}
   - model_name: gemini-subscription
     model_info: {selectable: false, advisor_selectable: true}
     litellm_params: {model: antigravity/gemini}
@@ -311,7 +311,7 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
             _,
         ):
             update_response = client.post("/api/active-model", json={
-                "model": "codex-terra",
+                "model": "codex-gpt-6.1-sol",
                 "mode": "alias",
             })
             assert update_response.status_code == 200, update_response.text
@@ -323,16 +323,16 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
 
     assert response.status_code == 200, response.text
     assert response.json()["choices"][0]["message"]["content"] == "fixture answer"
-    assert saved_state["active_model"] == "codex-terra"
+    assert saved_state["active_model"] == "codex-gpt-6.1-sol"
     assert saved_state["mode"] == "alias"
-    assert upstream_models == ["openai/responses/gpt-6-terra"]
+    assert upstream_models == ["openai/responses/gpt-6.1-sol"]
     assert routed_metadata[0]["routing"] == {
         "requested_model": "current",
-        "resolved_model": "codex-terra",
+        "resolved_model": "codex-gpt-6.1-sol",
         "mode": "alias",
         "policy_version": saved_state["policy_version"],
     }
-    assert routed_metadata[0]["gateway_policy"]["active_model"] == "codex-terra"
+    assert routed_metadata[0]["gateway_policy"]["active_model"] == "codex-gpt-6.1-sol"
     assert routed_metadata[0]["gateway_policy"]["policy_version"] == saved_state["policy_version"]
 
 

@@ -217,6 +217,43 @@ def test_default_desk_uses_openrouter_and_luna_high_without_locking_selection(tm
         assert restarted.snapshot().advisor_reasoning_effort == "medium"
 
 
+@pytest.mark.parametrize("retired, replacement", [
+    ("codex-terra", "codex-subscription"),
+    ("codex-reserve", "codex-luna"),
+])
+def test_saved_gpt_5_target_migrates_once_and_preserves_policy(tmp_path, retired, replacement):
+    config_path = Path(__file__).parents[1] / "config/litellm.yaml"
+    state_path = tmp_path / "state.json"
+    saved = {
+        "active_model": retired, "mode": "force", "policy_version": 12,
+        "advisor_model": "codex-gpt-6.1-sol-advisor",
+        "reasoning_effort": "high", "advisor_reasoning_effort": "low",
+    }
+    state_path.write_text(json.dumps(saved), encoding="utf-8")
+    control = RoutingControlPlane(config_path, state_path)
+    expected = {**saved, "active_model": replacement, "policy_version": 13}
+    assert json.loads(state_path.read_text(encoding="utf-8")) == expected
+    assert control.resolve("current")[0] == replacement
+    assert retired not in control.allowed_models
+    with pytest.raises(ValueError, match="not selectable"):
+        control.update(retired, "force")
+    restarted = RoutingControlPlane(config_path, state_path)
+    assert restarted.snapshot() == control.snapshot()
+    assert json.loads(state_path.read_text(encoding="utf-8")) == expected
+
+
+def test_gpt_6_1_sol_target_is_selectable_and_preserves_effort_after_restart(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACTIVE_MODEL", "codex-gpt-6.1-sol")
+    config_path = Path(__file__).parents[1] / "config/litellm.yaml"
+    state_path = tmp_path / "state.json"
+    control = RoutingControlPlane(config_path, state_path)
+    control.update("codex-gpt-6.1-sol", "force", reasoning_effort="ultra")
+    restarted = RoutingControlPlane(config_path, state_path)
+    assert restarted.resolve("current")[0] == "codex-gpt-6.1-sol"
+    assert restarted.snapshot().reasoning_effort == "ultra"
+    assert "codex-gpt-6.1-sol" not in restarted.advisor_models
+
+
 def test_advisor_is_optional_and_requests_skip_injection(tmp_path: Path):
     control = make_control_plane(tmp_path)
     disabled = control.update_advisor(None)

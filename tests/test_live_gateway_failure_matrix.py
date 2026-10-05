@@ -260,14 +260,14 @@ def test_05_codex_advisor_and_target_live_success(live_gateway: LiveGateway) -> 
     assert "SUBROUTE-LIVE-CODEX-ADVISOR-OK" in text, text
 
 
-def test_06_codex_reserve_alias_live_success(live_gateway: LiveGateway) -> None:
-    live_gateway.set_policy(target="codex-reserve", advisor=None, reasoning_effort="high")
+def test_06_codex_gpt_6_1_sol_target_live_success(live_gateway: LiveGateway) -> None:
+    live_gateway.set_policy(target="codex-gpt-6.1-sol", advisor=None, reasoning_effort="high")
     response = live_gateway.message(
-        "current", "Reply with exactly SUBROUTE-CODEX-RESERVE-OK. Do not call tools."
+        "current", "Reply with exactly SUBROUTE-CODEX-6-1-SOL-OK. Do not call tools."
     )
-    payload = _assert_live_message(response, "target=codex-reserve (GPT-5.6 Luna reserve-capable)")
+    payload = _assert_live_message(response, "target=codex-gpt-6.1-sol (GPT-6.1 Sol)")
     text = "".join(block.get("text", "") for block in payload.get("content", []))
-    assert "SUBROUTE-CODEX-RESERVE-OK" in text, text
+    assert "SUBROUTE-CODEX-6-1-SOL-OK" in text, text
 
 
 def test_07_openrouter_buffered_and_sse_live_success(live_gateway: LiveGateway) -> None:
@@ -415,7 +415,7 @@ def test_09_all_remaining_subscription_aliases_live_success(live_gateway: LiveGa
         "gemini-subscription-pro",
         "codex-subscription",
         "codex-astra",
-        "codex-terra",
+        "codex-gpt-6.1-sol",
     ):
         effort = "low"
         live_gateway.set_policy(target=target, advisor=None, reasoning_effort=effort)

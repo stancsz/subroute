@@ -97,7 +97,7 @@ docker compose up -d gateway-staging
 
 ## Routing, without surprises
 
-All OpenAI Advisor routes use GPT-6 or newer: Luna, Sol, Astra and GPT-6.1 Sol. These are selectable models, not a model lock. New routing state defaults to OpenRouter and GPT-6.1 Sol/low. `ACTIVE_MODEL` and `ADVISOR_MODEL` override initialization; persisted state takes precedence on subsequent starts, including explicitly disabled advisors and saved effort. Production retains its saved `force` mode; staging retains its own policy.
+All OpenAI target and Advisor routes use GPT-6 or newer: Luna, Sol, Astra and GPT-6.1 Sol. GPT-6.1 Sol is available as the target alias `codex-gpt-6.1-sol`. GPT-5.6 Terra and the GPT-5.6 Luna reserve route have been removed; saved selections migrate to GPT-6 Sol and GPT-6 Luna respectively. These are selectable models, not a model lock. New routing state defaults to OpenRouter and GPT-6.1 Sol/low. `ACTIVE_MODEL` and `ADVISOR_MODEL` override initialization; persisted state takes precedence on subsequent starts, including explicitly disabled advisors and saved effort. Production retains its saved `force` mode; staging retains its own policy.
 
 - **`alias`** is the default. It resolves `current` and `default` using the saved route. `auto` always uses the prioritized provider chain.
 - **`force`** applies the selected route to known model requests except explicit `auto` requests and image generation.
@@ -249,6 +249,8 @@ docker compose up -d gateway-staging
 ```
 
 ### 路由行为
+
+OpenAI 的 Target 和 Advisor 均使用 GPT-6 或更新版本：Luna、Sol、Astra 和 GPT-6.1 Sol。Target 可通过 `codex-gpt-6.1-sol` 选择 GPT-6.1 Sol。GPT-5.6 Terra 与 GPT-5.6 Luna reserve 路由已移除；已保存的旧选择分别迁移到 GPT-6 Sol 与 GPT-6 Luna。
 
 - **`alias`** 是默认模式，根据已保存的路由解析 `current` 和 `default`。`auto` 始终使用按优先级排列的服务链。
 - **`force`** 将所选路由应用到已知模型的推理请求，显式使用 `auto` 和图片生成请求除外。

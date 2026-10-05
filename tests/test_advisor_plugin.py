@@ -246,7 +246,7 @@ def test_codex_subscription_pair_collects_sol_and_injects_advice(monkeypatch, ef
     assert receipt["reasoning_effort"] == effort
 
 
-@pytest.mark.parametrize("target", ["codex-subscription", "codex-luna", "gemini-subscription"])
+@pytest.mark.parametrize("target", ["codex-subscription", "codex-gpt-6.1-sol", "codex-luna", "gemini-subscription"])
 @pytest.mark.parametrize("effort", [None, "high"])
 def test_codex_luna_advisor_preconsults_and_injects_advice(monkeypatch, target, effort):
     from litellm.types.utils import Usage

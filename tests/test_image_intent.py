@@ -128,27 +128,27 @@ def test_cline_function_call_survives_real_proxy(monkeypatch, tmp_path, protocol
     litellm_params: {model: openai/virtual}
   - model_name: codex-luna
     litellm_params: {model: codex-subscription/gpt-6-luna}
-  - model_name: codex-terra
-    litellm_params: {model: codex-subscription/gpt-6-terra}
+  - model_name: codex-gpt-6.1-sol
+    litellm_params: {model: codex-subscription/gpt-6.1-sol}
   - model_name: codex-luna-advisor
     model_info: {selectable: false, advisor_selectable: true, reasoning_efforts: [low, high]}
     litellm_params: {model: codex-advisor/gpt-6-luna}
 """, encoding="utf-8")
-    monkeypatch.setenv("ACTIVE_MODEL", "codex-terra")
+    monkeypatch.setenv("ACTIVE_MODEL", "codex-gpt-6.1-sol")
     monkeypatch.setenv("ADVISOR_MODEL", "codex-luna-advisor")
     control = RoutingControlPlane(config, tmp_path / "routing-state.json")
-    control.update("codex-terra", "force")
+    control.update("codex-gpt-6.1-sol", "force")
     before = control.snapshot()
     original_stream = proxy_fixture.FakeStream
     chunks = [
         {"id": "chatcmpl-cline-fixture", "object": "chat.completion.chunk", "created": 1,
-         "model": "gpt-6-terra", "choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
+         "model": "gpt-6.1-sol", "choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
              {"index": 0, "id": "call_image", "type": "function", "function": {
                  "name": CLINE_IMAGE_FUNCTION, "arguments": '{"prompt":"a fox"}'}}]}, "finish_reason": None}]},
         {"id": "chatcmpl-cline-fixture", "object": "chat.completion.chunk", "created": 1,
-         "model": "gpt-6-terra", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+         "model": "gpt-6.1-sol", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
         {"id": "chatcmpl-cline-fixture", "object": "chat.completion.chunk", "created": 1,
-         "model": "gpt-6-terra", "choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}},
+         "model": "gpt-6.1-sol", "choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}},
     ]
     monkeypatch.setattr(proxy_fixture, "FakeStream", lambda: original_stream(deepcopy(chunks)))
     path, data = proxy_fixture._request(protocol, stream)
@@ -167,7 +167,7 @@ def test_cline_function_call_survives_real_proxy(monkeypatch, tmp_path, protocol
     assert response.status_code == 200, response.text[:1000]
     assert CLINE_IMAGE_FUNCTION in response.text
     assert "a fox" in response.text
-    assert upstream_models == ["openai/responses/gpt-6-terra"]
+    assert upstream_models == ["openai/responses/gpt-6.1-sol"]
     assert control.snapshot() == before
     if not stream:
         body = response.json()

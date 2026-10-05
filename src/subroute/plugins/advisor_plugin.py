@@ -33,7 +33,7 @@ TOOL_HISTORY_ADVISORS = frozenset({
     "codex-luna-advisor",
 })
 CODEX_SUBSCRIPTION_MODELS = frozenset({
-    "codex-subscription", "codex-astra", "codex-terra", "codex-luna", "codex-reserve",
+    "codex-subscription", "codex-gpt-6.1-sol", "codex-astra", "codex-luna",
 })
 ADVISOR_MODEL_NAMES = {
     "codex-gpt-6.1-sol-advisor": "gpt-6.1-sol",

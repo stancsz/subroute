@@ -189,17 +189,17 @@ model_list:
       allowed_openai_params: [reasoning_effort]
       store: false
 
-  - model_name: codex-terra
+  - model_name: codex-gpt-6.1-sol
     model_info:
       <<: *context_policy
-      display_name: GPT-5.6 Terra
+      display_name: GPT-6.1 Sol
       provider: OpenAI
       source_id: openai-subscription
       access: Codex subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
-      model: codex-subscription/gpt-5.6-terra
+      model: codex-subscription/gpt-6.1-sol
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
@@ -219,25 +219,6 @@ model_list:
       capabilities: [tools, streaming, image-generation]
     litellm_params:
       model: codex-subscription/gpt-6-luna
-      api_base: https://chatgpt.com/backend-api/codex
-      api_key: refreshed-at-dispatch
-      extra_headers:
-        ChatGPT-Account-ID: refreshed-at-dispatch
-        User-Agent: OpenAI-Codex/0.151.0 (Windows)
-      allowed_openai_params: [reasoning_effort]
-      store: false
-
-  - model_name: codex-reserve
-    model_info:
-      <<: *context_policy
-      display_name: GPT-5.6 Luna (reserve-capable)
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Codex subscription
-      reasoning_efforts: [low, medium, high, xhigh, max]
-      capabilities: [tools, streaming]
-    litellm_params:
-      model: codex-subscription/gpt-5.6-luna
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
