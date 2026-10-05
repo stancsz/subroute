@@ -44,6 +44,12 @@ async def _codex_stream(
         # explicitly disabled. LiteLLM's public Responses-to-Chat conversion
         # can omit the caller's store=false before it reaches this adapter.
         request_options["store"] = False
+    # Codex returns displayable reasoning only when a summary is requested.
+    # Use LiteLLM's native Responses mapping and retain caller summary choices.
+    effort = request_options.get("reasoning_effort")
+    reasoning = dict(effort) if isinstance(effort, dict) else ({"effort": effort} if effort is not None else {})
+    reasoning.setdefault("summary", "auto")
+    request_options["reasoning_effort"] = reasoning
     if require_usage:
         # LiteLLM's Anthropic Messages bridge needs completion usage even when
         # the caller requested a buffered (non-streaming) response. This
@@ -103,11 +109,11 @@ def _plain_usage(value: Any) -> dict[str, Any] | None:
     raise CustomLLMError(status_code=502, message="Codex stream returned unsupported usage data")
 
 
-def _generic_chunks(chunk: Any) -> list[GenericStreamingChunk]:
-    """Translate Chat chunks to LiteLLM CustomLLM's generic stream contract."""
+def _stream_chunks(chunk: Any) -> list[GenericStreamingChunk | ModelResponseStream]:
+    """Keep native reasoning deltas; use generic chunks for content and usage."""
     usage = _plain_usage(_field(chunk, "usage"))
     choices = _field(chunk, "choices", []) or []
-    output: list[GenericStreamingChunk] = []
+    output: list[GenericStreamingChunk | ModelResponseStream] = []
     for choice in choices:
         delta = _field(choice, "delta")
         content = _field(delta, "content", "") or ""
@@ -119,6 +125,20 @@ def _generic_chunks(chunk: Any) -> list[GenericStreamingChunk]:
         tool_calls = _field(delta, "tool_calls", []) or []
         finish_reason = _field(choice, "finish_reason")
         choice_index = _field(choice, "index", 0)
+        if _field(delta, "reasoning_content") or _field(delta, "thinking_blocks"):
+            # GenericStreamingChunk has no reasoning fields. LiteLLM accepts
+            # native deltas and owns their Chat/Responses/Messages conversion.
+            # Keep finish/usage on the generic lane: native usage-only chunks
+            # after a finish are discarded by LiteLLM 1.101.0 and 1.103.0.
+            reasoning_delta = {
+                name: _field(delta, name)
+                for name in ("reasoning_content", "thinking_blocks", "provider_specific_fields")
+                if _field(delta, name) is not None
+            }
+            output.append(ModelResponseStream(
+                id=_field(chunk, "id"), model=_field(chunk, "model"),
+                choices=[{"index": choice_index, "delta": reasoning_delta, "finish_reason": None}],
+            ))
         pieces: list[tuple[str, Any]] = []
         if content:
             pieces.append((content, None))
@@ -139,7 +159,7 @@ def _generic_chunks(chunk: Any) -> list[GenericStreamingChunk]:
                 generic["tool_use"] = tool_use
             output.append(generic)
 
-    if not output and usage is not None:
+    if usage is not None and not any(isinstance(piece, dict) for piece in output):
         output.append({
             "text": "",
             "is_finished": False,
@@ -287,8 +307,8 @@ class CodexSubscriptionLLM(CustomLLM):
             async for chunk in stream:
                 terminal_reason = _terminal_finish_reason(chunk) or terminal_reason
                 provider_usage_seen = provider_usage_seen or _field(chunk, "usage") is not None
-                for generic_chunk in _generic_chunks(chunk):
-                    yield generic_chunk
+                for forwarded_chunk in _stream_chunks(chunk):
+                    yield forwarded_chunk
             if terminal_reason is None:
                 raise CustomLLMError(
                     status_code=502,

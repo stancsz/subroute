@@ -431,7 +431,8 @@ class DynamicRoutingPlugin(CustomLogger):
             updated["thinking"] = {"type": "adaptive"}
             updated["output_config"] = {**(kwargs.get("output_config") or {}), "effort": effort}
         elif call_type in {"acompletion", "completion"}:
-            updated["reasoning_effort"] = effort
+            requested = kwargs.get("reasoning_effort")
+            updated["reasoning_effort"] = {**requested, "effort": effort} if isinstance(requested, dict) else effort
         else:
             return None
         return updated

@@ -97,6 +97,8 @@ docker compose up -d gateway-staging
 
 ## Routing, without surprises
 
+Codex subscription targets request provider reasoning summaries and preserve them separately from answer text and tool calls. Claude-compatible clients receive standard `thinking` blocks and `thinking_delta` events when the provider returns a summary. The selected reasoning effort is retained. A client's output limit still covers thinking and answer output together.
+
 All OpenAI target and Advisor routes use GPT-6 or newer: Luna, Sol, Astra and GPT-6.1 Sol. GPT-6.1 Sol is available as the target alias `codex-gpt-6.1-sol`. GPT-5.6 Terra and the GPT-5.6 Luna reserve route have been removed; saved selections migrate to GPT-6 Sol and GPT-6 Luna respectively. These are selectable models, not a model lock. New routing state defaults to OpenRouter and GPT-6.1 Sol/low. `ACTIVE_MODEL` and `ADVISOR_MODEL` override initialization; persisted state takes precedence on subsequent starts, including explicitly disabled advisors and saved effort. Production retains its saved `force` mode; staging retains its own policy.
 
 - **`alias`** is the default. It resolves `current` and `default` using the saved route. `auto` always uses the prioritized provider chain.

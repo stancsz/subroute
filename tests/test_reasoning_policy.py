@@ -86,6 +86,15 @@ def test_responses_override_preserves_other_reasoning_fields(control, advisor_ca
     assert result["reasoning"] == {"effort": expected, "summary": "auto"}
 
 
+def test_chat_override_preserves_reasoning_summary_and_original_request(control):
+    plugin = DynamicRoutingPlugin(control)
+    data = {"reasoning_effort": {"effort": "medium", "summary": "auto"},
+            "metadata": {"gateway_reasoning_effort": "low"}}
+    result = asyncio.run(plugin.async_pre_call_deployment_hook(data, "acompletion"))
+    assert result["reasoning_effort"] == {"effort": "low", "summary": "auto"}
+    assert data["reasoning_effort"] == {"effort": "medium", "summary": "auto"}
+
+
 @pytest.mark.parametrize("provider_metadata", [None, {"label": "client-value"}])
 def test_responses_policy_never_leaks_into_provider_metadata(control, provider_metadata):
     control.update("codex-luna", "force", reasoning_effort="low")

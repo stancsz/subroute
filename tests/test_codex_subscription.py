@@ -462,7 +462,7 @@ def test_litellm_responses_dispatch_preserves_roleless_tool_history(monkeypatch)
     assert nested_call["stream"] is True
     assert "max_tokens" not in nested_call
     assert "max_output_tokens" not in nested_call
-    assert nested_call["reasoning_effort"] == "high"
+    assert nested_call["reasoning_effort"] == {"effort": "high", "summary": "auto"}
     assert "user" not in nested_call
     assert response.status == "completed"
     assert response.model == "gpt-6-luna"

@@ -74,6 +74,7 @@ def _configured_proxy(
     incomplete_stream=False,
     omit_provider_usage=False,
     dynamic_routing_plugin=None,
+    upstream_chunks=None,
 ):
     original_acompletion = litellm.acompletion
     upstream_models = []
@@ -120,7 +121,7 @@ def _configured_proxy(
                         "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
                     },
                 ])
-            return FakeStream()
+            return FakeStream(upstream_chunks) if upstream_chunks is not None else FakeStream()
         return await original_acompletion(**kwargs)
 
     with ExitStack() as stack:
