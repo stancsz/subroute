@@ -75,6 +75,8 @@ def _configured_proxy(
     omit_provider_usage=False,
     dynamic_routing_plugin=None,
     upstream_chunks=None,
+    provider_model_list=None,
+    additional_custom_providers=(),
 ):
     original_acompletion = litellm.acompletion
     upstream_models = []
@@ -128,7 +130,7 @@ def _configured_proxy(
         stack.enter_context(patch.object(litellm, "custom_provider_map", [{
             "provider": "codex-subscription",
             "custom_handler": codex_subscription_handler,
-        }]))
+        }, *additional_custom_providers]))
         stack.enter_context(patch.object(litellm, "acompletion", fake_upstream_or_dispatch))
         callbacks = []
         if credential_callback:
@@ -165,6 +167,8 @@ def _configured_proxy(
                 ("codex-luna", "gpt-6-luna"),
                 ("codex-gpt-6.1-sol", "gpt-6.1-sol"),
             )]
+        if provider_model_list is not None:
+            model_list = provider_model_list
         router = Router(
             model_list=model_list,
             num_retries=0,

@@ -495,6 +495,10 @@ router_settings:
     - codex-gpt-6.1-sol-advisor: [gemini-3.8-flash-advisor]
 
 litellm_settings:
+  # Xiaomi and local OpenAI-compatible backends implement Chat Completions.
+  # The default Messages-to-Responses bridge sends them to the wrong endpoint.
+  # Native Messages providers and custom subscription handlers keep their lanes.
+  use_chat_completions_url_for_anthropic_messages: true
   callbacks:
     - subroute.plugins.dynamic_router.dynamic_routing_plugin
     - subroute.plugins.advisor_plugin.advisor_plugin_instance

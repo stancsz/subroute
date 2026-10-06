@@ -255,16 +255,19 @@ def _default_control_plane() -> RoutingControlPlane:
 class DynamicRoutingPlugin(CustomLogger):
     def __init__(self, control_plane: RoutingControlPlane) -> None:
         super().__init__()
+        from subroute.thinking import install_messages_tool_ordering
+        install_messages_tool_ordering()
         self.control_plane = control_plane
 
     async def async_post_call_streaming_iterator_hook(self, user_api_key_dict, response, request_data):
+        from subroute.thinking import repair_thinking_starts
         # LiteLLM's Responses bridge emits text deltas but drops the caption
         # from the final snapshot when the same Chat choice contains images.
         # Preserve already-emitted items only on our hosted-image path.
         context = request_data.get("gateway_image_request") or {}
         repair = context.get("protocol") in {"responses", "aresponses"}
         completed_items = {}
-        async for event in response:
+        async for event in repair_thinking_starts(response):
             if repair:
                 kind = getattr(event, "type", None)
                 if kind == "response.output_item.done":
