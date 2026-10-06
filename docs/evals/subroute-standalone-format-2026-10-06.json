@@ -1,0 +1,714 @@
+{
+  "date": "2026-10-06",
+  "scope": "Four actual native CLIs, five configured provider routes, direct standalone Subroute on staging4005",
+  "client_versions": {
+    "claude": "2.1.251",
+    "codex": "0.154.0",
+    "opencode": "1.15.10",
+    "cline": "3.0.68"
+  },
+  "cases": [
+    {
+      "client": "claude",
+      "configured_route": "minimax",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to0",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": true,
+          "request_sha256": "adccb57e0188feb5c9c6ef05eb5aaf5573d7c79482c3519a706480ad85fc0d3b",
+          "response_sha256": "7a7d52e95dab72bfb68872601046c59879a9dd6d650a471fd2f6c2fd62843074"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "34bec65a613b76475d0e82cebc917254341dafe719847002eb92055ab7df5763",
+          "response_sha256": "736376bc03fb23ef318cb8b30ccbadaab4ab6d9e63037187967c6cf4d37eea76"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "37f8d2d1bcfa2220ce987d5048e83566de6ee52d2dbc35e2bd8452f7566bc7b2",
+          "response_sha256": "b4020bc2bb1301591c48e029e8a5637f218f314dfa1da48c4d6a28b6bcbbbc88"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| File | Value |\n|------|-------|\n| one.txt  | 17 |\n| two.txt | 25 |\n\n```python\nraw = r\"\\n\"\nprint(\"Raw string value:\", raw)\nprint(\"Sum of formats:\", 17 + 25)\n```"
+    },
+    {
+      "client": "claude",
+      "configured_route": "openrouter",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to1",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "3ea72798324cae6d9a74e4084a7e0c3557ad69514f57390cc88052001175c91e",
+          "response_sha256": "9867f74fbcc5359de3f3659d003a596a91a02e513fede8fa0ff773ad106c2e5b"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "302e35d7bac5d9b474625c2eb21c207b485c4beacbd0e9c289efbcd432f75aa2",
+          "response_sha256": "59493223b7d45693ccb53958088c76f583dd5b848341fcae1f66e5ca56efec20"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "6be4df328e90644d8511248b6f39ca8550a185bb2a14fc055a0731915a3e22ef",
+          "response_sha256": "80e92e9ce966d622c2cd5f9f8dab197a212bba95d086aca6dc27ae5ff8fb7e68"
+        }
+      ],
+      "answer": "## Result\n\n- **FORMAT_SUM**: 42 (17 + 25)\n\n### Inputs\n\n| `FORMAT_N` | Value |\n|---|---|\n| `FORMAT_ONE` (from `one.txt`) | 17 |\n| `FORMAT_TWO` (from `two.txt`) | 25 |\n\n### Verification\n\n```python\n# Verification of FORMAT_ONE + FORMAT_TWO\nFORMAT_ONE = 17\nFORMAT_TWO = 25\nFORMAT_SUM = FORMAT_ONE + FORMAT_TWO\nprint(FORMAT_SUM)           # 42\nassert FORMAT_SUM == 42\n\n# Demonstrate the literal raw string r\"\\n\"\nraw = r\"\\n\"\nprint(raw)                   # \\n\nprint(len(raw))              # 2  (backslash + 'n', not a newline)\nassert raw == \"\\\\n\"          # raw is two characters, not a newline\n```\n\nNotes on file contents read verbatim:\n- `one.txt` line 1: `FORMAT_ONE: 17`\n- `one.txt` line 2: `Literal code escape: \\n`\n- `one.txt` line 3: `中文行。`\n- `two.txt` line 1: `FORMAT_TWO: 25`\n- `two.txt` contains no further non-empty lines beyond the trailing newline."
+    },
+    {
+      "client": "claude",
+      "configured_route": "mimo-v2.6-pro",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to2",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "7959396bd1614a2023f0d0219d3a4dca6a808ff74217e9c907c8b17a84e92510",
+          "response_sha256": "d68c28ed3578969b6cb3327230e2c858456f45dc6efffb7f41ed793cab3e4955"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "225546d276fb3e13c17fbdb361fbee80c79b81f51ab07bfb18c424ce739c2093",
+          "response_sha256": "fe1dd34093daf4aede7aa27cd5933022661c20a2ec2697f90b4e79b9c4750df9"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "4b1c01e758e2b35e919681c7278c739e3f10af14bded3dca950f27fa89284bb2",
+          "response_sha256": "f6fb1cc03c8d56a4cf02ef99d4f8f44f7fd2a2ee66c1e27c63c49154dd57f878"
+        }
+      ],
+      "answer": "**FORMAT_SUM: 42**\n\nVerified: FORMAT_ONE = 17 and FORMAT_TWO = 25, so 17 + 25 = 42.\n\n| File | Value |\n|---|---|\n| one.txt | FORMAT_ONE: 17 |\n| two.txt | FORMAT_TWO: 25 |\n\n```python\nraw = r\"\\n\"  # literal backslash-n, not a newline\nprint(raw)   # \\n\n```"
+    },
+    {
+      "client": "claude",
+      "configured_route": "codex-luna",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to3",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "9bc6127497a44d7ab1b1e4e4d27904bc5d9960a77b5822710b0f4d681205c39b",
+          "response_sha256": "b16cd2814d44687e084a338421217d3c56f85c315ca569ce4e8f1f33524294ef"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "f38413c0b7f644da889db726e083c5cc8d91102a0bb0a50cee1eccc45d1fcad1",
+          "response_sha256": "88cc9a1db340174ff34509ac80db9cb82faaac46c20b1a7f88beb398b0272124"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "1637c56fcdc84ff6707199842fa41d16ed75268c981a056d4ae7f0e22519dcb3",
+          "response_sha256": "be397e12a92343fecc5cdaa5167d1b4d69688f592968ec0d7302afa08c8a76b0"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n|---|---:|\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nr\"\\n\"\n```"
+    },
+    {
+      "client": "claude",
+      "configured_route": "gemini-subscription",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to4",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": true,
+          "request_sha256": "15913c9d3af6d3904e8dfd9948f4f6fd3278ab76431eee3533d02c592fabba3c",
+          "response_sha256": "887955738f1d14287d94900d7d6f660ebc9acf844ffc16d66f930cc84ec6ff9b"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "7f18436130fff1209cd4b92fc9cbd22da26279a1134c4621430da55da3d37ecc",
+          "response_sha256": "03117ad0f2e3d1b6ae799f9b0e77419eb48984cd9b204fe019c38df08f3a79db"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "ac7c10f8626f90dde21b9557827ebbe9a305c249255b09744f6b228c92bebb0d",
+          "response_sha256": "6a407b7be2cbc6023128a3c4a48a0f794937969403539d83df7c467eaa688613"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n| --- | --- |\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nraw_newline = r\"\\n\"\n```"
+    },
+    {
+      "client": "codex",
+      "configured_route": "minimax",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to5",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "23c8d0aa101963192275d6d37c469117a58feed54dc1bfce35240397ffb6a60b",
+          "response_sha256": "5eaf152205416228561fdfd44e36ec052a05add8bc3d6b0edcd5d4a5217c253f"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "688b5670a2e25afbaf87ed8c2c1c73a152720a6a42d330931b1cf84c6b6312df",
+          "response_sha256": "50497a4a0958e8c98701886665f4dfdfec3604b6bf8c8230b4950656ff8cc25c"
+        }
+      ],
+      "answer": "**Result**\n\n- `FORMAT_SUM`: 42 (17 + 25 = 42, verified)\n\n**Inputs**\n\n| File | Label | Value |\n| --- | --- | --- |\n| `one.txt` | `FORMAT_ONE` | 17 |\n| `two.txt` | `FORMAT_TWO` | 25 |\n\n**Python example**\n\n```python\nraw = r\"\\n\"\nprint(repr(raw))  # '\\\\n'\nprint(len(raw))   # 2\n```"
+    },
+    {
+      "client": "codex",
+      "configured_route": "openrouter",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to6",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "d71c76891c0f5ed6a0cd5486b81a0b99cb7093783ba4b9b063d5a82cce4e7d58",
+          "response_sha256": "f98e14bebe8d916603703e09c0c884dd4c142076cbc3c00446518fe2a00badea"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "2fb7a4a399da8b0f04ca3ae71309532b1341e54e7e5ab2e84a46cd9f8f4fb000",
+          "response_sha256": "76e6c1f14134b0ed7974d0bddba8a23d81be374b425e8c44935860acad4ddf68"
+        }
+      ],
+      "answer": "**FORMAT_SUM: 42**\n\n| Field | Value |\n|---|---|\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nraw = r\"\\n\"\nprint(raw)\n```"
+    },
+    {
+      "client": "codex",
+      "configured_route": "mimo-v2.6-pro",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to7",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "392ebc7ffc97dbf7011b69e61f6b1216818858595e801b32ffeb605c1f521118",
+          "response_sha256": "5963ddb80499936d86199b9dacec5c9c3cb7fde10bbb9af6ede9d2a692c4d34a"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "edf68906b5049df70176db2058d46f84b3e9281087558f58e26f599f42f7ece4",
+          "response_sha256": "475c903c7f017c00d3f31167e61fb66566d72824c98223df5d5f68e160e55caa"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n|---|---:|\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nraw = r\"\\n\"\n```"
+    },
+    {
+      "client": "codex",
+      "configured_route": "codex-luna",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to8",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "26e19afe53620ecd5bff8b2a8fba68605a3651c14226f22ea82658fed6334f6e",
+          "response_sha256": "9ea003033f0ef2d4cf578e0ceafaf7a0c0ebd54007ddb36c7ebd900ea4182873"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "58a04b736064569cc13f0d5bca1dc82c65846a1b21e73e527fab477b013e99bd",
+          "response_sha256": "ff60c57873a5005c4e040cd91c1af18419258173bd541b8ff4476eb2f453bb90"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n|---|---:|\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nr\"\\n\"\n```"
+    },
+    {
+      "client": "codex",
+      "configured_route": "gemini-subscription",
+      "source": "tmp/direct-client-format-final/test_actual_client_thinking_to9",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "d938887dc393a09609f0b3e5af3a373149f562fb4041bebc15d89dedcda36378",
+          "response_sha256": "1f9637ae4ba074224e8f4812d8ccd6cf42fde806b33842da5b804f1dd910e15c"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "65ecf9224a1b29f2d1c6fd499ec67fffa780455c0667016864fe1d2374363495",
+          "response_sha256": "b29d865becced3527257000d103ceba249b5bdb7e95bf426b4d02f13672d8387"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Variable | Value |\n| --- | --- |\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nescaped_newline = r\"\\n\"\n```"
+    },
+    {
+      "client": "opencode",
+      "configured_route": "minimax",
+      "source": "tmp/opencode-format-pilot/test_actual_chat_client_tools_0",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "82c064a4f678ed7ac35bbf2efc4dfab8c819749ffd2a166b42ca687fc9778708",
+          "response_sha256": "15f4e00e334e7ef43cdd16c32ba5f8640710a82d71fed6d317d361697772edd9"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "2d241995fb09e7564fd996db2b4ba0103b731f87417f021b37126bc06062ebf8",
+          "response_sha256": "4b953508e5761fb8f8347a9fd507c064ceb766d699fba4a69efeb658a3772b29"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "ed791331fa3b936cd62ad5d1efd183a3ef2f5382c31426085f483f12ee8a594a",
+          "response_sha256": "229fb338bcb8dda95a54695b5258a7d22089b04df46d53d220f79edbcaba4d89"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| File | Value |\n|---|---|\n| one.txt | 17 |\n| two.txt | 25 |\n\n```python\n# Example using a raw string so the backslash is literal\nnewline_literal = r\"\\n\"\nprint(\"Raw representation:\", newline_literal)\nprint(\"Backslash and n as separate chars:\", list(newline_literal))\n```"
+    },
+    {
+      "client": "opencode",
+      "configured_route": "openrouter",
+      "source": "tmp/opencode-format-final/test_actual_chat_client_tools_0",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "82c064a4f678ed7ac35bbf2efc4dfab8c819749ffd2a166b42ca687fc9778708",
+          "response_sha256": "1764f2a6065c67410eec8dc01242c0d62aad1ef83973311b455732c332734e1b"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "df35677a29574185c7c78d5825afcc43cf8ffa7997caa5d0d95f5c02a7b6ab03",
+          "response_sha256": "6660afbb94068817562d51490d4889d60bc6c9a10f5942148fb4932f812776ac"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "4c75c0723733d4477d83ee2984c0c5976ea34dbec8713d71a6226688076088a2",
+          "response_sha256": "05ba7b9ae01a2772995c6023802407bf3b416831c2dd0c574cb763f10476541a"
+        }
+      ],
+      "answer": "**FORMAT_SUM: 42**\n\n| File | Key | Value |\n|---|---|---|\n| one.txt | FORMAT_ONE | 17 |\n| two.txt | FORMAT_TWO | 25 |\n\n```python\nraw = r\"\\n\"\nprint(repr(raw))\n```"
+    },
+    {
+      "client": "opencode",
+      "configured_route": "mimo-v2.6-pro",
+      "source": "tmp/opencode-format-final/test_actual_chat_client_tools_1",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "82c064a4f678ed7ac35bbf2efc4dfab8c819749ffd2a166b42ca687fc9778708",
+          "response_sha256": "4612e9fe6d31ab5002e1ada33009a34685c92f680fd77bd5af40d0086c8f5bca"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "293087b2100a861867ee986749ca6f4fac7fb78e3edfe037bbf2442041ca005e",
+          "response_sha256": "68b8533ef3e3bfed4ccfa2a89119d8a472c49db65dcebb890f5a0c4281958d6d"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "3c2fcdeb7a102bc5caba327e254771ed69bc23621b96123216454825a5b15236",
+          "response_sha256": "8cebc8c2095eff66d99964c2545c48d62146f903817d65fc9e6c0aa170026784"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n|---|---|\n| one.txt | FORMAT_ONE: 17 |\n| two.txt | FORMAT_TWO: 25 |\n\n```python\nsep = r\"\\n\"\nprint(17 + 25)\n```"
+    },
+    {
+      "client": "opencode",
+      "configured_route": "gemini-subscription",
+      "source": "tmp/opencode-format-final/test_actual_chat_client_tools_3",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "82c064a4f678ed7ac35bbf2efc4dfab8c819749ffd2a166b42ca687fc9778708",
+          "response_sha256": "b10857127c306faca20b9400b7a60b93e8ea393723bb7d7c8ac987bb1a2d4e2d"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "c2d2d0f8cc23fd28af8330c3bd555f19d68f98c64f8336263fe80a95f50b58eb",
+          "response_sha256": "ab4a69252754b349032154f990a24c0d64cb7bdb7cbc077743c367195256ee13"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "424810e429f514cf18359b2a1cd80ffd99f29bb6bd2fd3ac8201eeacfbbd3acd",
+          "response_sha256": "9c2ce16db59bb9f2699434cdbfa6b150755beffd4fffc7b2959c9663bb2d63a2"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n| --- | --- |\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nraw_text = r\"\\n\"\nprint(raw_text)\n```"
+    },
+    {
+      "client": "opencode",
+      "configured_route": "codex-luna",
+      "source": "tmp/chat-client-format-final/test_actual_chat_client_tools_0",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "82c064a4f678ed7ac35bbf2efc4dfab8c819749ffd2a166b42ca687fc9778708",
+          "response_sha256": "50cde84734e9b8c4ede86a3abb6205b4847ed6c9f65def8e38ea233fdb8d7260"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "eccc24532db5a4395d15ad817bd3fb740aad54021a91d2b1c1aaa31b6346f74d",
+          "response_sha256": "28a46f18b72e5ba54d18bdd0f1a80c14891180510ea321be984fe728b14b443b"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "e3aab9f5bca67ebfd4b4456dcbdd60e98f08a87a9654b758764e79528811f410",
+          "response_sha256": "9c1c968cc1f5639368063edb6f6e2492783df04ee5acf256df0ecacc09b0ccfb"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n|---|---:|\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nr\"\\n\"\n```"
+    },
+    {
+      "client": "cline",
+      "configured_route": "minimax",
+      "source": "tmp/cline-format-readonly/test_actual_chat_client_tools_0",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "771880f7b9b397819d2d66b2c36079dd501c3369c04b67145c5b81c7c9372d3d",
+          "response_sha256": "cc8da1e4519f5e1fb5110617dce28f22a4544e760c40e36b5a6d1c3a4b6e9f53"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "f2ecfdb766332a5ea25f945abfcbc386ecb59653c777d9f675441faae64fc279",
+          "response_sha256": "e219ba5a16ec712763bade168dfa00cb2319c19a431bf6710bf1741efc477ebc"
+        }
+      ],
+      "answer": "## FORMAT_SUM: 42\n\n### Input\n\n| File | Value |\n|------|--------|\n| FORMAT_ONE  | 17 |\n| FORMAT_TWO  | 25 |\n\n### Python\n\n```python\nFORMAT_ONE = 17\nFORMAT_TWO = 25\nFORMAT_SUM = FORMAT_ONE + FORMAT_TWO\nprint(FORMAT_SUM)  # 42\nprint(r\"\\n\")       # literal raw string containing a backslash and an n\n```"
+    },
+    {
+      "client": "cline",
+      "configured_route": "mimo-v2.6-pro",
+      "source": "tmp/chat-client-format-final/test_actual_chat_client_tools_2",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "8eab0f372d3380aedfaae19a78f8f86ebd3fac025d55dc70210dbbc49f62c6e2",
+          "response_sha256": "ad18287279a74e899c6d320a381b0f8fe524a7a08f4a81b9092c4c4002425078"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "94ce1f4a87dfeaa86b1da8823fb0a243e74fa82f816f6de1ae1a054f58632121",
+          "response_sha256": "00d1902cce8bfda3957baa59e31ff1dd233c23f37a96233c6ddb61da0771c753"
+        }
+      ],
+      "answer": "**FORMAT_SUM: 42**\n\n| File | Value |\n|---|---|\n| one.txt | FORMAT_ONE: 17 |\n| two.txt | FORMAT_TWO: 25 |\n\n```python\nsep = r\"\\n\"\nprint(f\"FORMAT_SUM: {17 + 25}\")  # 42\n```"
+    },
+    {
+      "client": "cline",
+      "configured_route": "codex-luna",
+      "source": "tmp/chat-client-format-final/test_actual_chat_client_tools_3",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "1b0ab015eb1241780bc8e5bab13ffd8a288b0c7bb036154a1b4697e5289f1c6c",
+          "response_sha256": "bdfa3b75f8d8db8f9572e930bbaacbff23d8874abe462edf95275e13dd0df999"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "163e42625e007df11dddcb28510553f7a76031f3ff0946d4b7aa0d83b723b480",
+          "response_sha256": "713e5d510f5adb2bbbcb8cb946b50505852ef0f57e1013f75c7aa3ff10edb71b"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| Input | Value |\n|---|---:|\n| FORMAT_ONE | 17 |\n| FORMAT_TWO | 25 |\n\n```python\nr\"\\n\"\n```"
+    },
+    {
+      "client": "cline",
+      "configured_route": "gemini-subscription",
+      "source": "tmp/chat-client-format-final/test_actual_chat_client_tools_4",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "740709758898a74824fea458ce3668f736883f54adb6948ec9611d61314d45b5",
+          "response_sha256": "7ce51da2a6d8d8a01eb349aa843b4802fe26192d44b7994a33c6da2a4a5a1cf8"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "32405a92b9ef56dfa6b8b663725dede458d0ac6e216e51f0ede9d5a2d40a4030",
+          "response_sha256": "c54045a9ff4c72ae9ec49a56b304694627356fcaf111f7d85f04253fca5e80cd"
+        }
+      ],
+      "answer": "FORMAT_SUM: 42\n\n| File | Variable | Value |\n| --- | --- | --- |\n| one.txt | FORMAT_ONE | 17 |\n| two.txt | FORMAT_TWO | 25 |\n\n```python\nraw_newline = r\"\\n\"\nprint(raw_newline)\n```"
+    },
+    {
+      "client": "cline",
+      "configured_route": "openrouter",
+      "source": "tmp/cline-openrouter-recovery/test_actual_chat_client_tools_0",
+      "result": "PASS",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "61d69845a2b345b5a64e282c6e5686967000816bc7112930e45ca9b857ec6f1c",
+          "response_sha256": "cde9e5a80398a16cb9988d4cb0911c51cf2ab82490110df2eb882210d0056112"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "client_disconnected": false,
+          "request_sha256": "21da4246df2c29c4d45e14398c7ec7ddcab6d6010333036d21fa2a17370c076c",
+          "response_sha256": "8221904a7d84d925b2c80f7bfae324488995e4617c4fca17aac01fa708ba5162"
+        }
+      ],
+      "answer": "## Result\n\n**FORMAT_SUM**: 42\n\n### Input values\n\n| File    | Name | Value |\n|---------|-------------|-------|\n| one.txt | FORMAT_ONE  | 17    |\n| two.txt | FORMAT_TWO  | 25    |\n\n### Python example with literal raw string `r\"\\n\"`\n\n```python\n# Literal raw string containing a backslash followed by the letter n\nraw_literal = r\"\\n\"\nprint(repr(raw_literal))  # '\\\\n'\n\nFORMAT_ONE = 17\nFORMAT_TWO = 25\nFORMAT_SUM = FORMAT_ONE + FORMAT_TWO\nassert FORMAT_SUM == 42\n```"
+    }
+  ],
+  "test_results": {
+    "windows_full_suite": {
+      "passed": 668,
+      "skipped": 38
+    },
+    "deployed_linux_litellm_1_103_0": {
+      "passed": 429
+    },
+    "latest_observer_checks": {
+      "passed": 9
+    }
+  },
+  "limitations": [
+    "Native terminal folding and Cline VS Code/Desktop rendered UI unverified",
+    "Configured route success can include existing explicit LiteLLM fallback; not proof each upstream was used",
+    "Sampled compatibility is not an availability or perfect generated-content guarantee",
+    "Original10 captures cover all POSTs; GET model metadata separately verified200 and recording added for future runs"
+  ],
+  "failure_history": [
+    {
+      "source": "tmp/opencode-format-final/test_actual_chat_client_tools_2",
+      "client": "opencode",
+      "route": "codex-luna",
+      "kind": "upstream_availability",
+      "status": 500,
+      "message": "Our servers are currently overloaded",
+      "recovery": "One explicit unchanged recheck passed; original capture retained"
+    },
+    {
+      "source": "tmp/chat-client-format-final/test_actual_chat_client_tools_1",
+      "client": "cline",
+      "route": "openrouter",
+      "kind": "provider_generated_content",
+      "statuses": [
+        200,
+        200
+      ],
+      "computed_answer_occurrences": 2,
+      "control_markers": [
+        "START_FOLLOW_CONTRACT",
+        "END_FOLLOW_CONTRACT"
+      ],
+      "evidence": "Markers absent both requests; native done.text exactly equals final wire answer",
+      "recovery": "One explicit unchanged recheck passed; no output stripping or model swap"
+    },
+    {
+      "source": "tmp/direct-client-format-baseline/test_actual_client_thinking_to1",
+      "kind": "historical_provider_generated_content",
+      "route": "openrouter",
+      "observed": "NUL characters and unclosed fence",
+      "disposition": "Fresh strict case passed; no claim AGY fix repairs OpenRouter generation"
+    },
+    {
+      "source": "tmp/agy-structured-probe.jsonl",
+      "kind": "confirmed_AGY_harness_defect",
+      "num_turns": 4,
+      "observed": "manage_task and completion prose appended after structured answer",
+      "repair": "Enable internal finish, require one user turn, use native structured_output and echoed schema, reject unexpected local tools"
+    },
+    {
+      "kind": "test_setup_failures",
+      "observed": "Initial raw model names404; incomplete/canceled observer artifacts; Cline missing updatedAt selected default provider; local-backend approval IPC lacked session ID",
+      "disposition": "Harness repaired; captured separately and not counted as provider formatting defects"
+    }
+  ],
+  "deployment": {
+    "health": {
+      "4000": [
+        200,
+        200,
+        200
+      ],
+      "4005": [
+        200,
+        200,
+        200
+      ],
+      "11435": [
+        200,
+        200,
+        200
+      ]
+    },
+    "runtime_hashes": {
+      "gateway": {
+        "thinking.py": "aca3d40284581104bcad469f85243433d052fa5acdddf551b190e17ea72bb92b",
+        "responses_stream.py": "fe37ba74d3d20a89f01c95140c394c398ebe5c265f86758175b6ba9547fc68e5",
+        "handlers/antigravity.py": "3172151e7dcf4a212fba916e1de0a128d70a8b42dabf0ec3244a1e991660c188",
+        "plugins/dynamic_router.py": "c8f23f74f64ac10779f720d0250ea8e4cc12eb02752d668e77d97096c5694ad0",
+        "litellm": "1.103.0"
+      },
+      "gateway-staging": {
+        "thinking.py": "aca3d40284581104bcad469f85243433d052fa5acdddf551b190e17ea72bb92b",
+        "responses_stream.py": "fe37ba74d3d20a89f01c95140c394c398ebe5c265f86758175b6ba9547fc68e5",
+        "handlers/antigravity.py": "3172151e7dcf4a212fba916e1de0a128d70a8b42dabf0ec3244a1e991660c188",
+        "plugins/dynamic_router.py": "c8f23f74f64ac10779f720d0250ea8e4cc12eb02752d668e77d97096c5694ad0",
+        "litellm": "1.103.0"
+      }
+    },
+    "target_agent_matches": true,
+    "sidecar_hashes": {
+      "bridge.py": "8979ea47856df925db6cf1eb9fe2b99328694a1432d1fabfcf9873ffe18aed22",
+      "advisor-agent.md": "7f52d06cf5712e844af100ef608275ce6e34b4d5bae371290c698b434150e817",
+      "audio-agent.md": "5557ccc3495f8aa4b7c28dc7f4b5fb473bc386bc9235975520a7c046838be3e0",
+      "target-agent.md": "9464681992e91d1cd076ee6572ba0bd9625e62cefb13be150eacef1955af78ea"
+    },
+    "standalone_models": {
+      "4000": {
+        "status": 200,
+        "current_available": true
+      },
+      "4005": {
+        "status": 200,
+        "current_available": true
+      }
+    },
+    "production_blocks": [
+      "text"
+    ],
+    "production_policy_unchanged": true
+  },
+  "compatible_combinations": 20
+}

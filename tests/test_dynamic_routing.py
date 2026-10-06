@@ -96,8 +96,8 @@ def test_alias_mode_resolves_current_but_preserves_explicit_models(tmp_path: Pat
         "gateway_reasoning_effort": None,
         "gateway_policy": {
             "active_model": "minimax", "mode": "alias", "policy_version": 1,
-            "advisor_model": "codex-luna-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "high",
+            "advisor_model": "codex-gpt-6.1-sol-advisor",
+        "reasoning_effort": None, "advisor_reasoning_effort": "low",
         },
         "routing": {
             "requested_model": "current",
@@ -198,15 +198,15 @@ def test_persisted_advisor_wins_over_startup_environment(tmp_path, monkeypatch):
     assert restarted.snapshot().advisor_model == "codex-sol-advisor"
 
 
-def test_default_desk_uses_openrouter_and_luna_high_without_locking_selection(tmp_path, monkeypatch):
+def test_default_desk_uses_openrouter_and_sol_low_without_locking_selection(tmp_path, monkeypatch):
     monkeypatch.delenv("ACTIVE_MODEL", raising=False)
     monkeypatch.delenv("ADVISOR_MODEL", raising=False)
     config_path = Path(__file__).parents[1] / "config/litellm.yaml"
     state_path = tmp_path / "state.json"
     control = RoutingControlPlane(config_path, state_path)
     assert control.snapshot().active_model == "openrouter"
-    assert control.snapshot().advisor_model == "codex-luna-advisor"
-    assert control.snapshot().advisor_reasoning_effort == "high"
+    assert control.snapshot().advisor_model == "codex-gpt-6.1-sol-advisor"
+    assert control.snapshot().advisor_reasoning_effort == "low"
     for model in (
         "codex-sol-advisor", "codex-astra-advisor", "codex-gpt-6.1-sol-advisor",
         "codex-luna-advisor",
@@ -301,8 +301,8 @@ def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
         "active_model": "desktop",
         "mode": "force",
         "policy_version": 2,
-        "advisor_model": "codex-luna-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "high",
+        "advisor_model": "codex-gpt-6.1-sol-advisor",
+        "reasoning_effort": None, "advisor_reasoning_effort": "low",
     }
     assert not list(tmp_path.glob("*.tmp"))
     with pytest.raises(ValueError, match="not selectable"):
@@ -336,8 +336,8 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         "active_model": "desktop",
         "mode": "force",
         "policy_version": 2,
-        "advisor_model": "codex-luna-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "high",
+        "advisor_model": "codex-gpt-6.1-sol-advisor",
+        "reasoning_effort": None, "advisor_reasoning_effort": "low",
     }
     assert client.get("/api/active-model").json() == response.json()
     options = client.get("/api/routing-options")

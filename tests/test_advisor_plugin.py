@@ -16,6 +16,13 @@ from subroute.plugins.advisor_plugin import (
 def advisor_router(monkeypatch):
     """Supply the live router services required by preconsult and advisor subcalls."""
     from litellm.proxy import proxy_server
+    from subroute.plugins import advisor_plugin
+
+    async def unexpected_provider(*args, **kwargs):
+        pytest.fail("Unit tests must mock every advisor transport, including fallback providers")
+
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", unexpected_provider)
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", unexpected_provider)
 
     class Router:
         def get_model_info(self, model):
@@ -94,15 +101,24 @@ def test_selected_preconsult_failure_fails_closed_with_correlated_reason(
         }},
     }
 
-    async def fail(*args, **kwargs):
+    attempts = []
+
+    async def fail_gemini(*args, **kwargs):
+        attempts.append("gemini")
         raise advisor_plugin_error(error_kind)
 
-    monkeypatch.setattr(advisor_plugin, "invoke_agy", fail)
+    async def fail_codex(*args, **kwargs):
+        attempts.append("codex")
+        raise advisor_plugin_error(error_kind)
+
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", fail_gemini)
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fail_codex)
 
     with pytest.raises(HTTPException) as caught:
         run(AdvisorPlugin(), data)
 
     assert caught.value.status_code == status_code
+    assert attempts == ["gemini", "codex"]
     assert caught.value.detail["error"]["type"] == "advisor_consultation_failed"
     assert caught.value.detail["error"]["message"] == (
         "Selected advisor failed; base request was not sent"
@@ -114,6 +130,7 @@ def test_selected_preconsult_failure_fails_closed_with_correlated_reason(
     assert receipt["model"] == "gemini-subscription"
     assert len(receipt["consultation_id"]) == 32
     assert receipt["reason"] == error_message
+    assert receipt["fallback_attempt"] == {"failed_model": "gemini-subscription", "reason": error_message}
     assert receipt["gateway_request_id"] == "gateway-request-test-123"
     assert data["messages"] == messages
     assert f"consultation_id={receipt['consultation_id']}" in caplog.text
@@ -145,6 +162,33 @@ def test_advisor_failure_reason_redacts_credentials_and_is_bounded():
     assert "\n" not in reason
 
 
+@pytest.mark.parametrize("error_kind", ["runtime", "timeout", "value", "too_large", "bridge_429", "codex_401", "codex_429", "codex_timeout"])
+def test_preconsult_first_failure_uses_one_fallback_and_its_actual_usage(monkeypatch, error_kind):
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    attempts = []
+    async def gemini(*args, **kwargs):
+        attempts.append("gemini")
+        raise advisor_plugin_error(error_kind)
+    async def codex(*args, **kwargs):
+        attempts.append("codex")
+        return "Fallback guidance", Usage(prompt_tokens=31, completion_tokens=7, total_tokens=38)
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", gemini)
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", codex)
+    messages = [{"role": "user", "content": "Review this design"}]
+    data = {"model": "codex-luna", "messages": messages.copy(), "litellm_call_id": "fallback-test",
+        "metadata": {"gateway_policy": {"advisor_model": "gemini-subscription", "advisor_reasoning_effort": "low"}}}
+    assert run(AdvisorPlugin(), data) is data
+    assert attempts == ["gemini", "codex"]
+    assert data["messages"][:-1] == messages
+    assert data["messages"][-1] == {"role": "developer", "content": "Independent advisor guidance:\nFallback guidance"}
+    receipt = data["metadata"]["gateway_advisor"]
+    assert receipt["status"] == "advice_injected" and receipt["resolved_model"] == "codex-gpt-6.1-sol-advisor"
+    assert receipt["usage_source"] == "provider" and receipt["input_tokens"] == 31 and receipt["output_tokens"] == 7
+    assert receipt["fallback_attempt"] == {"failed_model": "gemini-subscription", "reason": str(advisor_plugin_error(error_kind))}
+
+
 def test_selected_advisor_enables_plain_model_on_messages_route():
     plugin = AdvisorPlugin(
         max_uses=2,
@@ -164,7 +208,7 @@ def test_selected_advisor_enables_plain_model_on_messages_route():
     assert data["tools"][1] == {
         "type": ADVISOR_TOOL_TYPE,
         "name": "advisor",
-        "model": "gemini-subscription",
+        "model": "gemini-3.8-flash-advisor",
         "max_uses": 2,
         "caching": {"type": "ephemeral", "ttl": "5m"},
     }

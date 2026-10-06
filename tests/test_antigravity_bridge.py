@@ -28,22 +28,83 @@ SPEC.loader.exec_module(bridge)
 def test_response_text_requires_provider_content():
     payload = '\n'.join([
         '{"event":"step_update","step_update":{"text_delta":"partial"}}',
-        '{"event":"result","result":{"status":"SUCCESS","response":"complete"}}',
+        '{"event":"result","result":{"status":"SUCCESS","num_turns":1,"response":"complete"}}',
     ])
 
     assert bridge._response_text(payload) == "complete"
 
 
+@pytest.mark.parametrize("structured", [
+    {"kind": "text", "text": 'One answer\n中文 😀\n```python\nx = r"\\n"\n```'},
+    {"kind": "tool_call", "name": "read", "input": {"path": "a\\b.txt", "literal": r"\n"}},
+])
+def test_schema_result_uses_native_structured_output_not_lifecycle_prose(structured):
+    schema = {"type": "object"}
+    payload = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "num_turns": 1, "structured_output": structured,
+        "json_schema": schema, "response": json.dumps({**structured, "toolAction": "Finishing task"}) + "\nRepeated completion commentary.",
+        "usage": {"input_tokens": 12, "output_tokens": 3, "total_tokens": 15},
+    }})
+    assert json.loads(bridge._response_text(payload, schema)) == structured
+    assert bridge._provider_usage(payload) == {"input_tokens": 12, "output_tokens": 3, "total_tokens": 15}
+
+
+@pytest.mark.parametrize("extra", [
+    {}, {"structured_output": None}, {"structured_output": []},
+    {"structured_output": {}}, {"structured_output": {}, "json_schema": {"type": "array"}},
+])
+def test_missing_or_changed_native_schema_result_cannot_fall_back_to_prose(extra):
+    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": '{"kind":"text","text":"plausible"}', **extra}})
+    with pytest.raises(RuntimeError, match="structured result"):
+        bridge._response_text(payload, {"type": "object"})
+
+
+@pytest.mark.parametrize("schema", [None, {"type": "object"}])
+def test_additional_harness_turns_cannot_be_delivered_as_a_single_answer(schema):
+    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "num_turns": 4,
+        "response": "answer\n" * 4, "structured_output": {}, "json_schema": schema}})
+    with pytest.raises(RuntimeError, match="additional turns"):
+        bridge._response_text(payload, schema)
+
+
+@pytest.mark.parametrize("turns", [None, True, False, "1", 1.0, 0, 2])
+def test_terminal_turn_count_must_be_one_integer(turns):
+    result = {"status": "SUCCESS", "response": "answer"}
+    if turns is not None:
+        result["num_turns"] = turns
+    with pytest.raises(RuntimeError, match="additional turns"):
+        bridge._response_text(json.dumps({"event": "result", "result": result}))
+
+
+@pytest.mark.parametrize("advisor", [False, True])
+def test_target_and_advisor_reject_actual_local_tool_steps(monkeypatch, advisor):
+    events = [
+        {"event": "step_update", "step_update": {"step_type": "tool", "tool_name": "manage_task", "state": "DONE"}},
+        {"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": "answer",
+            "usage": {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3}}},
+    ]
+    server, thread, url = _start_bridge_server(monkeypatch, lambda *args, **kwargs: [])
+    monkeypatch.setattr(bridge, "_run_agy", lambda *args, **kwargs: subprocess.CompletedProcess([], 0, "\n".join(map(json.dumps, events)), ""))
+    try:
+        response = httpx.post(url + "/v1/completions", json={"model": "fixture", "prompt": "hello", "advisor": advisor})
+        assert response.status_code == 502
+        assert "unexpected local tool" in response.json()["detail"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 @pytest.mark.parametrize("content", ["", " \n\t"])
 def test_whitespace_is_not_a_completed_provider_answer(content):
-    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "response": content}})
+    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": content}})
     with pytest.raises(RuntimeError, match="no response text"):
         bridge._response_text(payload)
 
 
 def test_quoting_a_filter_message_in_an_answer_is_not_a_refusal():
     content = "The CLI diagnostic is: This request was blocked by Gemini's filters."
-    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "response": content}})
+    payload = json.dumps({"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": content}})
     assert bridge._response_text(payload) == content
 
 
@@ -55,7 +116,7 @@ def test_audio_refusal_keeps_exact_completed_attachment_count():
             "tool_info": {"parameters": {"AbsolutePath": paths[0]}},
         }}),
         json.dumps({"event": "result", "result": {
-            "status": "SUCCESS", "response": "This request was blocked by Gemini's filters.",
+            "status": "SUCCESS", "num_turns": 1, "response": "This request was blocked by Gemini's filters.",
             "conversation_id": "fixture",
         }}),
     ])
@@ -113,7 +174,7 @@ def test_response_text_rejects_missing_terminal_event_even_with_partial_text():
 @pytest.mark.parametrize("raw_usage", [None, {}, {"input_tokens": True}])
 def test_invalid_provider_usage_is_502_and_never_logged_as_success(monkeypatch, capsys, raw_usage):
     stdout = json.dumps({"event": "result", "result": {
-        "status": "SUCCESS", "response": "answer", "usage": raw_usage,
+        "status": "SUCCESS", "num_turns": 1, "response": "answer", "usage": raw_usage,
     }})
     server, thread, base_url = _start_bridge_server(monkeypatch, lambda *args, **kwargs: [])
     monkeypatch.setattr(bridge, "_run_agy", lambda *args, **kwargs: subprocess.CompletedProcess([], 0, stdout, ""))
@@ -128,7 +189,7 @@ def test_invalid_provider_usage_is_502_and_never_logged_as_success(monkeypatch, 
 
 
 def test_duplicate_terminal_results_cannot_mix_text_and_usage():
-    result = {"event": "result", "result": {"status": "SUCCESS", "response": "first"}}
+    result = {"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": "first"}}
     payload = json.dumps(result) + "\n" + json.dumps(result)
     with pytest.raises(RuntimeError, match="multiple terminal"):
         bridge._response_text(payload)
@@ -174,7 +235,7 @@ def test_gateway_preflight_limit_matches_sidecar_ingress_limit():
 
 
 def test_provider_usage_requires_terminal_provider_counts():
-    payload = '{"event":"result","result":{"status":"SUCCESS","usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}'
+    payload = '{"event":"result","result":{"status":"SUCCESS","num_turns":1,"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}'
 
     assert bridge._provider_usage(payload) == {
         "input_tokens": 12,
@@ -264,7 +325,7 @@ def _success_cli_command(marker_path: Path, delay: float) -> list[str]:
         "import json,pathlib,sys,time; "
         "pathlib.Path(sys.argv[1]).write_text('started'); "
         "sys.stdin.read(); time.sleep(float(sys.argv[2])); "
-        "print(json.dumps({'event':'result','result':{'status':'SUCCESS','response':'ok',"
+        "print(json.dumps({'event':'result','result':{'status':'SUCCESS','num_turns':1,'response':'ok',"
         "'usage':{'input_tokens':2,'output_tokens':1,'total_tokens':3}}}))"
     )
     return [sys.executable, "-c", script, str(marker_path), str(delay)]

@@ -22,7 +22,8 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
         for deployment in settings["model_list"]:
             info = deployment["model_info"]
             is_advisor = experts or deployment["model_name"].endswith("-advisor")
-            context = 32000 if is_advisor else 256000
+            speech = deployment["model_name"].startswith(("mimo-v2.5-asr", "mimo-v2.5-tts"))
+            context = 32000 if is_advisor else 8000 if speech else 256000
             assert info["max_input_tokens"] == context, deployment["model_name"]
             assert info["context_window"] == context
             assert info["auto_compact_token_limit"] == context * 0.8
@@ -222,7 +223,7 @@ def test_subscription_channels_stay_behind_litellm():
     )
 
 
-def test_only_explicit_auto_route_has_fallbacks_without_retries():
+def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retries():
     settings = config()
     routing = settings["router_settings"]
 
@@ -230,6 +231,12 @@ def test_only_explicit_auto_route_has_fallbacks_without_retries():
     assert routing["fallbacks"] == [
         {"auto": ["auto-gemini-subscription"]},
         {"auto-gemini-subscription": ["auto-codex-luna"]},
+        {"minimax": ["openrouter", "mimo-v2.6-pro", "codex-luna"]},
+        {"openrouter": ["minimax", "mimo-v2.6-pro", "codex-luna"]},
+        {"mimo-v2.6-pro": ["minimax", "openrouter", "codex-luna"]},
+        {"mimo-v2.6-flash": ["minimax", "openrouter", "codex-luna"]},
+        {"gemini-3.8-flash-advisor": ["codex-gpt-6.1-sol-advisor"]},
+        {"codex-gpt-6.1-sol-advisor": ["gemini-3.8-flash-advisor"]},
     ]
     assert settings["litellm_settings"]["drop_params"] is True
     assert settings["general_settings"]["master_key"] == (

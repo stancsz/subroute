@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -316,10 +315,10 @@ class AntigravityLLM(CustomLLM):
         return normalized, "tool_call" if required else None
 
     @staticmethod
-    def _tool_schema(tools: list[dict[str, Any]], forced_kind: str | None) -> dict[str, Any]:
+    def _tool_schema(tools: list[dict[str, Any]], forced_kind: str | None, *, allow_multiple_tools: bool = False) -> dict[str, Any]:
         kinds = [forced_kind] if forced_kind else ["text", "tool_call"]
         required = ["kind", "name", "input"] if forced_kind == "tool_call" else ["kind"]
-        return {
+        schema = {
             "type": "object",
             "properties": {
                 "kind": {"type": "string", "enum": kinds},
@@ -330,9 +329,19 @@ class AntigravityLLM(CustomLLM):
             "required": required,
             "additionalProperties": False,
         }
+        if allow_multiple_tools:
+            kinds.append("tool_calls")
+            schema["properties"]["calls"] = {
+                "type": "array", "minItems": 1, "maxItems": 8,
+                "items": {"type": "object", "properties": {
+                    "kind": {"type": "string", "enum": ["tool_call"]},
+                    "name": schema["properties"]["name"], "input": {"type": "object"},
+                }, "required": ["kind", "name", "input"], "additionalProperties": False},
+            }
+        return schema
 
     @staticmethod
-    def _tool_prompt(prompt: str, tools: list[dict[str, Any]], forced_kind: str | None) -> str:
+    def _tool_prompt(prompt: str, tools: list[dict[str, Any]], forced_kind: str | None, *, allow_multiple_tools: bool = False) -> str:
         tool_data = [
             {"name": tool["name"], "description": tool["description"], "input_schema": tool["parameters"]}
             for tool in tools
@@ -352,124 +361,19 @@ class AntigravityLLM(CustomLLM):
             "Never execute or simulate a tool. Return only the schema-constrained JSON decision. "
             "For a tool call, set kind to tool_call and include its exact name and input object. "
             "For a normal answer, set kind to text and include text."
+            + (" For independent parallel requests, return kind=tool_calls and a calls array of at most eight tool_call decisions. Return one JSON object, never adjacent decisions." if allow_multiple_tools else "")
         )
 
-    @classmethod
-    def _parse_tool_decision(cls, content: str, *, allow_plain_text: bool = False,
-                             allow_multiple_tools: bool = False) -> dict[str, Any]:
-        candidate = re.sub(r"(?m)^\s*```(?:json)?\s*$", "", content).lstrip()
-        decoder = json.JSONDecoder()
-        try:
-            decision, end = decoder.raw_decode(candidate)
-        except json.JSONDecodeError as exc:
-            # Only an unstructured answer may use the auto-choice text path.
-            # Never turn malformed JSON or a rejected structured result into success.
-            if allow_plain_text and not content.lstrip().startswith(("{", "[", "```")):
-                # Leading prose/fences must not turn a failed tool decision into
-                # visible answer text. Leave ordinary plain answers supported.
-                structured = bool(re.search(r'"kind"\s*:\s*"(?:tool_call|tool_calls|text)"', content))
-                # Decode embedded objects too: JSON escapes can spell the same
-                # decision key/value without matching the malformed-JSON guard.
-                for match in re.finditer(r"\{", content):
-                    try:
-                        embedded, _ = decoder.raw_decode(content, match.start())
-                    except json.JSONDecodeError:
-                        continue
-                    if isinstance(embedded, dict) and embedded.get("kind") in {"tool_call", "tool_calls", "text"}:
-                        structured = True
-                        break
-                if structured:
-                    raise _ToolOutputError("Antigravity mixed prose with a structured client decision") from exc
-                return {"kind": "text", "text": content}
-            raise _ToolOutputError(f"Antigravity returned invalid tool JSON: {exc.msg}") from exc
-        if not isinstance(decision, dict):
-            raise _ToolOutputError("Antigravity returned a non-object tool decision")
-        if decision.get("kind") not in {"text", "tool_call"}:
-            raise _ToolOutputError("Antigravity returned an invalid tool decision")
-        decisions = [decision]
-        remainder = candidate[end:].lstrip()
-        # AGY 1.2.11 can emit adjacent, distinct client-tool decisions for a
-        # parallel request. Retain up to eight only when the caller permits
-        # it; _complete validates every name/input before exposing any call.
-        # Retire this tolerance when AGY returns one schema result reliably.
-        while remainder.startswith("{"):
-            try:
-                extra, extra_end = decoder.raw_decode(remainder)
-            except json.JSONDecodeError as exc:
-                raise _ToolOutputError(f"Antigravity returned invalid trailing JSON: {exc.msg}") from exc
-            is_finish_marker = (
-                isinstance(extra, dict)
-                and extra.get("kind") == "tool_call"
-                and extra.get("name") == "finish"
-                and extra.get("input") == {}
-                and set(extra) <= {"kind", "name", "input", "id", "type"}
-            )
-            if extra not in decisions and not is_finish_marker:
-                if (allow_multiple_tools and decision.get("kind") == "tool_call"
-                        and isinstance(extra, dict) and extra.get("kind") == "tool_call"
-                        and set(extra) == {"kind", "name", "input"}):
-                    if len(decisions) >= 8:
-                        raise _ToolOutputError("Antigravity returned more than eight client tool decisions")
-                    decisions.append(extra)
-                    remainder = remainder[extra_end:].lstrip()
-                    continue
-                extra_name = extra.get("name") if isinstance(extra, dict) else None
-                raise _ToolOutputError(
-                    f"Antigravity returned a different additional structured result (name={extra_name!r})"
-                )
-            remainder = remainder[extra_end:].lstrip()
-        trailing = remainder.strip()
-        decision_text = decision.get("text")
-        if trailing and isinstance(decision_text, str) and cls._is_repeated_text_tail(trailing, decision_text):
-            trailing = ""
-        if trailing:
-            # AGY may append natural-language completion commentary after its
-            # schema-constrained result. It is not part of the gateway's tool
-            # contract, so ignore bounded plain text, while still rejecting
-            # any unaccepted structured result embedded in commentary.
-            if len(trailing) > 1200:
-                raise _ToolOutputError("Antigravity returned an oversized postamble after its structured tool decision")
-            offset = 0
-            while True:
-                object_start = trailing.find("{", offset)
-                if object_start < 0:
-                    break
-                try:
-                    extra, extra_end = decoder.raw_decode(trailing, object_start)
-                except json.JSONDecodeError:
-                    offset = object_start + 1
-                    continue
-                is_finish_marker = (
-                    isinstance(extra, dict)
-                    and extra.get("kind") == "tool_call"
-                    and extra.get("name") == "finish"
-                    and extra.get("input") == {}
-                    and set(extra) <= {"kind", "name", "input", "id", "type"}
-                )
-                if extra not in decisions and not is_finish_marker:
-                    extra_name = extra.get("name") if isinstance(extra, dict) else None
-                    extra_shape = (
-                        f"type={extra.get('type')!r}, kind={extra.get('kind')!r}, "
-                        f"fields={sorted(extra.keys())!r}"
-                        if isinstance(extra, dict) else f"type={type(extra).__name__}"
-                    )
-                    raise _ToolOutputError(
-                        "Antigravity returned a different additional structured result "
-                        f"(name={extra_name!r}, {extra_shape})"
-                    )
-                offset = extra_end
-        return {"kind": "tool_calls", "calls": decisions} if len(decisions) > 1 else decision
-
     @staticmethod
-    def _is_repeated_text_tail(tail: str, expected: str) -> bool:
-        if not expected:
-            return False
-        remaining = tail.strip()
-        if remaining != expected and not remaining.startswith(expected + "\n"):
-            return False
-        while remaining.startswith(expected):
-            remaining = remaining[len(expected):].strip()
-        return not remaining
+    def _parse_tool_decision(content: str) -> dict[str, Any]:
+        """Decode only the sidecar's native structured result, never prose."""
+        try:
+            decision = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise _ToolOutputError("Antigravity returned invalid structured tool JSON") from exc
+        if not isinstance(decision, dict) or decision.get("kind") not in {"text", "tool_call", "tool_calls"}:
+            raise _ToolOutputError("Antigravity returned an invalid tool decision")
+        return decision
 
     @staticmethod
     async def _complete(
@@ -487,9 +391,10 @@ class AntigravityLLM(CustomLLM):
             prompt = prompt_from_messages(messages, attachments)
             if attachments and tools:
                 raise ValueError("audio does not support schema-constrained client tools")
-            schema = AntigravityLLM._tool_schema(tools, forced_kind) if tools else None
+            allow_multiple = forced_kind is None and optional_params.get("parallel_tool_calls") is not False
+            schema = AntigravityLLM._tool_schema(tools, forced_kind, allow_multiple_tools=allow_multiple) if tools else None
             if tools:
-                prompt = AntigravityLLM._tool_prompt(prompt, tools, forced_kind)
+                prompt = AntigravityLLM._tool_prompt(prompt, tools, forced_kind, allow_multiple_tools=allow_multiple)
             content, usage = await invoke_agy(
                 model,
                 prompt,
@@ -498,10 +403,8 @@ class AntigravityLLM(CustomLLM):
             )
             if not tools:
                 return content, usage, []
-            decision = AntigravityLLM._parse_tool_decision(
-                content, allow_plain_text=forced_kind is None,
-                allow_multiple_tools=forced_kind is None and optional_params.get("parallel_tool_calls") is not False,
-            )
+            decision = AntigravityLLM._parse_tool_decision(content)
+            jsonschema.validate(decision, schema, registry=Registry())
             if decision.get("kind") not in {"text", "tool_call", "tool_calls"}:
                 raise _ToolOutputError("Antigravity returned an invalid tool decision")
             if decision["kind"] == "text":
@@ -510,11 +413,16 @@ class AntigravityLLM(CustomLLM):
                 if forced_kind == "tool_call" or not isinstance(decision.get("text"), str):
                     raise _ToolOutputError("Antigravity returned text when a tool call was required")
                 return decision["text"], usage, []
-            calls = decision.get("calls") if decision["kind"] == "tool_calls" else [decision]
+            if decision["kind"] == "tool_calls":
+                if not allow_multiple or set(decision) != {"kind", "calls"}:
+                    raise _ToolOutputError("Antigravity returned an invalid tool decision")
+                calls = decision["calls"]
+            else:
+                calls = [decision]
             validated = []
             for call in calls:
                 name, arguments = call.get("name"), call.get("input")
-                if set(call) != {"kind", "name", "input"}:
+                if call.get("kind") != "tool_call" or set(call) != {"kind", "name", "input"}:
                     raise _ToolOutputError("Antigravity returned missing or extra fields in a tool decision")
                 tool = next((item for item in tools if item["name"] == name), None)
                 if tool is None or not isinstance(arguments, dict):

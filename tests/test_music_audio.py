@@ -162,7 +162,7 @@ def test_bridge_reads_exact_bytes_and_cleans_temporary_audio_on_every_outcome(mo
                 "tool_info": {"parameters": {"AbsolutePath": str(path) if outcome != "unexpected" else "/root/unexpected"}},
             }})
         response_text = " \nThis request was blocked by Gemini's filters. Please rephrase." if outcome.startswith("refused") else "heard"
-        events.append({"event": "result", "result": {"status": "SUCCESS", "response": response_text, "usage": {
+        events.append({"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": response_text, "usage": {
             "input_tokens": 10, "output_tokens": 2, "total_tokens": 12,
         }}})
         return subprocess.CompletedProcess(command, 0, "\n".join(map(json.dumps, events)), "")

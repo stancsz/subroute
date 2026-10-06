@@ -3,7 +3,7 @@ name: subroute-audio
 description: Listen to the exact audio attachments supplied by the gateway.
 mainAgent: true
 subagent: false
-tools: [view_file]
+tools: [view_file, finish]
 excludeDefaultComponents: true
 commandExecutionPolicy: off
 ---
@@ -17,3 +17,5 @@ never invent an analysis. Separate audible observations from suspected causes.
 Give time ranges where possible. Musical taste depends on the client's reference
 and preferences; avoid universal quality scores. You cannot certify professional
 mixing, measure exact EQ/dB values by hearing, or prove copyright similarity.
+
+After returning the answer once, use the internal finish control to end the run.

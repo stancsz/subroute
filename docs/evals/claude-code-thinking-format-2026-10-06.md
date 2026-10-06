@@ -2,6 +2,10 @@
 
 Date: October 6, 2026 (America/Denver).
 
+The latest standalone Subroute and four-client acceptance is recorded at the end
+of this report and in the [standalone receipt](subroute-standalone-format-2026-10-06.json).
+Earlier checkpoints and failed attempts below remain historical evidence.
+
 The first verification below covered API fixtures and live HTTP requests. Actual
 Codex CLI testing subsequently exposed additional defects; that earlier evidence
 did not establish a complete coding-client tool journey. The follow-up section
@@ -264,3 +268,107 @@ legal text/terminal fields while production policy remained unchanged. Staging
 test policy was restored. Local gateway was rebuilt with its 201-test/typecheck
 verified source. These are updates to local Docker services; no registry image
 publication was configured or claimed.
+
+## Standalone Subroute and four native clients
+
+This follow-up bypassed local-api-gateway: every selected client journey used
+Subroute staging directly on port 4005. Native clients were Claude Code 2.1.251,
+Codex 0.154.0, OpenCode 1.15.10 and Cline 3.0.68. Cline CLI acceptance does not
+establish rendering in its older VS Code or Desktop clients.
+
+| Client | MiniMax | OpenRouter | MiMo Pro | Codex subscription | Gemini subscription |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code | Pass | Pass | Pass | Pass | Pass |
+| Codex CLI | Pass | Pass | Pass | Pass | Pass |
+| OpenCode CLI | Pass | Pass | Pass | Pass after explicit overload recovery | Pass |
+| Cline CLI | Pass | Pass after explicit generated-content recovery | Pass | Pass | Pass |
+
+Independent artifact review accepted these twenty recorded combinations,
+containing fifty captured requests, all HTTP 200. Each read both actual synthetic
+files, replayed their 17/25 markers, computed 42 once and preserved the files.
+Messages and Responses lifecycle checks cover Claude/Codex. OpenCode/Cline use
+their actual OpenAI-compatible Chat adapters; checks reconstruct indexed tool
+arguments, separate reasoning and answer deltas, require stream termination and
+compare native final output with the wire answer. Cline tool-start/end IDs and
+names match exactly. No full thinking mirror, visible thinking tag, NUL,
+provider control marker, unclosed code fence or repeated final result is accepted.
+Newlines, Unicode and literal raw-string escapes remain intact.
+
+The standalone Gemini defect was in Subroute's AGY integration. With `tools: []`,
+AGY 1.2.11 implicitly used `manage_task` and added synthetic user turns when it
+could not finish. The native failing probe ran four user turns and aggregated
+JSON with completion prose. An isolated agent with internal `finish` completed
+in one turn, returning an authoritative native `structured_output` and echoed
+`json_schema`, while `result.response` still contained runtime metadata.
+The [official headless documentation](https://antigravity.google/docs/cli/headless/)
+documents this parsed structured result.
+
+Target, advisor and audio agents now have internal finish control. The sidecar
+requires one genuine user turn and rejects missing or invalid turn counts.
+Target/advisor terminal runs containing unexpected local-tool events are rejected;
+audio retains only the already authorized attachment reads and finish. Schema mode
+requires the native parsed object and matching echoed schema, preserving actual
+provider usage. The handler accepts one strict JSON object; automatic parallel
+choice supports an explicit batch of at most eight calls. Every name and input
+is validated before any call is exposed. Forced single choice and parallel
+opt-out reject batches. Prose/fence/footer extraction and adjacent-JSON
+tolerances from the earlier checkpoint were removed. No additional service,
+transport, hidden retry, answer deduplication or provider switch was introduced.
+
+Regression coverage includes malformed/native/missing schema results, unsigned
+and signed thinking, multi-block and redacted reasoning, buffered assembly,
+interleaved calls, invalid second calls with no partial exposure, forced/parallel
+semantics, terminal failure, cancellation and provider-usage preservation.
+Independent review ran 44 additional adversarial native-schema probes. The
+deployed immutable Linux LiteLLM 1.103.0 image passed 429 relevant tests. The
+Windows full-suite result is in the durable receipt; all former fifteen baseline
+failures are resolved. Seven asserted obsolete defaults/aliases/fallbacks, and
+eight advisor fixtures left the fallback provider unmocked. Both advisor lanes
+are now isolated. Non-live socket guards block cloud addresses and known deployed
+gateway/sidecar ports while allowing ephemeral local fixture servers. Nine
+observer checks cover metadata errors, pre-dispatch read-only tool restrictions,
+network isolation and malformed displayed answers.
+
+The harness uses process-local client configuration, synthetic files and saved
+staging-policy restoration. OpenCode has only read permissions. Cline has valid
+isolated provider state (including its required `updatedAt`), disabled mutation,
+command, browsing, delegation and team tools. Independent native declaration
+checks confirmed only `read_files`; the recorder refuses broader declarations
+before upstream dispatch. Early Cline setup failures and unsupported local
+approval IPC were harness defects, retained separately. Tests do not alter the
+user's usual client settings. The original ten Claude/Codex captures record POSTs;
+metadata GET status/body recording was added and separately tested, with direct
+production/staging model-catalog requests both returning 200.
+
+Two initial expanded runs failed strict acceptance: an OpenCode auxiliary title
+request hit a genuine upstream subscription overload (HTTP 500), and OpenRouter
+generated `START_FOLLOW_CONTRACT`/`END_FOLLOW_CONTRACT` fences and two occurrences
+of the computed answer for Cline. Those markers were absent from both requests,
+and Cline's terminal text exactly matched the assembled wire answer. This
+supports an upstream content-generation cause, rather than client or gateway
+duplication. One explicit unchanged recovery check for each passed. These
+failures remain in the receipt; AGY's fix is not claimed to repair OpenRouter
+generation. The earlier direct OpenRouter NUL/unclosed-fence answer is retained
+as historical provider-quality evidence. No sanitization hid any such output.
+
+The scoped decision is **READY for sampled four-CLI protocol compatibility**.
+Perfect provider reliability is not established. Native terminal folding,
+screenshots and Cline VS Code/Desktop rendering remain unverified. Configured
+fallback routes can participate in a successful selected-route journey; adapter
+fixtures isolate protocol behavior, whereas these live runs test route-level
+customer compatibility.
+
+Production and staging gateways load the final handler. The AGY sidecar was
+rebuilt with all three finish-enabled agents. All four recorded gateway-module
+hashes and all four sidecar/agent hashes match source; both gateways use pinned
+LiteLLM 1.103.0. Readiness on 4000/4005 and local-gateway health on 11435 each
+returned three HTTP 200 responses. A production current Messages request
+completed with text and a legal terminal reason, leaving policy version 94
+unchanged. Staging's saved target/advisor/effort fields were restored. The local
+gateway's previously pushed 539ce5e source is unchanged this turn. These are
+local Docker deployments; no remote registry publication is claimed.
+
+The [standalone receipt](subroute-standalone-format-2026-10-06.json) stores selected
+answers, capture hashes, observed failures, exact validation results and deployed
+source hashes. Header-free raw client/wire captures and independent probes stay
+in the ignored local evaluation directory.

@@ -1,4 +1,4 @@
-"""Opt-in actual Claude Code/Codex tool turns through the local Docker gateway.
+"""Opt-in actual Claude Code/Codex tool turns through Subroute directly.
 
 Uses temporary files and process-only settings; restores staging policy. A
 loopback recorder saves header-free wire/client evidence in the pytest folder.
@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 from threading import Thread
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -25,31 +26,70 @@ from test_client_stream_contracts import collect_responses
 pytestmark = pytest.mark.live
 
 
+def assert_formatted_answer(answer):
+    plain_markdown = re.sub(r"[*`]", "", answer)
+    assert re.search(r"FORMAT_SUM:\s*42", plain_markdown) and "\n" in answer and "```" in answer and "\\n" in answer
+    assert "\x00" not in answer, "The displayed answer must not contain NUL control characters"
+    assert "<think>" not in answer and "</think>" not in answer
+    assert "START_FOLLOW_CONTRACT" not in answer and "END_FOLLOW_CONTRACT" not in answer, "Provider control markers leaked into the answer"
+    assert len(re.findall(r"(?m)^\s*```", answer)) % 2 == 0, "Every code fence must close"
+    assert len(re.findall(r"FORMAT_SUM:\s*42", plain_markdown)) == 1, "The brief final answer must not repeat the computed result"
+
+
 class WireRecorder:
-    def __init__(self):
+    def __init__(self, upstream="http://127.0.0.1:4005", allowed_tools=None):
         self.records = []
+        self.upstream = upstream.rstrip("/")
+        self.allowed_tools = allowed_tools
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_):
                 pass
 
+            def do_GET(self):
+                # Native Codex asks for model metadata as well as Responses.
+                # Forward the customer entry point instead of returning 501.
+                headers = {key: value for key, value in self.headers.items()
+                           if key.lower() not in {"host", "connection", "accept-encoding"}}
+                record = {"method": "GET", "path": self.path, "request": {}, "body": "", "status": None, "content_type": ""}
+                owner.records.append(record)
+                with httpx.Client(timeout=10) as client:
+                    response = client.get(f"{owner.upstream}{self.path}", headers=headers)
+                record.update(status=response.status_code, content_type=response.headers.get("content-type", ""), body=response.text)
+                self.send_response(response.status_code)
+                self.send_header("content-type", response.headers.get("content-type", "application/json"))
+                self.send_header("content-length", str(len(response.content)))
+                self.end_headers()
+                self.wfile.write(response.content)
+
             def do_POST(self):
                 payload = self.rfile.read(int(self.headers.get("content-length", "0")))
-                record = {"path": self.path, "request": json.loads(payload), "body": ""}
+                record = {"method": "POST", "path": self.path, "request": json.loads(payload), "body": "", "status": None, "content_type": ""}
                 owner.records.append(record)
+                if owner.allowed_tools is not None:
+                    names = {tool.get("function", {}).get("name") for tool in record["request"].get("tools", [])}
+                    if not names <= owner.allowed_tools:
+                        body = json.dumps({"error": {"message": "Client test exposed tools outside its read-only allowlist"}}).encode()
+                        record.update(status=400, content_type="application/json", body=body.decode())
+                        self.send_response(400)
+                        self.send_header("content-type", "application/json")
+                        self.send_header("content-length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
                 headers = {key: value for key, value in self.headers.items()
                            if key.lower() not in {"host", "content-length", "connection", "accept-encoding"}}
                 with httpx.Client(timeout=120) as client:
-                    with client.stream("POST", f"http://127.0.0.1:11435{self.path}", headers=headers, content=payload) as upstream:
+                    with client.stream("POST", f"{owner.upstream}{self.path}", headers=headers, content=payload) as upstream:
                         record["status"] = upstream.status_code
                         record["content_type"] = upstream.headers.get("content-type", "")
-                        self.send_response(upstream.status_code)
-                        self.send_header("content-type", record["content_type"])
-                        self.send_header("connection", "close")
-                        self.end_headers()
                         pieces = []
                         try:
+                            self.send_response(upstream.status_code)
+                            self.send_header("content-type", record["content_type"])
+                            self.send_header("connection", "close")
+                            self.end_headers()
                             for piece in upstream.iter_bytes():
                                 pieces.append(piece)
                                 self.wfile.write(piece)
@@ -61,6 +101,9 @@ class WireRecorder:
                             self.close_connection = True
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        # Join request workers before saving evidence, including background
+        # client requests. Otherwise unfinished records can masquerade as SSE.
+        self.server.daemon_threads = False
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
 
     def __enter__(self):
@@ -96,9 +139,13 @@ def _executables(client):
 @pytest.mark.parametrize("client_name", ["claude", "codex"])
 def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, provider, client_name):
     executable = _executables(client_name)
-    token = os.getenv("SUBROUTE_LOCAL_API_KEY")
+    upstream = os.getenv("SUBROUTE_CLI_BASE_URL", "http://127.0.0.1:4005")
+    address = urlparse(upstream)
+    assert address.scheme == "http" and address.hostname in {"127.0.0.1", "localhost", "::1"}
+    assert address.port in {4005, 11435}, "Only staging or its local forwarder may be mutated by this test"
+    token = os.getenv("SUBROUTE_LOCAL_API_KEY") if address.port == 11435 else os.getenv("SUBROUTE_LIVE_API_KEY", "subroute-cli-test")
     if not token:
-        pytest.skip("set SUBROUTE_LOCAL_API_KEY to authenticate the local CLI test")
+        pytest.skip("set SUBROUTE_LOCAL_API_KEY to authenticate the local-forwarder CLI test")
     files = {"one.txt": 'FORMAT_ONE: 17\nLiteral code escape: \\n\n中文行。\n', "two.txt": "FORMAT_TWO: 25\n"}
     for name, content in files.items():
         (tmp_path / name).write_text(content, encoding="utf-8")
@@ -121,14 +168,14 @@ def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, p
     # The subscription sidecar serializes whole completions, not token streams.
     # Allow its tool round trips while retaining a bounded overall deadline.
     cli_timeout = 240 if provider == "gemini-subscription" else 120
-    with WireRecorder() as recorder:
+    with WireRecorder(upstream) as recorder:
         if client_name == "claude":
             env.update(ANTHROPIC_BASE_URL=recorder.base_url, ANTHROPIC_API_KEY=token,
                        CLAUDE_CODE_MAX_OUTPUT_TOKENS="4096", MAX_THINKING_TOKENS="1024")
             command = [executable, "-p", "--bare", "--no-session-persistence", "--setting-sources", "",
                        "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--disable-slash-commands",
                        "--tools", "Read", "--allowedTools", "Read", "--permission-mode", "dontAsk",
-                       "--model", "claude-sonnet-4-6", "--settings", '{"alwaysThinkingEnabled":true}',
+                       "--model", "current" if address.port == 4005 else "claude-sonnet-4-6", "--settings", '{"alwaysThinkingEnabled":true}',
                        "--output-format", "stream-json", "--include-partial-messages", "--verbose",
                        "--system-prompt", "You are a coding assistant. Use Read for the requested files, then answer concisely."]
         else:
@@ -138,7 +185,8 @@ def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, p
                        "--cd", str(tmp_path),
                        "--enable", "skip_host_skill_discovery", "--disable", "apps", "--disable", "hooks",
                        "--disable", "plugins", "--disable", "remote_plugin", "--disable", "skill_search",
-                       "-m", "gpt-6-luna", "-c", 'model_provider="format_test"',
+                       "--disable", "view_image", "--disable", "image_generation",
+                       "-m", "current" if address.port == 4005 else "gpt-6-luna", "-c", 'model_provider="format_test"',
                        "-c", 'model_providers.format_test={name="Local format test",base_url="' + recorder.base_url + '/v1",wire_api="responses",env_key="SUBROUTE_CLI_TEST_KEY"}',
                        "-c", 'model_reasoning_effort="low"', "-c", 'model_reasoning_summary="auto"',
                        "-c", "model_context_window=200000", "-c", "model_auto_compact_token_limit=190000",
@@ -156,10 +204,11 @@ def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, p
     for name, text in [("client.jsonl", result.stdout), ("client.stderr", result.stderr),
                        ("wire.json", json.dumps(recorder.records, ensure_ascii=False, indent=2))]:
         (tmp_path / name).write_text(text.replace(token, "[REDACTED]"), encoding="utf-8")
+    (tmp_path / "connection.json").write_text(json.dumps({"upstream": upstream, "direct_subroute": address.port == 4005}), encoding="utf-8")
     assert result.returncode == 0, result.stderr[-1200:]
     assert "without active item" not in result.stderr
     events = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
-    wire = [record for record in recorder.records if "text/event-stream" in record["content_type"]]
+    wire = [record for record in recorder.records if "text/event-stream" in record.get("content_type", "") and not record.get("client_disconnected")]
     assert 2 <= len(wire) <= 5, "The client should use tools and then finish, without a repeating tool loop"
     tool_results = []
     for record in wire:
@@ -194,7 +243,8 @@ def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, p
         assert messages
         answer = messages[-1]
         assert all("<think>" not in message and "</think>" not in message for message in messages)
-    assert re.search(r"FORMAT_SUM:\s*(?:\*\*)?42(?:\*\*)?", answer) and "\n" in answer and "```" in answer and "\\n" in answer
+    assert_formatted_answer(answer)
     assert before == {name: hashlib.sha256((tmp_path / name).read_bytes()).hexdigest() for name in files}
-    errors = [record["status"] for record in recorder.records if record["status"] >= 400]
-    print(f"{client_name}/{provider}: completed real tool turn; wire/client structure verified; auxiliary HTTP errors={errors}; evidence={tmp_path}")
+    errors = [record["status"] for record in recorder.records if record["status"] is None or record["status"] >= 400]
+    print(f"{client_name}/{provider}: upstream={upstream}; completed real tool turn; wire/client structure verified; HTTP errors={errors}; evidence={tmp_path}")
+    assert not errors, "A successful final turn must not conceal failed customer requests"

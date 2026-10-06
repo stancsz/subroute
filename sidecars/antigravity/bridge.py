@@ -182,9 +182,18 @@ def _terminal_result(stdout: str) -> dict[str, Any]:
     return result
 
 
-def _response_text(stdout: str) -> str:
+def _response_text(stdout: str, json_schema: dict[str, Any] | None = None) -> str:
     result = _terminal_result(stdout)
     _reject_refusal(result)
+    if type(result.get("num_turns")) is not int or result["num_turns"] != 1:
+        raise RuntimeError("Antigravity ran additional turns for a single gateway request")
+    if json_schema is not None:
+        # AGY's response includes lifecycle prose/toolAction metadata. Its
+        # documented structured_output is the authoritative schema result.
+        structured = result.get("structured_output")
+        if not isinstance(structured, dict) or result.get("json_schema") != json_schema:
+            raise RuntimeError("Antigravity omitted the requested structured result or changed its schema")
+        return json.dumps(structured, ensure_ascii=False, separators=(",", ":"))
     content = result.get("response")
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError("Antigravity returned no response text (status=SUCCESS)")
@@ -379,7 +388,18 @@ class Handler(BaseHTTPRequestHandler):
             if completed.returncode != 0:
                 raise RuntimeError(completed.stderr.strip()[:300] or f"agy exited with {completed.returncode}")
             try:
-                content = _response_text(completed.stdout)
+                if not attachments:
+                    # Target/advisor can end their own turn, never execute a
+                    # workspace/client tool. Check actual events, not only the
+                    # agent's declaration (AGY exposes manage_task implicitly).
+                    for line in completed.stdout.splitlines():
+                        try:
+                            update = json.loads(line).get("step_update", {})
+                        except (ValueError, AttributeError):
+                            continue
+                        if update.get("step_type") == "tool" and update.get("tool_name") != "finish":
+                            raise RuntimeError("Antigravity target/advisor attempted an unexpected local tool")
+                content = _response_text(completed.stdout, json_schema)
             except RuntimeError as exc:
                 event_names = []
                 for line in completed.stdout.splitlines():

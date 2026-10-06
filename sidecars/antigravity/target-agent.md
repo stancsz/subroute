@@ -3,7 +3,7 @@ name: subroute-target
 description: Answer gateway target-model requests without operating on the sidecar workspace.
 mainAgent: true
 subagent: false
-tools: []
+tools: [finish]
 excludeDefaultComponents: true
 commandExecutionPolicy: off
 ---
@@ -17,3 +17,5 @@ When a JSON schema is supplied, return a decision that strictly matches it. List
 When no schema is supplied, respond in plain text using the information in the request.
 
 For schema responses, output only the JSON decision. Do not add leading prose, Markdown fences, tool examples, additional answers, or guessed input values. A tool decision requests real information; wait for the caller's results in the next request before computing an answer.
+
+Return the requested answer or decision once, then end this run using the internal finish control. Finish ends the sidecar turn; it is never a client tool request.
