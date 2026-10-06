@@ -1,0 +1,670 @@
+{
+  "successful_final_runs": [
+    {
+      "source": "tmp/client-format-probe/cli-final-minimax/test_actual_client_thinking_to0",
+      "client": "claude",
+      "requests": 3,
+      "types": [
+        [
+          "thinking",
+          "text"
+        ],
+        [
+          "thinking",
+          "tool_use",
+          "tool_use"
+        ],
+        [
+          "thinking",
+          "text"
+        ]
+      ],
+      "tool_count": 2,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "minimax"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-minimax/test_actual_client_thinking_to1",
+      "client": "codex",
+      "requests": 3,
+      "types": [
+        [
+          "reasoning",
+          "message",
+          "function_call",
+          "function_call"
+        ],
+        [
+          "reasoning",
+          "message",
+          "function_call",
+          "function_call"
+        ],
+        [
+          "reasoning",
+          "message"
+        ]
+      ],
+      "tool_count": 4,
+      "reasoning_items_SDK_validated": 6,
+      "errors": [],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "minimax"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-remaining/test_actual_client_thinking_to0",
+      "client": "claude",
+      "requests": 3,
+      "types": [
+        [
+          "text"
+        ],
+        [
+          "tool_use",
+          "tool_use"
+        ],
+        [
+          "text"
+        ]
+      ],
+      "tool_count": 2,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "openrouter"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-remaining/test_actual_client_thinking_to1",
+      "client": "claude",
+      "requests": 3,
+      "types": [
+        [
+          "text"
+        ],
+        [
+          "thinking",
+          "tool_use",
+          "tool_use"
+        ],
+        [
+          "thinking",
+          "text"
+        ]
+      ],
+      "tool_count": 2,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "mimo-v2.6-pro"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-remaining/test_actual_client_thinking_to2",
+      "client": "claude",
+      "requests": 6,
+      "types": [
+        [
+          "tool_use",
+          "tool_use"
+        ],
+        [
+          "text"
+        ]
+      ],
+      "tool_count": 2,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [],
+      "auxiliary_http_errors": [
+        {
+          "request": 0,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 2,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 3,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 5,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        }
+      ],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "codex-luna"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-remaining/test_actual_client_thinking_to4",
+      "client": "codex",
+      "requests": 4,
+      "types": [
+        [
+          "reasoning",
+          "function_call",
+          "function_call"
+        ],
+        [
+          "reasoning",
+          "function_call"
+        ],
+        [
+          "reasoning",
+          "function_call"
+        ],
+        [
+          "reasoning",
+          "message"
+        ]
+      ],
+      "tool_count": 4,
+      "reasoning_items_SDK_validated": 8,
+      "errors": [],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "openrouter"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-remaining/test_actual_client_thinking_to5",
+      "client": "codex",
+      "requests": 2,
+      "types": [
+        [
+          "reasoning",
+          "message",
+          "function_call"
+        ],
+        [
+          "reasoning",
+          "message"
+        ]
+      ],
+      "tool_count": 1,
+      "reasoning_items_SDK_validated": 4,
+      "errors": [],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "mimo-v2.6-pro"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-remaining/test_actual_client_thinking_to6",
+      "client": "codex",
+      "requests": 2,
+      "types": [
+        [
+          "message",
+          "function_call"
+        ],
+        [
+          "message"
+        ]
+      ],
+      "tool_count": 1,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "codex-luna"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-gemini/test_actual_client_thinking_to0",
+      "client": "claude",
+      "requests": 14,
+      "types": [
+        [
+          "tool_use"
+        ],
+        [
+          "tool_use"
+        ],
+        [
+          "text"
+        ]
+      ],
+      "tool_count": 2,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [],
+      "auxiliary_http_errors": [
+        {
+          "request": 0,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 2,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 3,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 4,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 5,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 6,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 7,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 9,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 10,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 11,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        },
+        {
+          "request": 13,
+          "status": 500,
+          "path": "/v1/messages?beta=true"
+        }
+      ],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "gemini-subscription"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-gemini-strict/test_actual_client_thinking_to0",
+      "client": "codex",
+      "requests": 4,
+      "types": [
+        [
+          "function_call",
+          "function_call",
+          "function_call",
+          "function_call"
+        ],
+        [
+          "message"
+        ]
+      ],
+      "tool_count": 4,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [],
+      "auxiliary_http_errors": [
+        {
+          "request": 0,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 1,
+          "status": 502,
+          "path": "/v1/responses"
+        }
+      ],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_content_observations": {
+        "FORMAT_SUM_occurrences": 4,
+        "failed_client_command_items": 1,
+        "note": "Final table/code answer repeats four times; three successful redundant reads and one invalid PowerShell read are replayed. Protocol scope passes; provider content/tool-selection quality is imperfect."
+      },
+      "provider_route": "gemini-subscription"
+    }
+  ],
+  "failed_current_runs": [],
+  "historical_failed_runs": [
+    {
+      "source": "tmp/client-format-probe/cli-final-remaining/test_actual_client_thinking_to7",
+      "client": "codex",
+      "requests": 1,
+      "types": [
+        [
+          "message"
+        ]
+      ],
+      "tool_count": 0,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [
+        "missing actual file marker replay",
+        "no actual tools",
+        "final formatting/computation mismatch"
+      ],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "gemini-subscription"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-gemini/test_actual_client_thinking_to1",
+      "client": "codex",
+      "requests": 13,
+      "types": [],
+      "tool_count": 0,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [
+        "request12 incomplete at capture",
+        "missing actual file marker replay",
+        "no actual tools",
+        "missing completed turn",
+        "final formatting/computation mismatch"
+      ],
+      "auxiliary_http_errors": [
+        {
+          "request": 0,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 1,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 2,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 3,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 4,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 5,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 6,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 7,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 8,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 9,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 10,
+          "status": 502,
+          "path": "/v1/responses"
+        },
+        {
+          "request": 11,
+          "status": 502,
+          "path": "/v1/responses"
+        }
+      ],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "gemini-subscription"
+    },
+    {
+      "source": "tmp/client-format-probe/cli-final-gemini-batch/test_actual_client_thinking_to0",
+      "client": "codex",
+      "requests": 1,
+      "types": [
+        [
+          "message"
+        ]
+      ],
+      "tool_count": 0,
+      "reasoning_items_SDK_validated": 0,
+      "errors": [
+        "missing actual file marker replay",
+        "no actual tools",
+        "final formatting/computation mismatch"
+      ],
+      "auxiliary_http_errors": [],
+      "fixture_hashes": {
+        "one.txt": {
+          "actual": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "initial_fixture": "3a61b0cf028e8165c3420a7f5a3f5513bdc6346bfa3d8c44959f0a2fb9bd41a2",
+          "matches": true
+        },
+        "two.txt": {
+          "actual": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "initial_fixture": "e1fcb590b5cf3e84ceb2f4b0c354538902296ecab73239a647ec070421995390",
+          "matches": true
+        }
+      },
+      "provider_route": "gemini-subscription"
+    }
+  ],
+  "pending_final_runs": [],
+  "auxiliary_http_error_total_successful_final": 17,
+  "native_UI_rendering": "unverified",
+  "reviewer_provider_calls": 0,
+  "scope": "Actual CLI protocol/tool-result/computation/format structure, not flawless provider behavior or rendered terminal UI",
+  "protocol_review": "Scoped READY; independent reviewer authored no product changes and made no provider calls",
+  "overall_perfect_provider_acceptance": "NOT READY",
+  "remaining_content_quality": {
+    "codex/gemini-subscription": [
+      "Formatted answer repeated four times",
+      "Three redundant successful reads and one failed PowerShell read in final tool batch"
+    ]
+  },
+  "regressions": {
+    "gateway_tests": 201,
+    "gateway_typecheck": "passed",
+    "windows_litellm": "1.101.0",
+    "windows_targeted": 281,
+    "windows_posix_skip": 1,
+    "deployed_litellm": "1.103.0",
+    "deployed_targeted": 282,
+    "final_handler_tests_each_version": 58,
+    "broad_suite_before_final_unicode_guard": {
+      "passed": 604,
+      "failed_preexisting": 15,
+      "skipped": 28
+    },
+    "independent_parser_probes": 18
+  },
+  "deployment": {
+    "health": {
+      "4000": [
+        200,
+        200,
+        200
+      ],
+      "4005": [
+        200,
+        200,
+        200
+      ],
+      "11435": [
+        200,
+        200,
+        200
+      ]
+    },
+    "runtime_hashes": {
+      "gateway": {
+        "thinking.py": "aca3d40284581104bcad469f85243433d052fa5acdddf551b190e17ea72bb92b",
+        "responses_stream.py": "fe37ba74d3d20a89f01c95140c394c398ebe5c265f86758175b6ba9547fc68e5",
+        "handlers/antigravity.py": "bb4ae390d6550f0e8726e9494a287f7d439d8359ac5577c559aae7378b6519fa",
+        "plugins/dynamic_router.py": "c8f23f74f64ac10779f720d0250ea8e4cc12eb02752d668e77d97096c5694ad0",
+        "litellm": "1.103.0"
+      },
+      "gateway-staging": {
+        "thinking.py": "aca3d40284581104bcad469f85243433d052fa5acdddf551b190e17ea72bb92b",
+        "responses_stream.py": "fe37ba74d3d20a89f01c95140c394c398ebe5c265f86758175b6ba9547fc68e5",
+        "handlers/antigravity.py": "bb4ae390d6550f0e8726e9494a287f7d439d8359ac5577c559aae7378b6519fa",
+        "plugins/dynamic_router.py": "c8f23f74f64ac10779f720d0250ea8e4cc12eb02752d668e77d97096c5694ad0",
+        "litellm": "1.103.0"
+      }
+    },
+    "target_agent_matches": true,
+    "production_blocks": [
+      "text"
+    ],
+    "production_policy_unchanged": true
+  }
+}

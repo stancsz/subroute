@@ -304,6 +304,8 @@ model_list:
       capabilities: [tools, streaming]
     litellm_params:
       model: minimax/MiniMax-M3
+      # Keep thinking out of visible Chat/Responses text (native provider switch).
+      reasoning_split: true
       api_key: os.environ/MINIMAX_API_KEY
 
   # LiteLLM 1.101.0 has a native MiniMax TTS provider for /v1/audio/speech.

@@ -24,6 +24,87 @@ TOOLS = [{
 }]
 
 
+@pytest.mark.parametrize("stream", [False, True])
+def test_multiple_client_tool_decisions_keep_distinct_inputs_and_order(monkeypatch, stream):
+    inputs = ["ONE\n中文", r"TWO\n"]
+    async def invoke(*args, **kwargs):
+        content = "\n".join(json.dumps({"kind": "tool_call", "name": "ping", "input": {"text": text}}) for text in inputs)
+        return content, antigravity.Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    monkeypatch.setattr(antigravity, "invoke_agy", invoke)
+    request = {"model": "gemini-3.8-flash", "messages": [{"role": "user", "content": "Read both inputs."}],
+               "optional_params": {"tools": TOOLS, "tool_choice": "auto", "parallel_tool_calls": True}}
+    if stream:
+        async def collect():
+            return [chunk async for chunk in antigravity.antigravity_handler.astreaming(**request)]
+        chunks = asyncio.run(collect())
+        calls = [chunk["tool_use"] for chunk in chunks if chunk.get("tool_use")]
+        assert [call["index"] for call in calls] == [0, 1]
+        assert chunks[-1]["finish_reason"] == "tool_calls"
+    else:
+        result = asyncio.run(antigravity.antigravity_handler.acompletion(**request))
+        calls = [call.model_dump() for call in result.choices[0].message.tool_calls]
+        assert result.choices[0].finish_reason == "tool_calls"
+    assert len({call["id"] for call in calls}) == 2
+    assert [json.loads(call["function"]["arguments"])["text"] for call in calls] == inputs
+
+
+@pytest.mark.parametrize("suffix,options", [
+    ('{"kind":"tool_call","name":"unknown","input":{}}', {}),
+    ('{"kind":"tool_call","name":"ping","input":{"text":42}}', {}),
+    ('{"kind":"tool_call","name":"ping","input":{"text":"SECOND"}}', {"parallel_tool_calls": False}),
+    ('{"kind":"text","text":"MIXED ANSWER"}', {}),
+    ('{"kind":"tool_call","name":"ping","input":', {}),
+    ("\n".join(json.dumps({"kind": "tool_call", "name": "ping", "input": {"text": str(n)}}) for n in range(8)), {}),
+])
+def test_invalid_additional_decision_exposes_no_partial_tools(monkeypatch, suffix, options):
+    async def invoke(*args, **kwargs):
+        return '{"kind":"tool_call","name":"ping","input":{"text":"FIRST"}}\n' + suffix, antigravity.Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    monkeypatch.setattr(antigravity, "invoke_agy", invoke)
+    async def collect():
+        seen = []
+        with pytest.raises(antigravity.CustomLLMError):
+            async for chunk in antigravity.antigravity_handler.astreaming(
+                model="gemini-3.8-flash", messages=[{"role": "user", "content": "Use tools."}],
+                optional_params={"tools": TOOLS, "tool_choice": "auto", **options},
+            ):
+                seen.append(chunk)
+        assert seen == []
+    asyncio.run(collect())
+
+
+def test_provider_cannot_inject_internal_batch_shape_to_bypass_parallel_opt_out(monkeypatch):
+    async def invoke(*args, **kwargs):
+        return json.dumps({"kind": "tool_calls", "calls": [{"kind": "tool_call", "name": "ping", "input": {"text": "NO"}}] * 9}), antigravity.Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    monkeypatch.setattr(antigravity, "invoke_agy", invoke)
+    with pytest.raises(antigravity.CustomLLMError, match="invalid tool decision"):
+        asyncio.run(antigravity.antigravity_handler.acompletion(
+            model="gemini-3.8-flash", messages=[{"role": "user", "content": "Use one tool."}],
+            optional_params={"tools": TOOLS, "tool_choice": "auto", "parallel_tool_calls": False},
+        ))
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("content", [
+    'I will use a tool:\n```json\n{"kind":"tool_call","name":"ping","input":{"text":"READ"}}\n```\nA guessed answer.',
+    'Here is the decision: {"kind":"text","text":"ANSWER"}',
+    r'Here is the decision: {"ki\u006ed":"tool_call","name":"ping","input":{"text":"READ"}}',
+    r'Here is the decision: {"kind":"tool\u005fcall","name":"ping","input":{"text":"READ"}}',
+])
+def test_prose_prefixed_structured_decision_cannot_become_visible_text(monkeypatch, stream, content):
+    async def invoke(*args, **kwargs):
+        return content, antigravity.Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    monkeypatch.setattr(antigravity, "invoke_agy", invoke)
+    request = {"model": "gemini-3.8-flash", "messages": [{"role": "user", "content": "Use a client tool."}],
+               "optional_params": {"tools": TOOLS, "tool_choice": "auto"}}
+    with pytest.raises(antigravity.CustomLLMError, match="mixed prose"):
+        if stream:
+            async def collect():
+                return [chunk async for chunk in antigravity.antigravity_handler.astreaming(**request)]
+            asyncio.run(collect())
+        else:
+            asyncio.run(antigravity.antigravity_handler.acompletion(**request))
+
+
 def tiny_wav_attachment():
     output = io.BytesIO()
     with wave.open(output, "wb") as wav:

@@ -1,9 +1,11 @@
-"""Narrow repair for LiteLLM's duplicated unsigned Messages block opener.
+"""Version-bounded repairs for LiteLLM's Chat-to-Messages conversion.
 
 LiteLLM 1.101.0 and 1.103.0 copy a thinking_blocks delta into both the
 content_block_start and the first thinking_delta. Its mixed-payload splitter
 fixes some shapes, but a reasoning-only first chunk still duplicates text.
-Retire this repair once upstream opens an empty block for every such shape.
+Signed/multiple thoughts and redacted blocks also lose boundaries in its
+normalizer, and buffered assembly drops unsigned thoughts and signature tails.
+Retire these patches when the client stream/replay contracts pass upstream.
 LiteLLM continues to own provider adaptation and protocol streaming.
 """
 
@@ -13,6 +15,39 @@ from importlib.metadata import version
 
 from litellm.llms.custom_llm import CustomLLMError
 from litellm.types.utils import Delta
+
+
+def _merge_opaque(target, fields):
+    """Preserve provider replay metadata; conflicting opaque values are unsafe."""
+    for key, value in fields.items():
+        if key not in target:
+            target[key] = deepcopy(value)
+        elif isinstance(value, dict) and isinstance(target[key], dict):
+            _merge_opaque(target[key], value)
+        elif target[key] != value:
+            raise CustomLLMError(502, "Provider changed in-flight tool metadata")
+
+
+def _thinking_deltas(chunk):
+    """Let the Messages adapter see each thought and signature separately."""
+    choices = getattr(chunk, "choices", None) or []
+    if len(choices) != 1 or not getattr(choices[0].delta, "thinking_blocks", None):
+        return [chunk]
+    blocks = choices[0].delta.thinking_blocks
+    pieces = []
+    for index, block in enumerate(blocks):
+        if block.get("type") not in {"thinking", "redacted_thinking"}:
+            raise CustomLLMError(502, "Provider returned an unsupported reasoning block")
+        parts = [deepcopy(block)]
+        if block.get("thinking") and block.get("signature"):
+            parts = [{**block, "signature": ""}, {"type": "thinking", "thinking": "", "signature": block["signature"]}]
+        for part_index, part in enumerate(parts):
+            piece = chunk.model_copy(deep=True)
+            piece.choices[0].delta = Delta(thinking_blocks=[part])
+            if part_index == 0 and (index > 0 or block.get("type") == "redacted_thinking" or (block.get("thinking") and block.get("signature"))):
+                piece._hidden_params["_subroute_thinking_boundary"] = True
+            pieces.append(piece)
+    return pieces
 
 
 def _event(frame):
@@ -131,12 +166,14 @@ async def _ordered_tool_deltas(source):
                             placeholder.usage = None
                         suffix.append((index, placeholder))
                     call = calls[index]
+                    _merge_opaque(call, {key: value for key, value in fields.items() if key not in {"index", "id", "type", "function"}})
                     for field in ("id", "type"):
                         if fields.get(field):
                             if call.get(field) and call[field] != fields[field]:
                                 raise CustomLLMError(502, "Provider changed an in-flight tool identity")
                             call[field] = fields[field]
                     function = fields.get("function") or {}
+                    _merge_opaque(call["function"], {key: value for key, value in function.items() if key not in {"name", "arguments"}})
                     if function.get("name"):
                         call["function"]["name"] = call["function"].get("name", "") + function["name"]
                     arguments = function.get("arguments") or ""
@@ -193,13 +230,88 @@ def install_messages_tool_ordering():
     if version("litellm") not in {"1.101.0", "1.103.0"}:
         return
     from litellm.llms.anthropic.experimental_pass_through.adapters import streaming_iterator
+    from litellm.llms.anthropic.experimental_pass_through.adapters.transformation import LiteLLMAnthropicMessagesAdapter
 
     base = streaming_iterator._CombinedChunkSplitter
     if getattr(base, "_subroute_tool_ordering", False):
         return
 
+    # The stock adapter seeds a populated opener and repeats the signature,
+    # prefers signatures over text, and ignores redacted blocks. Split signed
+    # snapshots first, then give LiteLLM empty openers for its own deltas.
+    original_start = LiteLLMAnthropicMessagesAdapter._translate_streaming_openai_chunk_to_anthropic_content_block
+    original_delta = LiteLLMAnthropicMessagesAdapter._translate_streaming_openai_chunk_to_anthropic
+
+    def block_start(self, choices):
+        blocks = getattr(choices[0].delta, "thinking_blocks", None) or []
+        if blocks and blocks[0].get("type") == "redacted_thinking":
+            return "redacted_thinking", deepcopy(blocks[0])
+        kind, block = original_start(self, choices)
+        if kind == "thinking":
+            block = {**block, "thinking": "", "signature": ""}
+        return kind, block
+
+    def block_delta(self, choices):
+        blocks = getattr(choices[0].delta, "thinking_blocks", None) or []
+        if blocks and blocks[0].get("type") == "redacted_thinking":
+            return "text_delta", {"type": "text_delta", "text": ""}
+        return original_delta(self, choices)
+
+    LiteLLMAnthropicMessagesAdapter._translate_streaming_openai_chunk_to_anthropic_content_block = block_start
+    LiteLLMAnthropicMessagesAdapter._translate_streaming_openai_chunk_to_anthropic = block_delta
+
+    wrapper = streaming_iterator.AnthropicStreamWrapper
+    original_transition = wrapper._should_start_new_content_block
+
+    def transition(self, chunk):
+        changed = original_transition(self, chunk)
+        if chunk._hidden_params.get("_subroute_thinking_boundary"):
+            self.current_content_block_type, self.current_content_block_start = block_start(LiteLLMAnthropicMessagesAdapter(), chunk.choices)
+            return True
+        return changed
+
+    wrapper._should_start_new_content_block = transition
+
+    from litellm.litellm_core_utils.streaming_chunk_builder_utils import ChunkProcessor
+
+    def combined_thinking(self, chunks):
+        # Upstream drops unsigned thoughts and trailing signature fragments
+        # when building a buffered response. Preserve the actual block order.
+        result = []
+        pending = None
+
+        def flush():
+            nonlocal pending
+            if pending and (pending["thinking"] or pending["signature"]):
+                result.append(pending)
+            pending = None
+
+        for chunk in chunks:
+            for choice in chunk["choices"]:
+                blocks = choice.get("delta", {}).get("thinking_blocks") or []
+                for index, block in enumerate(blocks):
+                    if block.get("type") == "redacted_thinking":
+                        flush()
+                        result.append(deepcopy(block))
+                        continue
+                    if index > 0 or (pending and pending["signature"] and block.get("thinking")):
+                        flush()
+                    if pending is None:
+                        pending = {"type": "thinking", "thinking": "", "signature": ""}
+                    pending["thinking"] += block.get("thinking") or ""
+                    pending["signature"] += block.get("signature") or ""
+        flush()
+        return result or None
+
+    ChunkProcessor.get_combined_thinking_content = combined_thinking
+
     class OrderedToolSplitter(base):
         _subroute_tool_ordering = True
+
+        @staticmethod
+        def _normalize_reasoning_fields(fields):
+            # Collapsing unsigned lists can also drop redacted entries.
+            return fields
 
         def __init__(self, stream):
             super().__init__(stream)
@@ -209,7 +321,9 @@ def install_messages_tool_ordering():
             try:
                 while True:
                     try:
-                        yield await super().__anext__()
+                        chunk = await super().__anext__()
+                        for piece in _thinking_deltas(chunk):
+                            yield piece
                     except StopAsyncIteration:
                         return
             finally:

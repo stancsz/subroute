@@ -345,13 +345,18 @@ class AntigravityLLM(CustomLLM):
         return (
             f"{prompt}\n\nAvailable client tools (the client executes them):\n"
             f"{json.dumps(tool_data, ensure_ascii=False)}\n\n{policy} "
+            "This is a client dispatch decision, not a request to execute tools in this environment. "
+            "The listed tools are available to the calling client even when local tool execution is disabled. "
+            "When a task needs external information, request the appropriate listed client tool using JSON; "
+            "do not answer that tools are unavailable solely because you cannot execute them here. "
             "Never execute or simulate a tool. Return only the schema-constrained JSON decision. "
             "For a tool call, set kind to tool_call and include its exact name and input object. "
             "For a normal answer, set kind to text and include text."
         )
 
     @classmethod
-    def _parse_tool_decision(cls, content: str, *, allow_plain_text: bool = False) -> dict[str, Any]:
+    def _parse_tool_decision(cls, content: str, *, allow_plain_text: bool = False,
+                             allow_multiple_tools: bool = False) -> dict[str, Any]:
         candidate = re.sub(r"(?m)^\s*```(?:json)?\s*$", "", content).lstrip()
         decoder = json.JSONDecoder()
         try:
@@ -360,11 +365,33 @@ class AntigravityLLM(CustomLLM):
             # Only an unstructured answer may use the auto-choice text path.
             # Never turn malformed JSON or a rejected structured result into success.
             if allow_plain_text and not content.lstrip().startswith(("{", "[", "```")):
+                # Leading prose/fences must not turn a failed tool decision into
+                # visible answer text. Leave ordinary plain answers supported.
+                structured = bool(re.search(r'"kind"\s*:\s*"(?:tool_call|tool_calls|text)"', content))
+                # Decode embedded objects too: JSON escapes can spell the same
+                # decision key/value without matching the malformed-JSON guard.
+                for match in re.finditer(r"\{", content):
+                    try:
+                        embedded, _ = decoder.raw_decode(content, match.start())
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(embedded, dict) and embedded.get("kind") in {"tool_call", "tool_calls", "text"}:
+                        structured = True
+                        break
+                if structured:
+                    raise _ToolOutputError("Antigravity mixed prose with a structured client decision") from exc
                 return {"kind": "text", "text": content}
             raise _ToolOutputError(f"Antigravity returned invalid tool JSON: {exc.msg}") from exc
         if not isinstance(decision, dict):
             raise _ToolOutputError("Antigravity returned a non-object tool decision")
+        if decision.get("kind") not in {"text", "tool_call"}:
+            raise _ToolOutputError("Antigravity returned an invalid tool decision")
+        decisions = [decision]
         remainder = candidate[end:].lstrip()
+        # AGY 1.2.11 can emit adjacent, distinct client-tool decisions for a
+        # parallel request. Retain up to eight only when the caller permits
+        # it; _complete validates every name/input before exposing any call.
+        # Retire this tolerance when AGY returns one schema result reliably.
         while remainder.startswith("{"):
             try:
                 extra, extra_end = decoder.raw_decode(remainder)
@@ -377,7 +404,15 @@ class AntigravityLLM(CustomLLM):
                 and extra.get("input") == {}
                 and set(extra) <= {"kind", "name", "input", "id", "type"}
             )
-            if extra != decision and not is_finish_marker:
+            if extra not in decisions and not is_finish_marker:
+                if (allow_multiple_tools and decision.get("kind") == "tool_call"
+                        and isinstance(extra, dict) and extra.get("kind") == "tool_call"
+                        and set(extra) == {"kind", "name", "input"}):
+                    if len(decisions) >= 8:
+                        raise _ToolOutputError("Antigravity returned more than eight client tool decisions")
+                    decisions.append(extra)
+                    remainder = remainder[extra_end:].lstrip()
+                    continue
                 extra_name = extra.get("name") if isinstance(extra, dict) else None
                 raise _ToolOutputError(
                     f"Antigravity returned a different additional structured result (name={extra_name!r})"
@@ -391,7 +426,7 @@ class AntigravityLLM(CustomLLM):
             # AGY may append natural-language completion commentary after its
             # schema-constrained result. It is not part of the gateway's tool
             # contract, so ignore bounded plain text, while still rejecting
-            # any additional structured result above.
+            # any unaccepted structured result embedded in commentary.
             if len(trailing) > 1200:
                 raise _ToolOutputError("Antigravity returned an oversized postamble after its structured tool decision")
             offset = 0
@@ -411,7 +446,7 @@ class AntigravityLLM(CustomLLM):
                     and extra.get("input") == {}
                     and set(extra) <= {"kind", "name", "input", "id", "type"}
                 )
-                if extra != decision and not is_finish_marker:
+                if extra not in decisions and not is_finish_marker:
                     extra_name = extra.get("name") if isinstance(extra, dict) else None
                     extra_shape = (
                         f"type={extra.get('type')!r}, kind={extra.get('kind')!r}, "
@@ -423,7 +458,7 @@ class AntigravityLLM(CustomLLM):
                         f"(name={extra_name!r}, {extra_shape})"
                     )
                 offset = extra_end
-        return decision
+        return {"kind": "tool_calls", "calls": decisions} if len(decisions) > 1 else decision
 
     @staticmethod
     def _is_repeated_text_tail(tail: str, expected: str) -> bool:
@@ -465,8 +500,9 @@ class AntigravityLLM(CustomLLM):
                 return content, usage, []
             decision = AntigravityLLM._parse_tool_decision(
                 content, allow_plain_text=forced_kind is None,
+                allow_multiple_tools=forced_kind is None and optional_params.get("parallel_tool_calls") is not False,
             )
-            if decision.get("kind") not in {"text", "tool_call"}:
+            if decision.get("kind") not in {"text", "tool_call", "tool_calls"}:
                 raise _ToolOutputError("Antigravity returned an invalid tool decision")
             if decision["kind"] == "text":
                 if set(decision) - {"kind", "text"}:
@@ -474,18 +510,23 @@ class AntigravityLLM(CustomLLM):
                 if forced_kind == "tool_call" or not isinstance(decision.get("text"), str):
                     raise _ToolOutputError("Antigravity returned text when a tool call was required")
                 return decision["text"], usage, []
-            name, arguments = decision.get("name"), decision.get("input")
-            if set(decision) != {"kind", "name", "input"}:
-                raise _ToolOutputError("Antigravity returned missing or extra fields in a tool decision")
-            tool = next((item for item in tools if item["name"] == name), None)
-            if tool is None or not isinstance(arguments, dict):
-                raise _ToolOutputError("Antigravity returned an undeclared tool or invalid tool input")
-            jsonschema.validate(arguments, tool["parameters"], registry=Registry())
-            return None, usage, [{
-                "id": f"call_{uuid.uuid4().hex[:24]}",
-                "type": "function",
-                "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
-            }]
+            calls = decision.get("calls") if decision["kind"] == "tool_calls" else [decision]
+            validated = []
+            for call in calls:
+                name, arguments = call.get("name"), call.get("input")
+                if set(call) != {"kind", "name", "input"}:
+                    raise _ToolOutputError("Antigravity returned missing or extra fields in a tool decision")
+                tool = next((item for item in tools if item["name"] == name), None)
+                if tool is None or not isinstance(arguments, dict):
+                    raise _ToolOutputError("Antigravity returned an undeclared tool or invalid tool input")
+                jsonschema.validate(arguments, tool["parameters"], registry=Registry())
+                validated.append({
+                    "id": f"call_{uuid.uuid4().hex[:24]}",
+                    "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+                })
+            # Nothing is exposed before the entire provider result validates.
+            return None, usage, validated
         except AntigravityBridgeError as exc:
             # LiteLLM's model-group RetryPolicy can then retry only this explicit
             # audio refusal class. Generic 502s and non-audio refusals keep the
