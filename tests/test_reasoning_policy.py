@@ -18,6 +18,30 @@ from subroute.plugins.dynamic_router import DynamicRoutingPlugin, RoutingControl
 ROOT = Path(__file__).parents[1]
 
 
+@pytest.mark.parametrize("call_type,bucket", [
+    ("acompletion", "metadata"),
+    ("aanthropic_messages", "metadata"),
+    ("aresponses", "litellm_metadata"),
+])
+def test_dedicated_advisor_keeps_luna_for_image_advice(control, call_type, bucket):
+    control.update("minimax", "force", reasoning_effort=None)
+    plugin = DynamicRoutingPlugin(control)
+    data = {"model": "codex-luna-advisor", "messages": [{"role": "user", "content": "Generate an image of a blue square"}],
+            "input": "Generate an image of a blue square", bucket: {
+                "advisor_sub_call": True, "gateway_policy": {"advisor_reasoning_effort": "low"},
+            }}
+    assert asyncio.run(plugin.async_pre_call_hook({}, None, data, call_type)) is None
+    assert data["model"] == "codex-luna-advisor"
+    assert "gateway_image_request" not in data
+    updated = asyncio.run(plugin.async_pre_call_deployment_hook(data, call_type))
+    if call_type == "aresponses":
+        assert updated["reasoning"]["effort"] == "low"
+    elif call_type == "aanthropic_messages":
+        assert updated["output_config"]["effort"] == "low"
+    else:
+        assert updated["reasoning_effort"] == "low"
+
+
 @pytest.fixture
 def control(tmp_path):
     return RoutingControlPlane(ROOT / "config/litellm.yaml", tmp_path / "state.json")

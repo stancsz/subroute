@@ -1,5 +1,10 @@
 # Product direction
 
+The Badlands public API uses Subroute for a dedicated on-demand Luna advisor and
+image generation, while ordinary public inference runs through OpenRouter with
+native MiMo coding-plan fallback. [Dedicated advisor operation](../misc/badlands-dedicated-advisor.md)
+records the internal metadata contract and separation from the saved local policy.
+
 Subroute is a local AI subscription router for developers using coding tools. Its job is to keep the client endpoint stable while the person chooses which configured model handles new requests. The repository describes local provider credentials, explicit routing, and visible failure behavior as core product boundaries; see [README.md](../../README.md) and [GOAL.md](../../GOAL.md).
 
 The current customer thesis is a single developer who wants to use several AI subscriptions and API connections from existing coding tools without changing each tool's model setting. The intended measurable value is fewer client reconfigurations and clearer control over where a request goes. The repository does not establish a paid business model, supported installer/distribution channel, or commercial support promise. This UI task does not invent those decisions.

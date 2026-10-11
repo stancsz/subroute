@@ -296,6 +296,11 @@ class DynamicRoutingPlugin(CustomLogger):
             data["extra_body"].pop("gateway_image_request", None)
         if call_type in {"aresponses", "responses"}:
             data.setdefault("litellm_metadata", {})
+        _, metadata = get_or_create_metadata_bucket(data)
+        # An internal advisor request retains its explicit model even when the
+        # user asks for advice about images or audio. It is not a generation task.
+        if metadata.get("advisor_sub_call") is True:
+            return None
         from subroute.plugins.image_intent import image_request_context
         from subroute.audio import audio_route
 
@@ -374,14 +379,7 @@ class DynamicRoutingPlugin(CustomLogger):
             data["model"] = IMAGE_MODEL
             data["image_generation_options"] = options
             return data
-        if call_type in {"aresponses", "responses"}:
-            data.setdefault("litellm_metadata", {})
         _, metadata = get_or_create_metadata_bucket(data)
-        if (
-            isinstance(metadata, dict)
-            and metadata.get("advisor_sub_call") is True
-        ):
-            return None
 
         if not isinstance(requested_model, str) or (
             requested_model not in self.control_plane.allowed_models
