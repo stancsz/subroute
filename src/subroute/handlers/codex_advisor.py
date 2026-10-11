@@ -292,6 +292,10 @@ async def call_codex_streaming_collect(
                         f"Codex subscription API error {response.status_code}: {detail}",
                     )
                 async for event in stream_events(response):
+                    from subroute.usage_accounting import observe_direct
+                    # Capture numeric facts before rejecting an incomplete or
+                    # invalid terminal response. The body itself is not stored.
+                    await observe_direct(event)
                     if event.get("type") in {"response.failed", "response.incomplete", "error"}:
                         raise RuntimeError("Codex advisor stream failed or was incomplete")
                     if event.get("type") == "response.completed":

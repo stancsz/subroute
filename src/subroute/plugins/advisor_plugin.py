@@ -225,19 +225,21 @@ class AdvisorPlugin(CustomLogger):
 
     @staticmethod
     async def _minimax_compaction(router: Any, messages: list[dict[str, Any]]) -> tuple[str, Any]:
+        from subroute.usage_accounting import accounting_role
         transcript = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
-        response = await router.acompletion(
-            model="minimax",
-            messages=[
-                {"role": "system", "content": COMPACTION_INSTRUCTIONS},
-                {"role": "user", "content": transcript},
-            ],
-            max_tokens=COMPACTION_MAX_OUTPUT_TOKENS,
-            timeout=MINIMAX_COMPACTION_TIMEOUT,
-            num_retries=0,
-            disable_fallbacks=True,
-            metadata={"subroute_context_compaction": True},
-        )
+        with accounting_role("compaction"):
+            response = await router.acompletion(
+                model="minimax",
+                messages=[
+                    {"role": "system", "content": COMPACTION_INSTRUCTIONS},
+                    {"role": "user", "content": transcript},
+                ],
+                max_tokens=COMPACTION_MAX_OUTPUT_TOKENS,
+                timeout=MINIMAX_COMPACTION_TIMEOUT,
+                num_retries=0,
+                disable_fallbacks=True,
+                metadata={"subroute_context_compaction": True},
+            )
         return AdvisorPlugin._completion_text(response), getattr(response, "usage", None)
 
     @classmethod
@@ -290,14 +292,29 @@ class AdvisorPlugin(CustomLogger):
 
     @classmethod
     async def _luna_compaction(cls, messages: list[dict[str, Any]]) -> tuple[str, Any]:
+        from subroute.usage_accounting import direct_attempt, observe_direct
         prompt = cls._luna_compaction_prompt(messages)
-        return await call_codex_streaming_collect(
-            "gpt-6-luna", prompt, timeout=LUNA_COMPACTION_TIMEOUT,
-            reasoning_effort="low",
-        )
+        async with direct_attempt("gpt-6-luna", "codex-subscription", "compaction"):
+            text, usage = await call_codex_streaming_collect(
+                "gpt-6-luna", prompt, timeout=LUNA_COMPACTION_TIMEOUT,
+                reasoning_effort="low",
+            )
+            await observe_direct({"usage": usage})
+            return text, usage
 
     @staticmethod
     async def _invoke_advisor(
+        model: str, messages: list[dict[str, Any]], effort: str | None,
+    ) -> tuple[str, Any]:
+        from subroute.usage_accounting import direct_attempt, observe_direct
+        provider = "antigravity" if model in ANTIGRAVITY_ADVISOR_MODELS else "codex-subscription"
+        async with direct_attempt(model, provider, "advisor"):
+            result = await AdvisorPlugin._invoke_advisor_transport(model, messages, effort)
+            await observe_direct({"usage": result[1]})
+            return result
+
+    @staticmethod
+    async def _invoke_advisor_transport(
         model: str, messages: list[dict[str, Any]], effort: str | None,
     ) -> tuple[str, Any]:
         if model in ANTIGRAVITY_ADVISOR_MODELS:

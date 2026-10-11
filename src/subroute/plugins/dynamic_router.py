@@ -259,6 +259,8 @@ class DynamicRoutingPlugin(CustomLogger):
         install_messages_tool_ordering()
         from subroute.responses_stream import install_responses_stream_repair
         install_responses_stream_repair()
+        from subroute.usage_accounting import install_stream_accounting
+        install_stream_accounting()
         self.control_plane = control_plane
 
     async def async_post_call_streaming_iterator_hook(self, user_api_key_dict, response, request_data):
@@ -599,3 +601,5 @@ def _register_routes() -> None:
 
 _register_routes()
 register_ui_routes(app)
+from subroute.usage_accounting import install_receipt_routes
+install_receipt_routes(app)

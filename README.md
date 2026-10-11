@@ -50,6 +50,8 @@ First provider to complete the request
 
 LiteLLM handles the public API protocols, streaming, and standard provider adapters. Subroute adds the local routing policy, configured subscription integrations, provider status, and control desk. Electron uses the same control desk as `/control`; it does not run the gateway.
 
+The [durable usage guide](docs/operations/usage-accounting.md) describes provider receipts, customer attribution, protected Cloudflare transfer, recovery and remaining limits. Its [acceptance record](docs/goal/usage-accounting.md) covers the 2026-10-11 serving release, real API calls and durable transfer into both Cloudflare environments.
+
 ## Get started
 
 Make credentials available as environment variables for the providers you plan to use, then start the production gateway from the repository root:

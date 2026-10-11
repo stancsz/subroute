@@ -153,6 +153,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         "api_base": "os.environ/OLLAMA_API_BASE",
     }
     assert config()["litellm_settings"]["callbacks"] == [
+        "subroute.usage_accounting.usage_accounting",
         "subroute.plugins.dynamic_router.dynamic_routing_plugin",
         "subroute.plugins.advisor_plugin.advisor_plugin_instance",
         "subroute.plugins.codex_credentials.codex_credential_refresher",

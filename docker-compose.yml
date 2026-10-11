@@ -51,6 +51,8 @@ services:
       # Preserve the existing production policy file during migration.
       - ACTIVE_MODEL_STATE_PATH=/app/config/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres:5432/litellm
+      - SUBROUTE_ENVIRONMENT=production
+      - SUBROUTE_ACCOUNTING_SECRET
       # No GATEWAY_MASTER_KEY is passed by default, so loopback clients can use
       # the gateway without an Authorization header. Add one explicitly only
       # when client bearer-token auth is wanted.
@@ -90,6 +92,8 @@ services:
       - HEALTH_CHECK_TIMEOUT_SECONDS=10
       - ACTIVE_MODEL_STATE_PATH=/app/state/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
+      - SUBROUTE_ENVIRONMENT=staging
+      - SUBROUTE_ACCOUNTING_SECRET
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}

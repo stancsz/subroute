@@ -502,6 +502,7 @@ litellm_settings:
   # Native Messages providers and custom subscription handlers keep their lanes.
   use_chat_completions_url_for_anthropic_messages: true
   callbacks:
+    - subroute.usage_accounting.usage_accounting
     - subroute.plugins.dynamic_router.dynamic_routing_plugin
     - subroute.plugins.advisor_plugin.advisor_plugin_instance
     - subroute.plugins.codex_credentials.codex_credential_refresher

@@ -150,3 +150,6 @@ Desktop 六个启动配置和现有直接 Subroute 的 Codex/Hermes 配置已更
 按 Luna advisor 的有界意见（model `codex-sol-advisor`，request `chatcmpl-codex-advisor-b9ed1eab651b`，1115 reported tokens），不启用通用 502 重试；过滤拒绝保持终态。advisor 的 stop rule 是恢复低于 20%、重试 usage 超过基线的 30%，或 CLI 内部重试使额度无法验证时停止。当前 recovery=33.3%，但额外 usage=40.1%，且 CLI 内部调用计数不可核验，因此不满足生产重试门槛。`decision_changed=true`：从先前讨论的条件复验转为只修复可观测性、不部署生产重试。详见 `docs/evals/gemini-audio-2026-09-30.md`。
 
 本次修复将 sidecar 已有的 `completed_reads` 计数通过私有错误 JSON 和 LiteLLM handler 传至 MCP 的结构化 refusal 错误，并增加 `expected_reads`；过滤仍以 MCP `isError=true` 暴露，`automatic_retry=false`。聚焦测试 `107 passed, 1 skipped`。部署后 production gateway readiness 为 HTTP 200、Antigravity sidecar healthy，容器内 bridge 与两个 gateway Python 源文件 SHA-256 均匹配工作树。此更改不会让 Gemini 接受被拒绝的输入，也不是 95% 成功率验收；当前 resume goal 仍 active，需上游有支持的反馈/行为变化，或用代表性任务获得足以评估的稳定性证据。
+# Accepted cross-repository accounting release
+
+The owner requested durable usage accounting, including internal calls, and full live acceptance with real API calls. The [durable inference accounting record](docs/goal/usage-accounting.md) identifies the accepted 2026-10-11 release, real provider calls, four coding clients in both public environments and reconciled durable receipts. Existing historical verdicts above are unchanged; acceptance is bounded by the documented measurement, transfer and framework limitations.
