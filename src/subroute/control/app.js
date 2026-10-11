@@ -10,14 +10,21 @@ const routeModel = document.querySelector("#route-model"), routeMode = document.
 const routeProvider = document.querySelector("#route-provider"), advisorProvider = document.querySelector("#advisor-provider");
 const routeEffort = document.querySelector("#route-effort"), advisorEffort = document.querySelector("#route-advisor-effort");
 const routeStatus = document.querySelector("#route-status"), routeKey = document.querySelector("#route-key");
+const policySummary = document.querySelector("#policy-summary");
+new MutationObserver(() => {
+  const status = routeStatus.textContent;
+  const failed = status.startsWith("Not saved:");
+  policySummary.dataset.state = failed ? "error" : !routingReady ? "offline" : "ready";
+  policySummary.textContent = failed ? "Not saved · previous policy remains active" : !routingReady ? "Policy unavailable · editing disabled" : (status.includes("Saving") || status.startsWith("Choose")) ? status : `Saved policy ${status.match(/v\d+/)?.[0] || "active"}`;
+  document.querySelector("#routing-description").textContent = !routingReady ? "The policy cannot be edited until the gateway reconnects." : "Changes save automatically and apply to new requests.";
+}).observe(routeStatus, {childList:true, subtree:true, characterData:true});
 let workingDirectory = null, routingReady = false;
 let routingModels = [], advisorModels = [];
 
 async function request(path, options) {
   let response;
   try { response = await fetch(path, options); }
-  catch (error) { setGatewayStatus(false); throw error; }
-  setGatewayStatus(true);
+  catch (error) { throw error; }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.detail || `Gateway request failed (${response.status})`);
   return payload;
@@ -92,13 +99,20 @@ async function renderRouting() {
     renderProviderMenu(advisorProvider, advisorModels, routing.state.advisor_model, true);
     renderModelMenu(routeModel, routingModels, routeProvider.value, routing.state.active_model);
     renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, routing.state.advisor_model);
+    routeMode.querySelector("[data-unavailable]")?.remove();
     routeMode.value = routing.state.mode;
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
     renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
     routeKey.textContent = routing.client_api_key_required ? "CLIENT API KEY REQUIRED" : "LOCAL CLIENT KEY BYPASS";
     setRoutingDisabled(false); routingReady = true;
-  } catch (error) { setRoutingDisabled(true); routeStatus.textContent = error.message; routeKey.textContent = "GATEWAY UNAVAILABLE"; }
+  } catch (error) {
+    if (!routingModels.length) {
+      for (const select of [routeProvider, advisorProvider, routeModel, routeAdvisor, routeEffort, advisorEffort]) select.replaceChildren(option("", "Unavailable"));
+      const unavailable = option("", "Policy unavailable"); unavailable.dataset.unavailable = "true"; routeMode.prepend(unavailable); routeMode.value = "";
+    }
+    setRoutingDisabled(true); routeStatus.textContent = error.message; routeKey.textContent = "GATEWAY UNAVAILABLE";
+  }
 }
 
 async function saveActiveRouting() {
@@ -130,6 +144,7 @@ function renderSources(sources, usageMap, usageFallback = "Provider quota data u
     card.classList.add(source.accent || "blue"); node.querySelector("h3").textContent = source.name; node.querySelector(".kind").textContent = source.kind; node.querySelector(".models").textContent = source.models;
     const line = node.querySelector(".usage"), footer = node.querySelector("footer"), bar = node.querySelector(".bar"), fill = node.querySelector(".bar i"), state = node.querySelector(".source-state");
     state.textContent = "ENV CONFIGURED";
+    bar.hidden = usage.state !== "ready";
     if (usage.state === "ready") { const percent = Math.min(100, usage.used / usage.limit * 100), remaining = usage.remaining ?? Math.max(0, usage.limit - usage.used), usd = usage.detail === "USD credits"; line.textContent = `${usd ? `$${remaining.toFixed(2)}` : `${Math.round(remaining)}%`} remaining`; footer.textContent = `${usd ? `$${usage.used.toFixed(2)} used` : `${Math.round(percent)}% used`} · ${compactReset(usage.detail)}`; fill.style.width = `${percent}%`; bar.setAttribute("role", "progressbar"); bar.setAttribute("aria-label", `${source.name} quota consumed`); bar.setAttribute("aria-valuenow", String(Math.round(percent))); bar.setAttribute("aria-valuemin", "0"); bar.setAttribute("aria-valuemax", "100"); }
     else if (usage.state === "connected") { line.textContent = "Subscription connected"; footer.textContent = usage.detail; }
     else if (usage.state === "sign_in_required") { line.textContent = "Sign in required"; footer.textContent = usage.detail; state.textContent = "ACTION NEEDED"; state.classList.add("needs-action"); }
@@ -154,16 +169,17 @@ function compactReset(detail) {
   return `resets in ${days ? `${days}d ${hours}h` : `${hours}h ${remainder}m`}`;
 }
 
-async function chooseDirectory() { if (!native) return false; const selected = await native.chooseDirectory(); if (!selected) return false; workingDirectory = selected; const field = document.querySelector("#working-directory"); field.textContent = selected; field.title = selected; document.querySelector("#launch-status").textContent = `Selected: ${selected}`; return true; }
+async function chooseDirectory() { if (!native) return false; const selected = await native.chooseDirectory(); if (!selected) return false; workingDirectory = selected; const field = document.querySelector("#working-directory"); field.textContent = selected; field.title = selected; for (const button of document.querySelectorAll("#agents button")) if (button.textContent === "Choose folder & launch") button.textContent = "Launch"; document.querySelector("#launch-status").textContent = `Selected: ${selected}`; return true; }
 
 async function renderAgents() {
   const agents = native ? await native.listAgents() : agentFallback, area = document.querySelector("#agents"), template = document.querySelector("#agent");
-  area.replaceChildren(...agents.sort((a, b) => a.name.localeCompare(b.name)).map(agent => { const node = template.content.cloneNode(true), button = node.querySelector("button"), state = node.querySelector(".agent-state"), ready = agent.installed && agent.ready; node.querySelector("b").textContent = agent.name; node.querySelector("small").textContent = agent.protocol; state.classList.add(native ? (ready ? "installed" : "missing") : "desktop-only"); button.textContent = native ? (ready ? "Launch" : agent.installed ? "CLI check failed" : "Install") : "Desktop only"; button.disabled = !native || (agent.installed && !ready); if (native) button.addEventListener("click", async () => { try { if (!agent.installed) { button.disabled = true; button.textContent = "Opening installer"; const result = await native.installAgent({ id: agent.id }); document.querySelector("#launch-status").textContent = `${result.detail} opened for ${result.name}. Refresh after installation finishes.`; return; } if (!workingDirectory && !await chooseDirectory()) return; const result = await native.launchAgent({ id: agent.id, directory: workingDirectory }); document.querySelector("#launch-status").textContent = `Opened ${result.name} in ${workingDirectory}.`; } catch (error) { document.querySelector("#launch-status").textContent = error.message; button.disabled = false; } }); return node; }));
+  area.replaceChildren(...agents.sort((a, b) => a.name.localeCompare(b.name)).map(agent => { const node = template.content.cloneNode(true), button = node.querySelector("button"), state = node.querySelector(".agent-state"), ready = agent.installed && agent.ready; node.querySelector("b").textContent = agent.name; node.querySelector("small").textContent = agent.protocol; state.classList.add(native ? (ready ? "installed" : "missing") : "desktop-only"); button.textContent = native ? (ready ? (workingDirectory ? "Launch" : "Choose folder & launch") : agent.installed ? "Check again" : "Install") : "Desktop only"; button.disabled = !native; if (native && agent.installed && !ready) { const message = document.createElement("span"); message.className = "agent-check-status"; message.textContent = "CLI check failed"; node.querySelector(".agent div").append(message); } if (native) button.addEventListener("click", async () => { try { if (agent.installed && !ready) { await renderAgents(); document.querySelector("#launch-status").textContent = "CLI check refreshed. Verify the agent installation and sign-in if its check still fails."; return; } if (!agent.installed) { button.disabled = true; button.textContent = "Opening installer"; const result = await native.installAgent({ id: agent.id }); document.querySelector("#launch-status").textContent = `${result.detail} opened for ${result.name}. Refresh after installation finishes.`; return; } if (!workingDirectory && !await chooseDirectory()) return; const result = await native.launchAgent({ id: agent.id, directory: workingDirectory }); document.querySelector("#launch-status").textContent = `Opened ${result.name} in ${workingDirectory}.`; } catch (error) { document.querySelector("#launch-status").textContent = error.message; button.disabled = false; } }); return node; }));
 }
 
 async function load(refreshUsage = false) {
   const button = document.querySelector("#refresh"); button.disabled = true;
-  const controls = Promise.all([renderRouting(), renderAgents()]);
+  let inventoryReady = false;
+  const controls = Promise.all([renderRouting(), renderAgents().catch(() => { document.querySelector("#launch-status").textContent = "Agent checks unavailable. Refresh to retry."; })]);
   try {
     const [sourceResult, usageResult] = await Promise.allSettled([
       request("/api/source-status"), request(`/api/provider-usage${refreshUsage ? "?refresh=true" : ""}`),
@@ -187,16 +203,17 @@ async function load(refreshUsage = false) {
       return;
     }
     const usage = usageResult.status === "fulfilled" ? usageResult.value : { sources: {}, updated_at: null };
+    inventoryReady = true;
     renderSources(sources, usage.sources || {}, usageResult.status === "rejected" ? "Usage could not be loaded. Refresh to try again." : "Provider quota data unavailable");
     updated.textContent = usage.updated_at ? `Usage updated ${new Date(usage.updated_at).toLocaleTimeString()}` : "Usage could not be loaded · refresh to retry";
     document.querySelector(".connection-summary").classList.remove("unavailable");
-  } finally { await controls; button.disabled = false; }
+  } finally { await controls; setGatewayStatus(inventoryReady && routingReady); button.disabled = false; }
 }
 document.querySelector("#gateway").textContent = location.origin;
 const localGateway = ["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
 document.querySelector(".privacy-note b").textContent = localGateway ? "Loopback gateway" : "Gateway connection";
 document.querySelector(".privacy-note small").textContent = localGateway ? "Bound to this device" : "Opened at this address";
-document.querySelector("#surface").textContent = native ? "DESKTOP CONTROL" : "WEB CONTROL";
+document.querySelector("#surface").textContent = native ? "Desktop control" : "Web control";
 document.body.classList.add(native ? "surface-desktop" : "surface-web");
 document.querySelector("#launcher-capability").textContent = native ? "NATIVE LAUNCH ENABLED" : "OPEN DESKTOP TO LAUNCH";
 document.querySelector("#choose-directory").disabled = !native;
@@ -218,4 +235,35 @@ routeMode.addEventListener("change", saveActiveRouting);
 routeEffort.addEventListener("change", saveActiveRouting);
 routeAdvisor.addEventListener("change", () => { renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, null, "#route-advisor-effort-help", true); saveAdvisorRouting(); });
 advisorEffort.addEventListener("change", saveAdvisorRouting);
+const menuToggle = document.querySelector("#menu-toggle");
+function closeNavigation() {
+  document.body.classList.remove("menu-open");
+  menuToggle.setAttribute("aria-expanded", "false");
+  menuToggle.setAttribute("aria-label", "Open navigation");
+}
+function showSection() {
+  const requested = location.hash.slice(1);
+  const section = ["routing", "connections", ...(native ? ["agent-launch"] : [])].includes(requested) ? requested : "routing";
+  const titles = { routing: "Routing", connections: "Connections", "agent-launch": "Coding agents" };
+  const descriptions = { routing: "Choose the target model and optional advisor for new requests.", connections: "Provider status and quota, reported by each configured source.", "agent-launch": "Open a coding session in your selected project folder." };
+  for (const id of ["routing", "connections", "agent-launch"]) document.getElementById(id).hidden = id !== section;
+  for (const link of document.querySelectorAll("[data-view]")) {
+    const active = link.dataset.view === section;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+  }
+  document.querySelector("#page-title").textContent = titles[section];
+  document.querySelector("#breadcrumb-page").textContent = titles[section];
+  document.querySelector("#page-description").textContent = descriptions[section];
+  closeNavigation();
+}
+menuToggle.addEventListener("click", () => {
+  const open = document.body.classList.toggle("menu-open");
+  menuToggle.setAttribute("aria-expanded", String(open));
+  menuToggle.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+});
+document.querySelectorAll("[data-view]").forEach(link => link.addEventListener("click", event => { event.preventDefault(); location.hash = link.dataset.view; showSection(); document.querySelector("#page-title").focus({preventScroll:true}); window.scrollTo(0,0); }));
+document.addEventListener("keydown", event => { if (event.key === "Escape" && document.body.classList.contains("menu-open")) { closeNavigation(); menuToggle.focus(); } });
+window.addEventListener("hashchange", showSection);
+showSection();
 load(false);

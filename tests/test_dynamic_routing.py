@@ -320,7 +320,7 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     response = client.get("/control")
     assert response.status_code == 200
     assert "Connections" in response.text
-    assert "Routing desk" in response.text
+    assert "Routing policy" in response.text
     assert "/control/app.js" in response.text
 
     assert client.get("/m").status_code == 404

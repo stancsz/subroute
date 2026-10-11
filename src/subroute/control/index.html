@@ -3,55 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5f3ec">
+  <meta name="theme-color" content="#ffffff">
   <meta name="description" content="A local control desk for your AI providers, model routes, and coding agents.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%20fill%3D%22%23111827%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%223%22%20fill%3D%22%23fff%22%2F%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M4%203h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6%205v4h9V8h-9Zm0%2012v4h12v-4H10Z%22%2F%3E%3C%2Fsvg%3E">
   <title>Subroute | Local AI gateway</title>
-  <link rel="stylesheet" href="/control/styles.css?v=readiness-1">
+  <link rel="stylesheet" href="/control/styles.css?v=badlands-3">
 </head>
 <body>
-  <main class="shell">
+  <a class="skip" href="#workspace">Skip to workspace</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Gateway navigation">
+      <a class="brand" href="#routing" aria-label="Subroute by Badlands"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor"><path fill-rule="evenodd" d="M4 3h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6 5v4h9V8h-9Zm0 12v4h12v-4H10Z"/></svg></span><span><b>Subroute</b><small>by Badlands</small></span></a>
+      <div class="workspace-label"><span class="workspace-avatar" aria-hidden="true">L</span><span>Local workspace<small id="surface">Web control</small></span></div>
+      <p class="nav-label">Gateway</p>
+      <nav class="section-nav" aria-label="Control desk sections">
+        <a class="active" href="#routing" data-view="routing" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h6l4 6-4 6H4m10-12h6m-6 12h6"/></svg><span>Routing</span></a>
+        <a href="#connections" data-view="connections"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v6m12-6v6M3 9h18v5a9 9 0 0 1-18 0V9Zm9 14v-4"/></svg><span>Connections</span></a>
+        <a class="desktop-nav" href="#agent-launch" data-view="agent-launch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 6 6-6 6m10 0h6"/></svg><span>Coding agents</span></a>
+      </nav>
+      <div class="sidebar-foot"><a class="admin-link" href="/ui/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v7m0-7-9 9M9 4H4v16h16v-5"/></svg><span>LiteLLM admin</span><span aria-hidden="true">↗</span></a><p>Keys, models and logs</p><div class="local-identity"><span class="local-dot" aria-hidden="true"></span><span>Local gateway<small>Managed on this device</small></span></div></div>
+    </aside>
+    <div class="workspace">
     <header class="topbar">
-      <a class="brand" href="#overview" aria-label="Subroute home">
-        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span><b>subroute</b><small>LOCAL AI GATEWAY</small></span>
-      </a>
+      <div class="bar-start"><button id="menu-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">☰</button><a class="mobile-brand" href="#routing" aria-label="Subroute by Badlands"><svg viewBox="0 0 32 32" fill="currentColor"><path fill-rule="evenodd" d="M4 3h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6 5v4h9V8h-9Zm0 12v4h12v-4H10Z"/></svg></a><span class="breadcrumb">Local gateway <span aria-hidden="true">/</span> <b id="breadcrumb-page">Routing</b></span></div>
       <div class="top-actions">
         <div class="connection-pill"><i></i><span id="gateway-status">Connecting to gateway</span><code id="gateway">127.0.0.1:4000</code></div>
         <button id="refresh" type="button"><span aria-hidden="true">↻</span> Refresh usage</button>
       </div>
     </header>
 
+    <main id="workspace" class="workspace-main">
     <section id="overview" class="intro">
       <div>
-        <p class="eyebrow">YOUR LOCAL CONTROL DESK</p>
-        <h1>One route. Every coding tool.</h1>
-        <p class="lede">Keep your clients steady while you choose which AI connection powers the next request.</p>
+        <p class="eyebrow">Local gateway</p>
+        <h1 id="page-title" tabindex="-1">Routing</h1>
+        <p class="lede" id="page-description">Choose the target model and optional advisor for new requests.</p>
       </div>
         <div class="privacy-note"><span class="privacy-icon" aria-hidden="true">⌂</span><span><b>Loopback gateway</b><small>Bound to this device</small></span></div>
     </section>
 
-    <nav class="section-nav" aria-label="Control desk sections">
-      <a class="active" href="#routing">Routing</a>
-      <a href="#connections">Connections</a>
-      <a class="desktop-nav" href="#agent-launch">Coding agents</a>
-      <span id="surface">WEB CONTROL</span>
-    </nav>
-
     <section id="routing" class="routing-desk" aria-labelledby="routing-title">
       <div class="section-heading route-heading">
-        <div><p class="eyebrow">01 / DIRECT TRAFFIC</p><h2 id="routing-title">Routing desk</h2><p>Set the model for every new request.</p></div>
-        <div class="policy-chip"><i></i> LOCAL POLICY</div>
+        <div><h2 id="routing-title">Routing policy</h2><p id="routing-description">Changes save automatically and apply to new requests.</p></div>
+        <div class="policy-chip" id="policy-summary">Loading policy…</div>
       </div>
       <div class="route-grid">
         <div class="route-column route-model-panel target-panel">
-          <div class="route-panel-head"><span class="panel-index">A</span><div><strong>Target model</strong><small>The model that writes the response</small></div><span class="role-pill">PRIMARY</span></div>
+          <div class="route-panel-head"><span class="panel-index">A</span><div><strong>Target model</strong><small>The model that writes the response</small></div><span class="role-pill">Primary</span></div>
           <label>Provider<select id="route-provider" aria-label="Target provider" disabled><option value="">Loading providers…</option></select></label>
           <label>Model route<select id="route-model" aria-label="Target model" disabled><option value="">Loading models…</option></select></label>
           <label>Reasoning effort<select id="route-effort" aria-label="Target reasoning" aria-describedby="route-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
           <p id="route-effort-help" class="route-help"></p>
         </div>
         <div class="route-column route-model-panel advisor-panel">
-          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on tool requests</small></div><span class="role-pill optional">OPTIONAL</span></div>
+          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on tool requests</small></div><span class="role-pill optional">Optional</span></div>
           <label>Provider<select id="advisor-provider" aria-label="Advisor provider" disabled><option value="">Loading providers…</option></select></label>
           <label>Model route<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
           <label>Reasoning effort<select id="route-advisor-effort" aria-label="Advisor reasoning" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
@@ -67,7 +72,7 @@
 
     <section id="agent-launch" class="launcher" aria-labelledby="agents-title">
       <div class="section-heading">
-        <div><p class="eyebrow">02 / START WORK</p><h2 id="agents-title">Coding agents</h2><p>Open a ready-to-use coding session in your project.</p></div>
+        <div><h2 id="agents-title">Coding agents</h2><p>Open a ready-to-use coding session in your project.</p></div>
         <span id="launcher-capability" class="section-meta">Detecting Desktop bridge…</span>
       </div>
       <div class="working-directory"><div><p class="field-label">PROJECT FOLDER</p><code id="working-directory">Choose the folder where your agent should work.</code></div><button id="choose-directory" class="button-secondary" type="button">Choose folder</button></div>
@@ -77,19 +82,21 @@
 
     <section id="connections" class="connections" aria-labelledby="connections-title">
       <div class="section-heading connections-heading">
-        <div><p class="eyebrow">03 / KNOW YOUR SOURCES</p><h2 id="connections-title">Connections</h2><p>Provider status and usage, reported directly by each source.</p></div>
+        <div><h2 id="connections-title">Connections</h2><p>Provider status and usage, reported directly by each source.</p></div>
         <div class="connection-summary"><span class="summary-led"></span><span id="connection-count">Loading connections…</span><small id="updated">Usage not refreshed</small></div>
       </div>
-      <div id="cards" class="cards"></div>
+      <div class="provider-table"><div class="table-head" aria-hidden="true"><span>Provider / models</span><span>Connection</span><span>Quota / status</span><span>Provider report</span></div><div id="cards" class="cards"></div></div>
       <details class="other-sources"><summary><span>More connections</span><span id="other-count">Show providers not configured on this gateway</span></summary><div id="more-cards" class="cards"></div></details>
-      <p class="usage-note"><span aria-hidden="true">↗</span><span><b>Usage you can trust.</b> Quota appears only when the provider reports it. Unavailable values stay clearly marked and are never estimated.</span></p>
+      <p class="usage-note"><span aria-hidden="true">↗</span><span><b>Provider-reported usage.</b> Quota appears only when the provider reports it. Unavailable values stay clearly marked and are never estimated.</span></p>
     </section>
 
-    <footer class="footer"><span class="footer-brand"><span class="brand-mark small" aria-hidden="true"><i></i><i></i><i></i></span>SUBROUTE</span><span>Local first · Provider reported · Yours to control</span><a href="/ui/">Gateway administration <span aria-hidden="true">↗</span></a></footer>
-  </main>
+    <footer class="footer"><span class="footer-brand"><span class="brand-mark small" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor"><path fill-rule="evenodd" d="M4 3h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6 5v4h9V8h-9Zm0 12v4h12v-4H10Z"/></svg></span>Subroute by Badlands</span><span>Local first · Provider reported · Yours to control</span><a href="/ui/">Gateway administration <span aria-hidden="true">↗</span></a></footer>
+    </main>
+    </div>
+  </div>
 
-  <template id="card"><article class="card"><div class="card-head"><span class="source-mark" aria-hidden="true"></span><span class="kind"></span></div><h3></h3><p class="models"></p><div class="usage-row"><p class="usage"></p><span class="source-state"></span></div><div class="bar" role="img"><i></i></div><footer></footer></article></template>
+  <template id="card"><article class="card"><div class="provider-info"><div class="card-head"><span class="source-mark" aria-hidden="true"></span><h3></h3></div><p class="models"></p></div><span class="kind"></span><div class="usage-row"><p class="usage"></p><span class="source-state"></span></div><div class="bar" role="img"><i></i></div><footer></footer></article></template>
   <template id="agent"><article class="agent"><span class="agent-state" aria-hidden="true"></span><div><b></b><small></small></div><button type="button"></button></article></template>
-  <script src="/control/app.js?v=gemini-limits-2"></script>
+  <script src="/control/app.js?v=badlands-3"></script>
 </body>
 </html>
