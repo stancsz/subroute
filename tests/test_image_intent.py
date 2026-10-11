@@ -278,6 +278,31 @@ def test_explicit_image_tools_and_other_tools_are_preserved(monkeypatch, tmp_pat
 
 @pytest.mark.parametrize("protocol", ["chat", "responses", "messages"])
 @pytest.mark.parametrize("stream", [False, True])
+def test_dedicated_image_payload_bypasses_minimax_without_semantic_intent(monkeypatch, tmp_path, protocol, stream):
+    from test_codex_proxy_http import _configured_proxy, _request
+
+    calls, _ = native_stub(monkeypatch)
+    control = make_control_plane(tmp_path)
+    control.update("minimax", "force")
+    path, data = _request(protocol, stream)
+    data["model"] = "codex-luna"
+    data["tools"] = [{"type": "image_generation"}]
+    if protocol == "responses":
+        data["input"] = "A blue square on white"
+    else:
+        data["messages"] = [{"role": "user", "content": "A blue square on white"}]
+    with _configured_proxy(dynamic_routing_plugin=DynamicRoutingPlugin(control)) as (client, *_):
+        response = client.post(path, json=data)
+    assert response.status_code == 200, response.text[:1000]
+    assert PNG in response.text
+    assert "Here is your image." in response.text
+    assert len(calls) == 1
+    assert calls[0]["tools"] == [{"type": "image_generation"}]
+    assert control.snapshot().active_model == "minimax"
+
+
+@pytest.mark.parametrize("protocol", ["chat", "responses", "messages"])
+@pytest.mark.parametrize("stream", [False, True])
 def test_luna_can_request_other_tools_without_faking_an_image(monkeypatch, tmp_path, protocol, stream):
     from test_codex_proxy_http import _configured_proxy, _request
 
