@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="A local control desk for your AI providers, model routes, and coding agents.">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%20fill%3D%22%23111827%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%223%22%20fill%3D%22%23fff%22%2F%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M4%203h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6%205v4h9V8h-9Zm0%2012v4h12v-4H10Z%22%2F%3E%3C%2Fsvg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%20fill%3D%22%23111827%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%223%22%20fill%3D%22%23fff%22%2F%3E%3Crect%20x%3D%222%22%20y%3D%223%22%20width%3D%2228%22%20height%3D%227%22%20rx%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M9.65%2012H22.35Q23%2012%2023.12%2012.64L25.88%2027.12Q26%2028%2025.12%2028H6.88Q6%2028%206.12%2027.12L8.88%2012.64Q9%2012%209.65%2012Z%22%2F%3E%3C%2Fsvg%3E">
   <title>Subroute | Local AI gateway</title>
   <link rel="stylesheet" href="/control/styles.css?v=badlands-3">
 </head>
@@ -13,7 +13,7 @@
   <a class="skip" href="#workspace">Skip to workspace</a>
   <div class="shell">
     <aside class="sidebar" id="sidebar" aria-label="Gateway navigation">
-      <a class="brand" href="#routing" aria-label="Subroute by Badlands"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor"><path fill-rule="evenodd" d="M4 3h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6 5v4h9V8h-9Zm0 12v4h12v-4H10Z"/></svg></span><span><b>Subroute</b><small>by Badlands</small></span></a>
+      <a class="brand" href="#routing" aria-label="Subroute by Badlands"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor"><rect x="2" y="3" width="28" height="7" rx="1.2"/><path d="M9.65 12H22.35Q23 12 23.12 12.64L25.88 27.12Q26 28 25.12 28H6.88Q6 28 6.12 27.12L8.88 12.64Q9 12 9.65 12Z"/></svg></span><span><b>Subroute</b><small>by Badlands</small></span></a>
       <div class="workspace-label"><span class="workspace-avatar" aria-hidden="true">L</span><span>Local workspace<small id="surface">Web control</small></span></div>
       <p class="nav-label">Gateway</p>
       <nav class="section-nav" aria-label="Control desk sections">
@@ -25,7 +25,7 @@
     </aside>
     <div class="workspace">
     <header class="topbar">
-      <div class="bar-start"><button id="menu-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">☰</button><a class="mobile-brand" href="#routing" aria-label="Subroute by Badlands"><svg viewBox="0 0 32 32" fill="currentColor"><path fill-rule="evenodd" d="M4 3h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6 5v4h9V8h-9Zm0 12v4h12v-4H10Z"/></svg></a><span class="breadcrumb">Local gateway <span aria-hidden="true">/</span> <b id="breadcrumb-page">Routing</b></span></div>
+      <div class="bar-start"><button id="menu-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">☰</button><a class="mobile-brand" href="#routing" aria-label="Subroute by Badlands"><svg viewBox="0 0 32 32" fill="currentColor"><rect x="2" y="3" width="28" height="7" rx="1.2"/><path d="M9.65 12H22.35Q23 12 23.12 12.64L25.88 27.12Q26 28 25.12 28H6.88Q6 28 6.12 27.12L8.88 12.64Q9 12 9.65 12Z"/></svg></a><span class="breadcrumb">Local gateway <span aria-hidden="true">/</span> <b id="breadcrumb-page">Routing</b></span></div>
       <div class="top-actions">
         <div class="connection-pill"><i></i><span id="gateway-status">Connecting to gateway</span><code id="gateway">127.0.0.1:4000</code></div>
         <button id="refresh" type="button"><span aria-hidden="true">↻</span> Refresh usage</button>
@@ -90,7 +90,7 @@
       <p class="usage-note"><span aria-hidden="true">↗</span><span><b>Provider-reported usage.</b> Quota appears only when the provider reports it. Unavailable values stay clearly marked and are never estimated.</span></p>
     </section>
 
-    <footer class="footer"><span class="footer-brand"><span class="brand-mark small" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor"><path fill-rule="evenodd" d="M4 3h16v3h5v7h-4v3h7v9h-5v4H4V3Zm6 5v4h9V8h-9Zm0 12v4h12v-4H10Z"/></svg></span>Subroute by Badlands</span><span>Local first · Provider reported · Yours to control</span><a href="/ui/">Gateway administration <span aria-hidden="true">↗</span></a></footer>
+    <footer class="footer"><span class="footer-brand"><span class="brand-mark small" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor"><rect x="2" y="3" width="28" height="7" rx="1.2"/><path d="M9.65 12H22.35Q23 12 23.12 12.64L25.88 27.12Q26 28 25.12 28H6.88Q6 28 6.12 27.12L8.88 12.64Q9 12 9.65 12Z"/></svg></span>Subroute by Badlands</span><span>Local first · Provider reported · Yours to control</span><a href="/ui/">Gateway administration <span aria-hidden="true">↗</span></a></footer>
     </main>
     </div>
   </div>
