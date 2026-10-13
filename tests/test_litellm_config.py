@@ -248,6 +248,8 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
     )
     assert settings["general_settings"]["health_check_concurrency"] == 2
     assert settings["general_settings"]["health_check_skip_disabled_background_models"] is True
+    assert settings["general_settings"]["disable_spend_logs"] is False
+    assert settings["litellm_settings"]["turn_off_message_logging"] is True
     assert "disable_error_logs" not in settings["general_settings"]
 
 

@@ -516,6 +516,9 @@ litellm_settings:
   # This removes known unsupported top-level parameters. It does not guarantee
   # cross-provider tool, vision, context, reasoning, or streaming compatibility.
   drop_params: true
+  # Keep request/response bodies out of LiteLLM logs while retaining token and
+  # cost records in Postgres for local Subroute traffic.
+  turn_off_message_logging: true
   set_verbose: false
 
 general_settings:
@@ -525,6 +528,6 @@ general_settings:
   database_url: os.environ/DATABASE_URL
   health_check_concurrency: 2
   health_check_skip_disabled_background_models: true
-  disable_spend_logs: true
+  disable_spend_logs: false
   disable_error_tracking: true
   allow_requests_on_db_unavailable: false
