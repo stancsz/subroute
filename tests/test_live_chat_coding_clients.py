@@ -91,16 +91,16 @@ def test_actual_chat_client_tools_and_format(formatting_gateway, tmp_path, provi
         if client_name == "opencode":
             env["OPENCODE_CONFIG_CONTENT"] = json.dumps({
                 "$schema": "https://opencode.ai/config.json", "autoupdate": False, "share": "disabled",
-                "enabled_providers": ["format_test"], "model": "format_test/current", "small_model": "format_test/current",
+                "enabled_providers": ["format_test"], "model": "format_test/auto", "small_model": "format_test/auto",
                 "provider": {"format_test": {"npm": "@ai-sdk/openai-compatible", "options": {
                     "baseURL": recorder.base_url + "/v1", "apiKey": "subroute-cli-test"}, "models": {
-                    "current": {"name": "Subroute", "reasoning": True, "toolcall": True,
+                    "auto": {"name": "Subroute", "reasoning": True, "toolcall": True,
                                 "limit": {"context": 200000, "output": 4096}}}}},
                 "permission": {"*": "deny", "read": "allow"}, "mcp": {}, "plugin": [],
                 "agent": {"format_test": {"mode": "primary", "prompt": "Use read to inspect both files, then answer concisely.",
                                            "permission": {"*": "deny", "read": "allow"}}},
             })
-            command = [executable, "run", "--pure", "--format", "json", "--agent", "format_test", "--model", "format_test/current", prompt]
+            command = [executable, "run", "--pure", "--format", "json", "--agent", "format_test", "--model", "format_test/auto", prompt]
         else:
             state = isolated / "data/settings"
             state.mkdir(parents=True)
@@ -113,7 +113,7 @@ def test_actual_chat_client_tools_and_format(formatting_gateway, tmp_path, provi
                 "toolAutoApprove": True, "disabledTools": disabled, "tools": {"web_search": {"enabled": False}}}), encoding="utf-8")
             (state / "providers.json").write_text(json.dumps({"version": 1, "lastUsedProvider": "openai-compatible", "modes": {},
                 "providers": {"openai-compatible": {"settings": {"provider": "openai-compatible", "protocol": "openai-chat",
-                    "client": "openai-compatible", "baseUrl": recorder.base_url + "/v1", "apiKey": "subroute-cli-test", "model": "current",
+                    "client": "openai-compatible", "baseUrl": recorder.base_url + "/v1", "apiKey": "subroute-cli-test", "model": "auto",
                     "modelCatalog": {"loadLatestOnInit": False, "loadPrivateOnAuth": False}},
                     "updatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "tokenSource": "manual"}}}), encoding="utf-8")
             env.update(CLINE_DATA_DIR=str(isolated / "data"), CLINE_PROVIDER_SETTINGS_PATH=str(state / "providers.json"),

@@ -149,7 +149,7 @@ def test_01_gemini_subscription_target_live_success(live_gateway: LiveGateway) -
     effort = os.getenv("SUBROUTE_LIVE_TARGET_EFFORT", "low")
     live_gateway.set_policy(target=target, advisor=None, reasoning_effort=effort)
     response = live_gateway.message(
-        "current",
+        "default",
         "Reply with exactly SUBROUTE-LIVE-TARGET-OK. Do not call tools.",
     )
     payload = _assert_live_message(response, f"target={target}")
@@ -187,16 +187,16 @@ def test_02_target_live_failure_matrix(live_gateway: LiveGateway) -> None:
         {"type": "text", "text": "Describe this image."},
         {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": tiny_png}},
     ]
-    response = live_gateway.message("current", image)
+    response = live_gateway.message("default", image)
     _assert_live_failure(response, "target unsupported image", "does not support 'image_url' content blocks")
 
     # The live gateway rejects the serialized bridge request at its actual
     # 1 MB boundary, before sending a body the sidecar would reject/reset.
-    response = live_gateway.message("current", "x" * 1_000_100)
+    response = live_gateway.message("default", "x" * 1_000_100)
     _assert_live_failure(response, "target bridge request limit", "bridge request exceeds 1000000 bytes")
 
     response = live_gateway.message(
-        "current",
+        "default",
         "Reply with exactly SUBROUTE-LIVE-TARGET-RECOVERED. Do not call tools.",
     )
     payload = _assert_live_message(response, f"target={target} after failure")
@@ -219,7 +219,7 @@ def test_03_gemini_advisor_live_failure_is_reported(live_gateway: LiveGateway) -
     # This crosses the real gateway and advisor adapter but is rejected by the
     # sidecar request-size guard before either subscription provider is called.
     call_id = f"subroute-advisor-failure-{uuid.uuid4().hex}"
-    response = live_gateway.message("current", "x" * 1_000_100, call_id=call_id)
+    response = live_gateway.message("default", "x" * 1_000_100, call_id=call_id)
     _assert_live_failure(
         response,
         f"advisor={advisor} bounded transport failure",
@@ -239,7 +239,7 @@ def test_04_gemini_advisor_and_target_live_success_after_failure(live_gateway: L
     advisor = os.getenv("SUBROUTE_LIVE_ADVISOR_MODEL", "gemini-subscription")
     live_gateway.set_policy(target=target, advisor=advisor, reasoning_effort="low")
     response = live_gateway.message(
-        "current",
+        "default",
         "Reply with exactly SUBROUTE-LIVE-ADVISOR-BASE-OK. Do not call tools.",
     )
     payload = _assert_live_message(response, f"advisor={advisor} target={target}")
@@ -252,7 +252,7 @@ def test_05_codex_advisor_and_target_live_success(live_gateway: LiveGateway) -> 
     advisor = os.getenv("SUBROUTE_LIVE_CODEX_ADVISOR_MODEL", "codex-sol-advisor")
     live_gateway.set_policy(target=target, advisor=advisor, reasoning_effort="low")
     response = live_gateway.message(
-        "current",
+        "default",
         "Reply with exactly SUBROUTE-LIVE-CODEX-ADVISOR-OK. Do not call tools.",
     )
     payload = _assert_live_message(response, f"advisor={advisor} target={target}")
@@ -263,7 +263,7 @@ def test_05_codex_advisor_and_target_live_success(live_gateway: LiveGateway) -> 
 def test_06_codex_gpt_6_1_sol_target_live_success(live_gateway: LiveGateway) -> None:
     live_gateway.set_policy(target="codex-gpt-6.1-sol", advisor=None, reasoning_effort="high")
     response = live_gateway.message(
-        "current", "Reply with exactly SUBROUTE-CODEX-6-1-SOL-OK. Do not call tools."
+        "default", "Reply with exactly SUBROUTE-CODEX-6-1-SOL-OK. Do not call tools."
     )
     payload = _assert_live_message(response, "target=codex-gpt-6.1-sol (GPT-6.1 Sol)")
     text = "".join(block.get("text", "") for block in payload.get("content", []))
@@ -274,7 +274,7 @@ def test_07_openrouter_buffered_and_sse_live_success(live_gateway: LiveGateway) 
     live_gateway.set_policy(target="openrouter", advisor=None, reasoning_effort=None)
     buffered = live_gateway.client.post(
         "/v1/chat/completions",
-        json={"model": "current", "max_tokens": 256, "messages": [{
+        json={"model": "default", "max_tokens": 256, "messages": [{
             "role": "user", "content": "Reply with exactly SUBROUTE-OPENROUTER-BUFFERED-OK."
         }]},
     )
@@ -287,7 +287,7 @@ def test_07_openrouter_buffered_and_sse_live_success(live_gateway: LiveGateway) 
     print(f"LIVE PASS target=openrouter buffered: status=200 usage={body['usage']}")
 
     request = {
-        "model": "current", "stream": True,
+        "model": "default", "stream": True,
         "stream_options": {"include_usage": True}, "max_tokens": 256,
         "messages": [{"role": "user", "content": "Reply with exactly SUBROUTE-OPENROUTER-SSE-OK."}],
     }
@@ -323,7 +323,7 @@ def test_08_client_disconnect_cancels_gemini_target_and_recovers(live_gateway: L
     call_id = f"subroute-client-disconnect-{uuid.uuid4().hex}"
     request_body = json.dumps(
         {
-            "model": "current",
+            "model": "default",
             "max_tokens": 4096,
             "stream": True,
             "messages": [{
@@ -397,7 +397,7 @@ def test_08_client_disconnect_cancels_gemini_target_and_recovers(live_gateway: L
     assert not remaining_pids, f"Antigravity CLI survived public client disconnect: {sorted(remaining_pids)}"
 
     recovered = live_gateway.message(
-        "current", "Reply with exactly SUBROUTE-DISCONNECT-RECOVERY-OK.", max_tokens=64
+        "default", "Reply with exactly SUBROUTE-DISCONNECT-RECOVERY-OK.", max_tokens=64
     )
     payload = _assert_live_message(recovered, f"target={target} after client disconnect")
     text = "".join(block.get("text", "") for block in payload.get("content", []))
@@ -420,7 +420,7 @@ def test_09_all_remaining_subscription_aliases_live_success(live_gateway: LiveGa
         effort = "low"
         live_gateway.set_policy(target=target, advisor=None, reasoning_effort=effort)
         response = live_gateway.message(
-            "current",
+            "default",
             f"Reply with exactly SUBROUTE-{target.upper()}-OK. Do not call tools.",
             max_tokens=48,
         )
@@ -435,7 +435,7 @@ def test_09_all_remaining_subscription_aliases_live_success(live_gateway: LiveGa
             reasoning_effort="low",
         )
         response = live_gateway.message(
-            "current",
+            "default",
             f"Reply with exactly SUBROUTE-{advisor.upper()}-OK. Do not call tools.",
             max_tokens=48,
         )

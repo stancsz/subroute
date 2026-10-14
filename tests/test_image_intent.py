@@ -86,7 +86,7 @@ def test_cline_image_function_stays_client_owned(tmp_path, protocol, mode, activ
         tool = {"name": CLINE_IMAGE_FUNCTION, "input_schema": schema}
         choice = {"type": "tool", "name": CLINE_IMAGE_FUNCTION} if selected else {"type": "auto"}
     prompt = '<user_input mode="act">create a photo</user_input>'
-    data = {"model": "current", "tools": [tool], "tool_choice": choice}
+    data = {"model": "default", "tools": [tool], "tool_choice": choice}
     data.update({"input": prompt} if protocol == "aresponses" else {"messages": [{"role": "user", "content": prompt}]})
     before = deepcopy(data)
     assert image_request_context(data, protocol) is None
@@ -94,7 +94,7 @@ def test_cline_image_function_stays_client_owned(tmp_path, protocol, mode, activ
     control = make_control_plane(tmp_path)
     control.update(active_model, mode)
     result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, protocol))
-    assert result["model"] == ("current" if mode == "off" else active_model)
+    assert result["model"] == ("default" if mode == "off" else active_model)
     assert result["tools"] == before["tools"]
     assert result["tool_choice"] == before["tool_choice"]
     assert "gateway_image_request" not in result
@@ -124,7 +124,7 @@ def test_cline_function_call_survives_real_proxy(monkeypatch, tmp_path, protocol
 
     config = tmp_path / "routing.yaml"
     config.write_text("""model_list:
-  - model_name: current
+  - model_name: default
     litellm_params: {model: openai/virtual}
   - model_name: codex-luna
     litellm_params: {model: codex-subscription/gpt-6-luna}
@@ -153,7 +153,7 @@ def test_cline_function_call_survives_real_proxy(monkeypatch, tmp_path, protocol
     monkeypatch.setattr(proxy_fixture, "FakeStream", lambda: original_stream(deepcopy(chunks)))
     path, data = proxy_fixture._request(protocol, stream)
     schema = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}
-    data["model"] = "current"
+    data["model"] = "default"
     prompt = '<user_input mode="act">create a photo</user_input>'
     if protocol == "responses":
         data["input"] = prompt
@@ -333,7 +333,7 @@ def test_luna_can_request_other_tools_without_faking_an_image(monkeypatch, tmp_p
 def test_internal_context_cannot_be_supplied_by_client(tmp_path):
     control = make_control_plane(tmp_path)
     control.update("minimax", "force")
-    data = {"model": "current", "messages": [{"role": "user", "content": "Hello"}],
+    data = {"model": "default", "messages": [{"role": "user", "content": "Hello"}],
             "gateway_image_request": {"protocol": "responses"},
             "extra_body": {"gateway_image_request": {"protocol": "responses"}}}
     result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, "acompletion"))
@@ -346,7 +346,7 @@ def test_image_exception_skips_saved_advisor(tmp_path):
     control = make_control_plane(tmp_path)
     control.update("minimax", "force")
     control.update_advisor("codex-luna-advisor")
-    data = {"model": "current", "messages": [{"role": "user", "content": "Draw a cat"}]}
+    data = {"model": "default", "messages": [{"role": "user", "content": "Draw a cat"}]}
     asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, "anthropic_messages"))
     before = json.dumps(data, sort_keys=True)
     asyncio.run(AdvisorPlugin().async_pre_call_hook({}, None, data, "anthropic_messages"))

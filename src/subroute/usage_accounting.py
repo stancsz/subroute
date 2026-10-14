@@ -274,6 +274,47 @@ class ReceiptStore:
             logger.error("usage checkpoint write failed attempt_id=%s", attempt_id)
             return False
 
+    async def mirror_advisor_log(self, attempt_id: str | None = None) -> bool:
+        """Make completed direct Advisor usage visible in LiteLLM's Logs UI.
+
+        The receipt remains authoritative. A distinct request ID and zero spend
+        when provider cost is unreported avoid double charging the parent call.
+        Passing None backfills existing receipts idempotently.
+        """
+        try:
+            await self.execute("""INSERT INTO "LiteLLM_SpendLogs"
+                (request_id,call_type,api_key,spend,total_tokens,prompt_tokens,
+                 completion_tokens,"startTime","endTime",model,model_group,
+                 custom_llm_provider,metadata,status)
+                SELECT 'subroute-advisor-' || r.attempt_id::text, 'advisor', '',
+                  COALESCE((r.payload->>'provider_cost_micros')::double precision / 1000000, 0),
+                  COALESCE((r.payload->>'total_tokens')::integer,
+                    (r.payload->>'input_tokens')::integer + (r.payload->>'output_tokens')::integer),
+                  (r.payload->>'input_tokens')::integer,
+                  (r.payload->>'output_tokens')::integer,
+                  to_timestamp((r.payload->>'created_at')::bigint / 1000.0) AT TIME ZONE 'UTC',
+                  to_timestamp(r.updated_at / 1000.0) AT TIME ZONE 'UTC',
+                  COALESCE(r.payload->>'upstream_model','unknown'),
+                  COALESCE(r.payload->>'upstream_model','unknown'),
+                  COALESCE(r.payload->>'provider_id','unknown'),
+                  jsonb_build_object(
+                    'subroute_role','advisor',
+                    'subroute_attempt_id',r.attempt_id::text,
+                    'subroute_request_id',r.request_id::text,
+                    'usage_complete',true,
+                    'provider_cost_reported',r.payload ? 'provider_cost_micros',
+                    'spend_logs_metadata',jsonb_build_object('role','advisor','source','subroute')),
+                  'success'
+                FROM subroute_usage_receipts r
+                WHERE r.payload->>'role'='advisor' AND r.payload->>'kind'='provider'
+                  AND r.outcome='complete' AND r.payload->>'usage_complete'='true'
+                  AND ($1::uuid IS NULL OR r.attempt_id=$1::uuid)
+                ON CONFLICT (request_id) DO NOTHING""", attempt_id)
+            return True
+        except Exception:
+            logger.error("advisor Logs mirror failed attempt_id=%s", attempt_id)
+            return False
+
     async def pending(self, environment: str) -> list:
         await self.ensure()
         # Terminal state changes leave a revision for the consumer, even after restart.
@@ -792,7 +833,9 @@ async def direct_attempt(model: str, provider: str, role: str):
     finally:
         direct_context.reset(token)
         attempt.facts["usage_complete"] = outcome == "complete" and "input_tokens" in attempt.facts and "output_tokens" in attempt.facts
-        await store.update(ident, attempt.facts, outcome)
+        saved = await store.update(ident, attempt.facts, outcome)
+        if saved and role == "advisor" and attempt.facts["usage_complete"]:
+            await store.mirror_advisor_log(ident)
 
 
 def install_receipt_routes(app):

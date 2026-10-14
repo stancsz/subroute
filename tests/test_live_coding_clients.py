@@ -175,7 +175,7 @@ def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, p
             command = [executable, "-p", "--bare", "--no-session-persistence", "--setting-sources", "",
                        "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--disable-slash-commands",
                        "--tools", "Read", "--allowedTools", "Read", "--permission-mode", "dontAsk",
-                       "--model", "current" if address.port == 4005 else "claude-sonnet-4-6", "--settings", '{"alwaysThinkingEnabled":true}',
+                       "--model", "default" if address.port == 4005 else "claude-sonnet-4-6", "--settings", '{"alwaysThinkingEnabled":true}',
                        "--output-format", "stream-json", "--include-partial-messages", "--verbose",
                        "--system-prompt", "You are a coding assistant. Use Read for the requested files, then answer concisely."]
         else:
@@ -186,7 +186,7 @@ def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, p
                        "--enable", "skip_host_skill_discovery", "--disable", "apps", "--disable", "hooks",
                        "--disable", "plugins", "--disable", "remote_plugin", "--disable", "skill_search",
                        "--disable", "view_image", "--disable", "image_generation",
-                       "-m", "current" if address.port == 4005 else "gpt-6-luna", "-c", 'model_provider="format_test"',
+                       "-m", "default" if address.port == 4005 else "gpt-6-luna", "-c", 'model_provider="format_test"',
                        "-c", 'model_providers.format_test={name="Local format test",base_url="' + recorder.base_url + '/v1",wire_api="responses",env_key="SUBROUTE_CLI_TEST_KEY"}',
                        "-c", 'model_reasoning_effort="low"', "-c", 'model_reasoning_summary="auto"',
                        "-c", "model_context_window=200000", "-c", "model_auto_compact_token_limit=190000",

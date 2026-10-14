@@ -17,6 +17,7 @@ from subroute import usage_accounting as accounting
 class MemoryStore:
     def __init__(self):
         self.rows = {}
+        self.mirrors = []
         self.fail_start = False
         self.fail_update = False
 
@@ -43,6 +44,10 @@ class MemoryStore:
 
     async def checkpoint(self, ident, facts):
         return await self.update(ident, facts)
+
+    async def mirror_advisor_log(self, ident=None):
+        self.mirrors.append(ident)
+        return True
 
     async def ack(self, environment, rows):
         self.acked = (environment, rows)
@@ -149,6 +154,7 @@ def test_direct_advisor_compaction_failure_and_cancellation_keep_observed_usage(
         assert [row["outcome"] for row in rows] == ["complete", "complete", "failed", "cancelled"]
         assert rows[2]["facts"]["input_tokens"] == 11 and rows[2]["facts"]["usage_complete"] is False
         assert rows[3]["facts"] == {"input_tokens": 5, "usage_complete": False}
+        assert store.mirrors == [next(ident for ident, row in store.rows.items() if row is rows[0])]
         assert all(row["trace"] == trace for row in rows)
         assert "private" not in str(rows) and "sk-secret" not in str(rows)
     asyncio.run(scenario())

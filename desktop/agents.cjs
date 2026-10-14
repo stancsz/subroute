@@ -5,9 +5,9 @@ const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 const execFileAsync = promisify(execFile);
 
-const MODEL = "current";
+const MODEL = "auto";
 const PROFILE = "subroute";
-// Session budgets apply to every model selected behind the gateway alias.
+// Session budgets apply to the gateway's automatic route.
 const CONTEXT_WINDOW = 256000;
 const COMPACT_THRESHOLD = 204800;
 const AGENTS = {
@@ -90,7 +90,7 @@ async function writeLaunchFile(filePath, contents) {
 
 function catalog() {
   return JSON.stringify({ models: [{
-    slug: MODEL, display_name: MODEL, description: "Subroute active model", context_window: CONTEXT_WINDOW,
+    slug: MODEL, display_name: MODEL, description: "Subroute automatic route", context_window: CONTEXT_WINDOW,
     max_context_window: CONTEXT_WINDOW, auto_compact_token_limit: COMPACT_THRESHOLD,
     effective_context_window_percent: 100, shell_type: "default", visibility: "list",
     supported_in_api: true, priority: 0, additional_speed_tiers: [], service_tiers: [],
@@ -165,7 +165,7 @@ async function prepareLaunch(id, gatewayUrl, launchHome = desktopLaunchHome()) {
     const patchPath = path.join(dshHome, "subroute.patch.yaml");
     await writeLaunchFile(settingsPath, [
       "llm-deepseek:", `  baseURL: ${JSON.stringify(openai)}`, "  models:", `    - id: ${MODEL}`,
-      "      name: Subroute active model", "      inputModalities: [text, image]", `      contextWindow: ${CONTEXT_WINDOW}`, "      maxTokens: 32768",
+      "      name: Subroute automatic route", "      inputModalities: [text, image]", `      contextWindow: ${CONTEXT_WINDOW}`, "      maxTokens: 32768",
       "agent-default-model:", "  provider: deepseek-official", `  model: ${MODEL}`, "",
     ].join("\n"));
     await writeLaunchFile(patchPath, ["- id: settings", "  config:", `    path: ${JSON.stringify(settingsPath)}`, ""].join("\n"));
@@ -183,7 +183,7 @@ async function prepareLaunch(id, gatewayUrl, launchHome = desktopLaunchHome()) {
     await writeLaunchFile(configPath, JSON.stringify({
       models: { providers: { subroute: {
         baseUrl: openai, apiKey: "subroute-local", api: "openai-completions",
-        models: [{ id: MODEL, name: "Subroute active model", contextWindow: CONTEXT_WINDOW, maxTokens: 32768 }],
+        models: [{ id: MODEL, name: "Subroute automatic route", contextWindow: CONTEXT_WINDOW, maxTokens: 32768 }],
       } } },
       agents: {
         defaults: { model: { primary: `subroute/${MODEL}` }, compaction: { enabled: true } },

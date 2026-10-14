@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ def make_control_plane(tmp_path: Path, include_speech_models: bool = False) -> R
     config = tmp_path / "litellm.yaml"
     config.write_text(
         """model_list:
-  - model_name: current
+  - model_name: default
     model_info: {selectable: true}
     litellm_params: {model: openai/virtual}
   - model_name: minimax
@@ -84,10 +85,10 @@ def test_candidates_filter_virtual_and_non_selectable_models(tmp_path: Path):
     assert control.choices[0].capabilities == ("tools", "204k")
 
 
-def test_alias_mode_resolves_current_but_preserves_explicit_models(tmp_path: Path):
+def test_alias_mode_resolves_default_but_preserves_explicit_models(tmp_path: Path):
     control = make_control_plane(tmp_path)
     plugin = DynamicRoutingPlugin(control)
-    data = {"model": "current", "metadata": {"client": "codex"}}
+    data = {"model": "default", "metadata": {"client": "codex"}}
 
     assert run(plugin, data) is data
     assert data["model"] == "minimax"
@@ -101,7 +102,7 @@ def test_alias_mode_resolves_current_but_preserves_explicit_models(tmp_path: Pat
         "advisor_sensitivity": "balanced", "advisor_classifier": "local",
         },
         "routing": {
-            "requested_model": "current",
+            "requested_model": "default",
             "resolved_model": "minimax",
             "mode": "alias",
             "policy_version": 1,
@@ -134,9 +135,9 @@ def test_force_and_off_modes_have_explicit_semantics(tmp_path: Path):
     assert data["metadata"]["routing"]["policy_version"] == force.policy_version
 
     control.update("minimax", "off")
-    passthrough = {"model": "current"}
+    passthrough = {"model": "default"}
     assert run(plugin, passthrough) is passthrough
-    assert passthrough["model"] == "current"
+    assert passthrough["model"] == "default"
 
 
 def test_unknown_model_is_rejected_before_force_routing(tmp_path: Path):
@@ -154,12 +155,24 @@ def test_unknown_model_is_rejected_before_force_routing(tmp_path: Path):
     assert data["metadata"] == {}
 
 
+@pytest.mark.parametrize("prompt", ["hello", "Draw a cat"])
+def test_removed_current_alias_is_rejected_before_dispatch(tmp_path: Path, prompt: str):
+    from fastapi import HTTPException
+
+    control = make_control_plane(tmp_path)
+    with pytest.raises(HTTPException) as error:
+        run(DynamicRoutingPlugin(control), {
+            "model": "current", "messages": [{"role": "user", "content": prompt}],
+        })
+    assert error.value.status_code == 404
+
+
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
         ("get", "/v1/skills", None),
-        ("post", "/v1/rerank", {"model": "current", "query": "q", "documents": ["d"]}),
-        ("post", "/v1/embeddings", {"model": "current", "input": "x"}),
+        ("post", "/v1/rerank", {"model": "default", "query": "q", "documents": ["d"]}),
+        ("post", "/v1/embeddings", {"model": "default", "input": "x"}),
     ],
 )
 def test_unconfigured_provider_operations_return_client_errors(method, path, body):
@@ -179,7 +192,7 @@ def test_routing_precedes_advisor_injection_for_plain_target(tmp_path: Path):
     control.update_advisor("codex-gpt-6.1-sol-advisor")
     router = DynamicRoutingPlugin(control)
     advisor = AdvisorPlugin()
-    data = {"model": "current", "messages": [{"role": "user", "content": "help"}]}
+    data = {"model": "default", "messages": [{"role": "user", "content": "help"}]}
 
     asyncio.run(router.async_pre_call_hook({}, None, data, "anthropic_messages"))
     asyncio.run(advisor.async_pre_call_hook({}, None, data, "anthropic_messages"))
@@ -237,7 +250,7 @@ def test_saved_gpt_5_target_migrates_once_and_preserves_policy(tmp_path, retired
         "advisor_trigger": "model", "advisor_sensitivity": "balanced", "advisor_classifier": "local",
     }
     assert json.loads(state_path.read_text(encoding="utf-8")) == expected
-    assert control.resolve("current")[0] == replacement
+    assert control.resolve("default")[0] == replacement
     assert retired not in control.allowed_models
     with pytest.raises(ValueError, match="not selectable"):
         control.update(retired, "force")
@@ -253,7 +266,7 @@ def test_gpt_6_1_sol_target_is_selectable_and_preserves_effort_after_restart(tmp
     control = RoutingControlPlane(config_path, state_path)
     control.update("codex-gpt-6.1-sol", "force", reasoning_effort="ultra")
     restarted = RoutingControlPlane(config_path, state_path)
-    assert restarted.resolve("current")[0] == "codex-gpt-6.1-sol"
+    assert restarted.resolve("default")[0] == "codex-gpt-6.1-sol"
     assert restarted.snapshot().reasoning_effort == "ultra"
     assert "codex-gpt-6.1-sol" not in restarted.advisor_models
 
@@ -288,7 +301,7 @@ def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
     monkeypatch.setattr(litellm, "callbacks", [DynamicRoutingPlugin(control), AdvisorPlugin()])
     result = asyncio.run(proxy.pre_call_hook(
         user_api_key_dict=UserAPIKeyAuth(),
-        data={"model": "current", "messages": [{"role": "user", "content": "hello"}]},
+        data={"model": "default", "messages": [{"role": "user", "content": "hello"}]},
         call_type="anthropic_messages",
     ))
     assert result["model"] == "minimax"
@@ -348,7 +361,7 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     assert client.get("/api/active-model").json() == response.json()
     options = client.get("/api/routing-options")
     assert options.status_code == 200
-    assert options.json()["client_api_key_required"] is False
+    assert options.json()["client_api_key_required"] is bool(os.getenv("GATEWAY_MASTER_KEY"))
     assert {item["model_id"] for item in options.json()["models"]} == {"minimax", "desktop"}
     advisor = client.post(
         "/api/advisor-model",

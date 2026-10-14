@@ -126,8 +126,9 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     by_name = {deployment["model_name"]: deployment for deployment in deployments}
 
     assert "openai" not in by_name
-    assert by_name["current"]["model_info"]["selectable"] is False
-    assert by_name["current"]["model_info"]["disable_background_health_check"] is True
+    assert "current" not in by_name
+    assert by_name["auto"]["model_info"]["selectable"] is False
+    assert by_name["auto"]["model_info"]["disable_background_health_check"] is True
     assert "gemini-api" not in by_name
     assert not any(
         "gpt-5.2-codex" in str(deployment.get("litellm_params", {}).get("model", ""))
@@ -270,14 +271,13 @@ def test_windows_launchers_force_utf8_and_loopback_defaults():
     assert "4010" not in gateway
 
 
-def test_gateway_defaults_to_loopback_no_auth_but_supports_an_explicit_master_key():
+def test_gateway_master_key_is_optional_and_passed_to_both_gateways():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert 'GATEWAY_MASTER_KEY=${GATEWAY_MASTER_KEY:-sk-gateway-local-dev}' not in compose
-    assert not any(
-        line.strip().startswith("- GATEWAY_MASTER_KEY")
-        for line in compose.splitlines()
-    )
+    services = yaml.safe_load(compose)["services"]
+    for service in ("gateway", "gateway-staging"):
+        assert "GATEWAY_MASTER_KEY" in services[service]["environment"]
     assert config()["general_settings"]["master_key"] == "os.environ/GATEWAY_MASTER_KEY"
 
 

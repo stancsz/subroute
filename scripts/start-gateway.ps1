@@ -21,6 +21,7 @@ if (-not $env:OLLAMA_API_BASE) { $env:OLLAMA_API_BASE = "http://127.0.0.1:11434"
 # gateway. Supplying it explicitly opts back into LiteLLM bearer-token auth.
 if (-not $env:DATABASE_URL) { $env:DATABASE_URL = "postgresql://litellm:litellm-local-db@127.0.0.1:5433/litellm" }
 if (-not $env:UI_USERNAME) { $env:UI_USERNAME = "admin" }
+if (-not $env:UI_PASSWORD) { $env:UI_PASSWORD = "password" }
 
 & $litellmExecutable --config (Resolve-Path $Config) --host $HostAddress --port $Port --telemetry False
 exit $LASTEXITCODE

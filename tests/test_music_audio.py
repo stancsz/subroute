@@ -32,7 +32,7 @@ def sample():
 
 
 def request(audio=None):
-    return {"model": "current", "messages": [{"role": "user", "content": [
+    return {"model": "default", "messages": [{"role": "user", "content": [
         {"type": "text", "text": "Listen"}, {"type": "input_audio", "input_audio": audio or sample()},
     ]}]}
 

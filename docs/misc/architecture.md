@@ -41,11 +41,11 @@ This repository owns:
   growing back into the project
 - a callback that injects LiteLLM's built-in Advisor tool on the Anthropic
   Messages path whenever the captured policy contains an advisor selection
-- a loopback-only routing control plane that resolves `current`, or explicitly
+- a loopback-only routing control plane that resolves `default`, or explicitly
   applies `force` mode, before LiteLLM selects a deployment
 
 The dynamic routing callback precedes the Advisor callback. A request for
-`current` resolves to the selected model; `auto` remains a LiteLLM model group
+`default` resolves to the selected model; `auto` is a LiteLLM model group
 whose provider errors use the configured fallback chain. Explicit fallback
 chains also cover MiniMax, OpenRouter, and Xiaomi target aliases. Advisor
 failover uses a private Gemini alias plus GPT-6.1 Sol, so advisor errors do not

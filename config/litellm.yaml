@@ -1,25 +1,15 @@
 model_list:
   # Native provider adapters. Change model_name to the stable public aliases
   # that coding tools should select. Add deployments rather than Python code.
-  - model_name: current
+  # Explicit automatic route. LiteLLM tries this MiniMax deployment first,
+  # then the configured Gemini and Codex subscription groups on provider error.
+  - model_name: auto
     model_info:
       <<: &context_policy
         max_input_tokens: 256000
         context_window: 256000
         auto_compact_token_limit: 204800
         compaction_scope: total
-      display_name: Current model
-      selectable: false
-      disable_background_health_check: true
-    litellm_params:
-      # The dynamic router resolves this virtual entry before deployment selection.
-      model: openai/current
-
-  # Explicit automatic route. LiteLLM tries this MiniMax deployment first,
-  # then the configured Gemini and Codex subscription groups on provider error.
-  - model_name: auto
-    model_info:
-      <<: *context_policy
       display_name: Auto
       selectable: false
       disable_background_health_check: true

@@ -53,9 +53,9 @@ services:
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres:5432/litellm
       - SUBROUTE_ENVIRONMENT=production
       - SUBROUTE_ACCOUNTING_SECRET
-      # No GATEWAY_MASTER_KEY is passed by default, so loopback clients can use
-      # the gateway without an Authorization header. Add one explicitly only
-      # when client bearer-token auth is wanted.
+      # An explicit GATEWAY_MASTER_KEY enables the Admin UI and bearer-token auth.
+      # Leave it unset for the default loopback-only, unauthenticated API.
+      - GATEWAY_MASTER_KEY
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
@@ -65,7 +65,7 @@ services:
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
       - UI_USERNAME=${UI_USERNAME:-admin}
-      - UI_PASSWORD=${UI_PASSWORD:-sk-gateway-local-dev}
+      - UI_PASSWORD=${UI_PASSWORD:-password}
       - MINIMAX_API_KEY
       - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY
@@ -95,6 +95,7 @@ services:
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
       - SUBROUTE_ENVIRONMENT=staging
       - SUBROUTE_ACCOUNTING_SECRET
+      - GATEWAY_MASTER_KEY
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
@@ -104,7 +105,7 @@ services:
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
       - UI_USERNAME=${UI_USERNAME:-admin}
-      - UI_PASSWORD=${UI_PASSWORD:-sk-gateway-local-dev}
+      - UI_PASSWORD=${UI_PASSWORD:-password}
       - MINIMAX_API_KEY
       - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY

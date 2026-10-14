@@ -14,12 +14,12 @@ On first launch it creates `%APPDATA%/subroute-desktop/sources.json` from `sourc
 
 The launcher starts each installed CLI in a visible PowerShell window rooted at the selected working directory. It checks the CLI's local `--version` command before enabling its Launch button. Claude Code, Codex, OpenCode, OpenClaw, Hermes, and DeepSeek Harness receive a session-only Subroute configuration; their generated profile files live under `%APPDATA%/subroute-desktop/launch/`, not in the agent's existing home directory. The terminal stays open so a gateway or provider error remains visible instead of being reported as a false successful launch.
 
-Each launch follows `current`, so switching the gateway's target keeps the same **256,000-token context budget** and **204,800-token (80%) compaction trigger**. The launcher owns these session settings in `agents.cjs`; they override inherited compaction-disable flags for Claude Code and OpenCode. Relaunch an existing terminal to pick up new settings.
+Each launch uses `auto` with the same **256,000-token context budget** and **204,800-token (80%) compaction trigger**. The launcher owns these session settings in `agents.cjs`; they override inherited compaction-disable flags for Claude Code and OpenCode. Relaunch an existing terminal to pick up new settings.
 
 | Client | Native configuration |
 | --- | --- |
 | Codex | Explicit window and compaction threshold in the catalog, profile and CLI overrides; `model_auto_compact_token_limit_scope = "total"` counts the entire active context, including the carried summary prefix. The catalog uses 100% of the configured window. |
-| Claude Code | Unknown alias `current`, `CLAUDE_CODE_MAX_CONTEXT_TOKENS=256000`, `CLAUDE_CODE_AUTO_COMPACT_WINDOW=256000`, and `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`. |
+| Claude Code | Alias `auto`, `CLAUDE_CODE_MAX_CONTEXT_TOKENS=256000`, `CLAUDE_CODE_AUTO_COMPACT_WINDOW=256000`, and `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`. |
 | OpenCode 1.x | Context and input limits of 256000, automatic compaction, no separate tool-output pruning, and a 51200-token reserve. Its native check counts input, output and cache tokens together. |
 | Hermes | `model.context_length=256000`, enabled compression with ratio 0.8 and absolute threshold 204800; disable its Codex threshold autoraise. |
 | DeepSeek Harness | `contextWindow=256000`; the installed native `compaction-basic` policy defaults to ratio 0.8 and measures the full assembled request. |

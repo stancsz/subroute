@@ -54,7 +54,7 @@ def verify_stream(response):
     return blocks
 
 
-PAYLOAD = {"model": "current", "max_tokens": 2048, "stream": True,
+PAYLOAD = {"model": "default", "max_tokens": 2048, "stream": True,
            "thinking": {"type": "enabled", "budget_tokens": 1024},
            "messages": [{"role": "user", "content": "Write exactly two lines: FORMAT_LINE_A then FORMAT_LINE_B. Put a real line break between the lines, with no code fence or explanation."}]}
 
@@ -91,7 +91,7 @@ def test_local_parallel_tools_and_followup(formatting_gateway):
     token = os.getenv("SUBROUTE_LOCAL_API_KEY")
     headers = {"x-api-key": token} if token else {}
     messages = [{"role": "user", "content": "Call lookup twice, once with q=1 and once with q=2. Do not answer until both tool results return."}]
-    payload = {"model": "current", "max_tokens": 2048, "stream": True, "messages": messages,
+    payload = {"model": "default", "max_tokens": 2048, "stream": True, "messages": messages,
                "tools": [{"name": "lookup", "description": "Look up a number.", "input_schema": {"type": "object", "properties": {"q": {"type": "integer"}}, "required": ["q"], "additionalProperties": False}}],
                "tool_choice": {"type": "any"}}
     with httpx.Client(base_url=base, headers=headers, timeout=120) as client:

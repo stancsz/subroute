@@ -43,7 +43,7 @@ def test_client_tool_allowlist_rejects_unsafe_setup_before_upstream_dispatch():
     # An unreachable upstream makes any accidental forward fail this check.
     with WireRecorder("http://127.0.0.1:1", allowed_tools={"read_files"}) as recorder:
         response = httpx.post(recorder.base_url + "/v1/chat/completions", json={
-            "model": "current", "tools": [{"type": "function", "function": {"name": "run_commands"}}]})
+            "model": "auto", "tools": [{"type": "function", "function": {"name": "run_commands"}}]})
     assert response.status_code == 400
     assert recorder.records[0]["status"] == 400
     assert "read-only allowlist" in response.json()["error"]["message"]

@@ -84,8 +84,8 @@ def test_invalid_effort_fails_before_state_changes(control, monkeypatch):
 
 
 @pytest.mark.parametrize("mode,requested,expected", [
-    ("force", "desktop", "high"), ("alias", "current", "high"),
-    ("alias", "codex-luna", None), ("off", "current", None),
+    ("force", "desktop", "high"), ("alias", "default", "high"),
+    ("alias", "codex-luna", None), ("off", "default", None),
 ])
 def test_effort_only_overrides_routed_requests_and_uses_one_snapshot(control, mode, requested, expected):
     control.update("codex-luna", mode, reasoning_effort="high")
@@ -123,7 +123,7 @@ def test_chat_override_preserves_reasoning_summary_and_original_request(control)
 def test_responses_policy_never_leaks_into_provider_metadata(control, provider_metadata):
     control.update("codex-luna", "force", reasoning_effort="low")
     plugin = DynamicRoutingPlugin(control)
-    data = {"model": "current", "input": [{"role": "user", "content": "hello"}]}
+    data = {"model": "default", "input": [{"role": "user", "content": "hello"}]}
     if provider_metadata is not None:
         data["metadata"] = provider_metadata.copy()
     asyncio.run(plugin.async_pre_call_hook({}, None, data, "aresponses"))
@@ -138,7 +138,7 @@ def test_responses_policy_never_leaks_into_provider_metadata(control, provider_m
 def test_native_codex_bridge_transmits_selected_effort(control, monkeypatch, protocol, alias, model, effort):
     control.update(alias, "force", reasoning_effort=effort)
     plugin = DynamicRoutingPlugin(control)
-    data = {"model": "current", "messages": [{"role": "user", "content": "hello"}]}
+    data = {"model": "default", "messages": [{"role": "user", "content": "hello"}]}
     asyncio.run(plugin.async_pre_call_hook({}, None, data, "acompletion"))
     monkeypatch.setattr(litellm, "callbacks", [plugin])
     captured = []

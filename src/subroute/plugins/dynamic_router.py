@@ -26,7 +26,7 @@ RoutingMode = Literal["alias", "force", "off"]
 AdvisorTrigger = Literal["model", "adaptive", "hybrid", "always"]
 AdvisorSensitivity = Literal["conservative", "balanced", "frequent"]
 AdvisorClassifier = Literal["local", "rules"]
-VIRTUAL_ALIASES = frozenset({"current", "default", "auto"})
+VIRTUAL_ALIASES = frozenset({"default", "auto"})
 RETIRED_MODEL_ALIASES = {
     "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
     "codex-terra": "codex-subscription", "codex-reserve": "codex-luna",
@@ -313,6 +313,8 @@ class DynamicRoutingPlugin(CustomLogger):
         call_type: str,
     ) -> dict | None:
         requested_model = data.get("model")
+        if requested_model == "current":
+            raise HTTPException(status_code=404, detail="unknown model")
         # This request snapshot is server-owned, never a client override.
         data.pop("gateway_image_request", None)
         if isinstance(data.get("extra_body"), dict):

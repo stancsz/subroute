@@ -163,7 +163,7 @@ def _configured_proxy(
                     "allowed_openai_params": ["reasoning_effort"],
                 },
             } for model_name, target in (
-                ("current", "gpt-6-luna"),
+                ("default", "gpt-6-luna"),
                 ("codex-luna", "gpt-6-luna"),
                 ("codex-gpt-6.1-sol", "gpt-6.1-sol"),
             )]
@@ -281,7 +281,7 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
 
     config_path = temp_dir / "routing.yaml"
     config_path.write_text("""model_list:
-  - model_name: current
+  - model_name: default
     litellm_params: {model: openai/virtual}
   - model_name: codex-luna
     litellm_params: {model: codex-subscription/gpt-6-luna}
@@ -322,7 +322,7 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
             assert update_response.status_code == 200, update_response.text
             saved_state = update_response.json()
             response = client.post("/v1/chat/completions", json={
-                "model": "current",
+                "model": "default",
                 "messages": [{"role": "user", "content": "say hello"}],
             })
 
@@ -332,7 +332,7 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
     assert saved_state["mode"] == "alias"
     assert upstream_models == ["openai/responses/gpt-6.1-sol"]
     assert routed_metadata[0]["routing"] == {
-        "requested_model": "current",
+        "requested_model": "default",
         "resolved_model": "codex-gpt-6.1-sol",
         "mode": "alias",
         "policy_version": saved_state["policy_version"],
