@@ -247,6 +247,133 @@ def test_policy_selected_non_subscription_target_uses_native_advisor():
     }]
 
 
+@pytest.mark.parametrize("sensitivity,prompt,consulted", [
+    ("frequent", "simple question", False),
+    ("frequent", "x" * 400, True),
+    ("balanced", "x" * 400, False),
+    ("balanced", "x" * 1200, True),
+    ("conservative", "x" * 1200, False),
+    ("conservative", "```python\n" + "x" * 1200 + "\n```", True),
+])
+def test_gateway_trigger_controls_openrouter_advisor_call(monkeypatch, sensitivity, prompt, consulted):
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    calls = []
+
+    async def fake_collect(model, messages, **kwargs):
+        calls.append(model)
+        return "Check the proposed change.", Usage(prompt_tokens=9, completion_tokens=5, total_tokens=14)
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fake_collect)
+    data = {
+        "model": "openrouter",
+        "messages": [{"role": "user", "content": prompt}],
+        "metadata": {"gateway_policy": {
+            "advisor_model": "codex-luna-advisor", "advisor_trigger": "adaptive",
+            "advisor_sensitivity": sensitivity, "advisor_classifier": "rules",
+        }},
+    }
+
+    run(AdvisorPlugin(), data)
+
+    assert calls == (["gpt-6-luna"] if consulted else [])
+    assert "tools" not in data
+    if consulted:
+        assert data["messages"][-1] == {
+            "role": "developer", "content": "Independent advisor guidance:\nCheck the proposed change.",
+        }
+        assert data["metadata"]["gateway_advisor"]["status"] == "advice_injected"
+    else:
+        assert data["messages"] == [{"role": "user", "content": prompt}]
+        assert data["metadata"]["gateway_advisor"]["reason"] == "below_complexity_threshold"
+
+
+def test_hybrid_keeps_native_tool_available_after_preconsult(monkeypatch):
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    async def classify(prompt, recent_tool_history):
+        assert prompt == "Review the implementation"
+        assert recent_tool_history is False
+        return 1, "qwen3.5:4b"
+
+    calls = []
+
+    async def fake_collect(model, messages, **kwargs):
+        calls.append(model)
+        return "Check cancellation.", Usage(prompt_tokens=8, completion_tokens=4, total_tokens=12)
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fake_collect)
+    plugin = AdvisorPlugin()
+    monkeypatch.setattr(plugin.classifier, "classify", classify)
+    policy = {
+        "advisor_model": "codex-luna-advisor", "advisor_trigger": "hybrid",
+        "advisor_sensitivity": "balanced", "advisor_classifier": "local",
+    }
+    data = {"model": "openrouter", "messages": [{"role": "user", "content": "Review the implementation"}],
+            "metadata": {"gateway_policy": policy}}
+
+    run(plugin, data)
+    assert data["tools"][0]["type"] == ADVISOR_TOOL_TYPE
+    assert data["metadata"]["gateway_advisor_decision"]["source"] == "local"
+    assert calls == []
+
+    policy["advisor_sensitivity"] = "frequent"
+    data = {"model": "openrouter", "messages": [{"role": "user", "content": "Review the implementation"}],
+            "metadata": {"gateway_policy": policy}}
+    run(plugin, data)
+    assert data["tools"][0]["type"] == ADVISOR_TOOL_TYPE
+    assert data["metadata"]["gateway_advisor"]["status"] == "advice_injected"
+    assert calls == ["gpt-6-luna"]
+
+
+def test_local_classifier_failure_uses_rules_without_extra_provider_call(monkeypatch):
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    calls = []
+
+    async def unavailable(prompt, recent_tool_history):
+        raise TimeoutError("local model unavailable")
+
+    async def fake_collect(model, messages, **kwargs):
+        calls.append(model)
+        return "Check the error path.", Usage(prompt_tokens=8, completion_tokens=4, total_tokens=12)
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fake_collect)
+    plugin = AdvisorPlugin()
+    monkeypatch.setattr(plugin.classifier, "classify", unavailable)
+    data = {"model": "openrouter", "messages": [{"role": "user", "content": "x" * 1200}],
+            "metadata": {"gateway_policy": {
+                "advisor_model": "codex-luna-advisor", "advisor_trigger": "adaptive",
+                "advisor_sensitivity": "balanced", "advisor_classifier": "local",
+            }}}
+
+    run(plugin, data)
+    assert calls == ["gpt-6-luna"]
+    assert data["metadata"]["gateway_advisor_decision"]["source"] == "rules_fallback"
+    assert data["metadata"]["gateway_advisor_decision"]["classifier_error"] == "TimeoutError"
+
+
+def test_gateway_trigger_skips_non_messages_and_unsupported_gemini_content(monkeypatch):
+    from subroute.plugins import advisor_plugin
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("Ineligible requests must not call the advisor")
+
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", unexpected)
+    data = {"model": "openrouter", "messages": [{"role": "user", "content": "x" * 1200}],
+            "metadata": {"gateway_policy": {"advisor_model": "gemini-subscription", "advisor_trigger": "always"}}}
+    assert run(AdvisorPlugin(), data, "acompletion") is None
+    assert "gateway_advisor" not in data["metadata"]
+
+    data["messages"] = [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}]
+    run(AdvisorPlugin(), data)
+    assert data["metadata"]["gateway_advisor"]["reason"] == "unsupported_content"
+    assert "tools" not in data
+
+
 @pytest.mark.parametrize("effort", [None, "high"])
 @pytest.mark.parametrize("target", ["codex-luna", "gemini-subscription-pro"])
 @pytest.mark.parametrize("metadata_key", ["metadata", "litellm_metadata"])

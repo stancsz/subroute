@@ -97,7 +97,8 @@ def test_alias_mode_resolves_current_but_preserves_explicit_models(tmp_path: Pat
         "gateway_policy": {
             "active_model": "minimax", "mode": "alias", "policy_version": 1,
             "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "low",
+        "reasoning_effort": None, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
+        "advisor_sensitivity": "balanced", "advisor_classifier": "local",
         },
         "routing": {
             "requested_model": "current",
@@ -231,7 +232,10 @@ def test_saved_gpt_5_target_migrates_once_and_preserves_policy(tmp_path, retired
     }
     state_path.write_text(json.dumps(saved), encoding="utf-8")
     control = RoutingControlPlane(config_path, state_path)
-    expected = {**saved, "active_model": replacement, "policy_version": 13}
+    expected = {
+        **saved, "active_model": replacement, "policy_version": 13,
+        "advisor_trigger": "model", "advisor_sensitivity": "balanced", "advisor_classifier": "local",
+    }
     assert json.loads(state_path.read_text(encoding="utf-8")) == expected
     assert control.resolve("current")[0] == replacement
     assert retired not in control.allowed_models
@@ -302,7 +306,8 @@ def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "low",
+        "reasoning_effort": None, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
+        "advisor_sensitivity": "balanced", "advisor_classifier": "local",
     }
     assert not list(tmp_path.glob("*.tmp"))
     with pytest.raises(ValueError, match="not selectable"):
@@ -337,7 +342,8 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "low",
+        "reasoning_effort": None, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
+        "advisor_sensitivity": "balanced", "advisor_classifier": "local",
     }
     assert client.get("/api/active-model").json() == response.json()
     options = client.get("/api/routing-options")
@@ -358,6 +364,26 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     )
     assert luna_advisor.status_code == 200
     assert luna_advisor.json()["advisor_model"] == "codex-luna-advisor"
+    adaptive = client.post(
+        "/api/advisor-model",
+        json={
+            "advisor_model": "codex-luna-advisor", "advisor_trigger": "hybrid",
+            "advisor_sensitivity": "conservative", "advisor_classifier": "rules",
+        },
+        headers={"origin": "http://testserver"},
+    )
+    assert adaptive.status_code == 200
+    assert adaptive.json()["advisor_trigger"] == "hybrid"
+    assert adaptive.json()["advisor_sensitivity"] == "conservative"
+    assert adaptive.json()["advisor_classifier"] == "rules"
+    assert RoutingControlPlane(control.config_path, control.state_path).snapshot().advisor_trigger == "hybrid"
+    invalid = client.post(
+        "/api/advisor-model",
+        json={"advisor_model": "codex-luna-advisor", "advisor_trigger": "random"},
+        headers={"origin": "http://testserver"},
+    )
+    assert invalid.status_code == 422
+    assert control.snapshot().advisor_trigger == "hybrid"
     no_advisor = client.post(
         "/api/advisor-model",
         json={"advisor_model": None},

@@ -9,6 +9,8 @@ const moreCards = document.querySelector("#more-cards"), connectionCount = docum
 const routeModel = document.querySelector("#route-model"), routeMode = document.querySelector("#route-mode"), routeAdvisor = document.querySelector("#route-advisor");
 const routeProvider = document.querySelector("#route-provider"), advisorProvider = document.querySelector("#advisor-provider");
 const routeEffort = document.querySelector("#route-effort"), advisorEffort = document.querySelector("#route-advisor-effort");
+const advisorTrigger = document.querySelector("#route-advisor-trigger");
+const advisorSensitivity = document.querySelector("#route-advisor-sensitivity"), advisorClassifier = document.querySelector("#route-advisor-classifier");
 const routeStatus = document.querySelector("#route-status"), routeKey = document.querySelector("#route-key");
 const policySummary = document.querySelector("#policy-summary");
 new MutationObserver(() => {
@@ -44,6 +46,9 @@ function setRoutingDisabled(value) {
   routeAdvisor.disabled = value || !advisorProvider.value;
   routeEffort.disabled = value || !routeModel.value || routeMode.value === "off" || routeEffort.options.length < 2;
   advisorEffort.disabled = value || !routeAdvisor.value || advisorEffort.options.length < 2;
+  advisorTrigger.disabled = value || !routeAdvisor.value;
+  advisorSensitivity.disabled = value || !routeAdvisor.value || !["adaptive", "hybrid"].includes(advisorTrigger.value);
+  advisorClassifier.disabled = advisorSensitivity.disabled;
 }
 
 function renderProviderMenu(select, choices, selected, advisor = false) {
@@ -101,6 +106,9 @@ async function renderRouting() {
     renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, routing.state.advisor_model);
     routeMode.querySelector("[data-unavailable]")?.remove();
     routeMode.value = routing.state.mode;
+    advisorTrigger.value = routing.state.advisor_trigger || "model";
+    advisorSensitivity.value = routing.state.advisor_sensitivity || "balanced";
+    advisorClassifier.value = routing.state.advisor_classifier || "local";
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
     renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
@@ -128,7 +136,7 @@ async function saveAdvisorRouting() {
   if (!routingReady) return;
   setRoutingDisabled(true); routeStatus.textContent = "Saving advisor…";
   try {
-    const state = await request("/api/advisor-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ advisor_model: routeAdvisor.value || null, reasoning_effort: advisorEffort.value || null }) });
+    const state = await request("/api/advisor-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ advisor_model: routeAdvisor.value || null, reasoning_effort: advisorEffort.value || null, advisor_trigger: advisorTrigger.value, advisor_sensitivity: advisorSensitivity.value, advisor_classifier: advisorClassifier.value }) });
     routeStatus.textContent = `Advisor ${state.advisor_model ? "saved" : "disabled"} · policy v${state.policy_version}`; setRoutingDisabled(false);
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
 }
@@ -235,6 +243,9 @@ routeMode.addEventListener("change", saveActiveRouting);
 routeEffort.addEventListener("change", saveActiveRouting);
 routeAdvisor.addEventListener("change", () => { renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, null, "#route-advisor-effort-help", true); saveAdvisorRouting(); });
 advisorEffort.addEventListener("change", saveAdvisorRouting);
+advisorTrigger.addEventListener("change", saveAdvisorRouting);
+advisorSensitivity.addEventListener("change", saveAdvisorRouting);
+advisorClassifier.addEventListener("change", saveAdvisorRouting);
 const menuToggle = document.querySelector("#menu-toggle");
 function closeNavigation() {
   document.body.classList.remove("menu-open");

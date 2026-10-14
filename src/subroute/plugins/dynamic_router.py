@@ -23,6 +23,9 @@ from subroute.ui_control import register_ui_routes, source_configuration
 
 
 RoutingMode = Literal["alias", "force", "off"]
+AdvisorTrigger = Literal["model", "adaptive", "hybrid", "always"]
+AdvisorSensitivity = Literal["conservative", "balanced", "frequent"]
+AdvisorClassifier = Literal["local", "rules"]
 VIRTUAL_ALIASES = frozenset({"current", "default", "auto"})
 RETIRED_MODEL_ALIASES = {
     "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
@@ -41,6 +44,9 @@ class RoutingState:
     advisor_model: str | None = "codex-gpt-6.1-sol-advisor"
     reasoning_effort: str | None = None
     advisor_reasoning_effort: str | None = None
+    advisor_trigger: AdvisorTrigger = "model"
+    advisor_sensitivity: AdvisorSensitivity = "balanced"
+    advisor_classifier: AdvisorClassifier = "local"
 
 
 @dataclass(frozen=True)
@@ -66,6 +72,9 @@ class RoutingUpdate(BaseModel):
 class AdvisorUpdate(BaseModel):
     advisor_model: str | None
     reasoning_effort: str | None = None
+    advisor_trigger: AdvisorTrigger | None = None
+    advisor_sensitivity: AdvisorSensitivity | None = None
+    advisor_classifier: AdvisorClassifier | None = None
 
 
 def _load_choices(config_path: Path) -> tuple[ModelChoice, ...]:
@@ -147,6 +156,9 @@ class RoutingControlPlane:
             advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")),
             reasoning_effort=raw.get("reasoning_effort"),
             advisor_reasoning_effort=raw.get("advisor_reasoning_effort"),
+            advisor_trigger=raw.get("advisor_trigger", "model"),
+            advisor_sensitivity=raw.get("advisor_sensitivity", "balanced"),
+            advisor_classifier=raw.get("advisor_classifier", "local"),
         )
         if replacement := RETIRED_MODEL_ALIASES.get(state.active_model):
             state = replace(state, active_model=replacement, policy_version=state.policy_version + 1)
@@ -165,6 +177,12 @@ class RoutingControlPlane:
             raise ValueError("policy_version must be positive")
         if state.advisor_model is not None and state.advisor_model not in self.advisor_models:
             raise ValueError(f"advisor model is not selectable: {state.advisor_model!r}")
+        if state.advisor_trigger not in {"model", "adaptive", "hybrid", "always"}:
+            raise ValueError(f"invalid advisor trigger: {state.advisor_trigger!r}")
+        if state.advisor_sensitivity not in {"conservative", "balanced", "frequent"}:
+            raise ValueError(f"invalid advisor sensitivity: {state.advisor_sensitivity!r}")
+        if state.advisor_classifier not in {"local", "rules"}:
+            raise ValueError(f"invalid advisor classifier: {state.advisor_classifier!r}")
         for model, effort in (
             (state.active_model, state.reasoning_effort),
             (state.advisor_model, state.advisor_reasoning_effort),
@@ -223,6 +241,9 @@ class RoutingControlPlane:
                     if advisor_model == self._state.advisor_model
                     else default_effort,
                 ),
+                advisor_trigger=settings.get("advisor_trigger") or self._state.advisor_trigger,
+                advisor_sensitivity=settings.get("advisor_sensitivity") or self._state.advisor_sensitivity,
+                advisor_classifier=settings.get("advisor_classifier") or self._state.advisor_classifier,
             )
             self._validate(candidate)
             self._write_atomic(candidate)
@@ -567,7 +588,10 @@ async def update_advisor_model(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=415, detail="application/json is required")
     try:
         update = AdvisorUpdate.model_validate(await request.json())
-        settings = update.model_dump(include={"reasoning_effort"}, exclude_unset=True)
+        settings = update.model_dump(
+            include={"reasoning_effort", "advisor_trigger", "advisor_sensitivity", "advisor_classifier"},
+            exclude_unset=True,
+        )
         return asdict(control_plane.update_advisor(update.advisor_model, **settings))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise HTTPException(status_code=422, detail="invalid advisor update") from exc

@@ -56,11 +56,15 @@
           <p id="route-effort-help" class="route-help"></p>
         </div>
         <div class="route-column route-model-panel advisor-panel">
-          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on tool requests</small></div><span class="role-pill optional">Optional</span></div>
+          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on Messages requests</small></div><span class="role-pill optional">Optional</span></div>
           <label>Provider<select id="advisor-provider" aria-label="Advisor provider" disabled><option value="">Loading providers…</option></select></label>
           <label>Model route<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
           <label>Reasoning effort<select id="route-advisor-effort" aria-label="Advisor reasoning" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
           <p id="route-advisor-effort-help" class="route-help"></p>
+          <label>When to consult<select id="route-advisor-trigger" aria-label="Advisor trigger" aria-describedby="route-advisor-trigger-help" disabled><option value="model">Current behavior</option><option value="adaptive">Adaptive before target</option><option value="hybrid">Adaptive + target may ask</option><option value="always">Every eligible request</option></select></label>
+          <label>Adaptive sensitivity<select id="route-advisor-sensitivity" aria-label="Advisor sensitivity" disabled><option value="conservative">Less often</option><option value="balanced">Balanced</option><option value="frequent">More often</option></select></label>
+          <label>Complexity check<select id="route-advisor-classifier" aria-label="Advisor classifier" disabled><option value="local">Local model, rules fallback</option><option value="rules">Gateway rules only</option></select></label>
+          <p id="route-advisor-trigger-help" class="route-help">Adaptive checks run before the target. Combined mode also lets the target request advice on any turn, including after preconsultation. The local check uses Ollama and falls back to rules if unavailable.</p>
         </div>
       </div>
       <div class="route-footer">
@@ -97,6 +101,6 @@
 
   <template id="card"><article class="card"><div class="provider-info"><div class="card-head"><span class="source-mark" aria-hidden="true"></span><h3></h3></div><p class="models"></p></div><span class="kind"></span><div class="usage-row"><p class="usage"></p><span class="source-state"></span></div><div class="bar" role="img"><i></i></div><footer></footer></article></template>
   <template id="agent"><article class="agent"><span class="agent-state" aria-hidden="true"></span><div><b></b><small></small></div><button type="button"></button></article></template>
-  <script src="/control/app.js?v=badlands-3"></script>
+  <script src="/control/app.js?v=badlands-4"></script>
 </body>
 </html>

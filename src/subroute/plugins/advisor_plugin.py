@@ -22,6 +22,7 @@ from subroute.handlers.codex_advisor import (
 from subroute.handlers.antigravity import invoke_agy, model_with_effort, prompt_from_messages
 from subroute.handlers.antigravity import AntigravityBridgeError, AntigravityRequestTooLargeError
 from subroute.handlers.codex_advisor import CodexAdvisorError
+from subroute.plugins.advisor_classifier import LocalComplexityClassifier
 
 
 ADVISOR_TOOL_TYPE = "advisor_20260301"
@@ -56,6 +57,7 @@ ADVISOR_TOOL_MODEL_ALIASES = {
     # private LiteLLM group to keep fallback policy scoped to consultation.
     "gemini-subscription": "gemini-3.8-flash-advisor",
 }
+ADAPTIVE_THRESHOLDS = {"frequent": 1, "balanced": 2, "conservative": 3}
 logger = logging.getLogger(__name__)
 _SECRET_FIELD = re.compile(
     r"(?i)\b(authorization|api[\s_-]?key|access[\s_-]?token|refresh[\s_-]?token|token|password)(['\"]?\s*[:=]\s*['\"]?)([^'\"\s,;}\]]+)"
@@ -106,6 +108,7 @@ class AdvisorPlugin(CustomLogger):
         if not 1 <= max_uses <= 5:
             raise ValueError("max_uses must be between 1 and LiteLLM's hard cap of 5")
         self.max_uses = max_uses
+        self.classifier = LocalComplexityClassifier()
 
     @staticmethod
     def _context_limits(router: Any, model: str) -> tuple[int | None, int | None]:
@@ -185,6 +188,65 @@ class AdvisorPlugin(CustomLogger):
                 continue
             return index
         return -1
+
+    @classmethod
+    def _latest_user_text(cls, messages: list[dict[str, Any]]) -> str:
+        latest_user = cls._latest_user_index(messages)
+        if latest_user < 0:
+            return ""
+        content = messages[latest_user].get("content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "\n".join(
+                part.get("text", "") for part in content
+                if isinstance(part, dict) and part.get("type") in {"text", "input_text"}
+                and isinstance(part.get("text"), str)
+            )
+        return ""
+
+    @classmethod
+    def _recent_tool_history(cls, messages: list[dict[str, Any]]) -> bool:
+        latest_user = cls._latest_user_index(messages)
+        return latest_user >= 0 and has_tool_history(messages[max(0, latest_user - 6):latest_user])
+
+    @classmethod
+    def _complexity_score(cls, messages: list[dict[str, Any]]) -> int:
+        """Fallback score when local classification is disabled or unavailable."""
+        prompt = cls._latest_user_text(messages)
+        score = 2 if len(prompt) >= 1200 else 1 if len(prompt) >= 400 else 0
+        sample = prompt[:32000]
+        if "```" in sample or re.search(r"(?m)^(?:diff --git |@@ |\+\+\+ |--- )", sample):
+            score += 1
+        if len(re.findall(r"(?m)^\s*(?:\d+[.)]|[-*])\s+", sample)) >= 2:
+            score += 1
+        if cls._recent_tool_history(messages):
+            score += 2
+        return min(score, 3)
+
+    async def _adaptive_decision(
+        self, messages: list[dict[str, Any]], classifier: str, sensitivity: str,
+    ) -> dict[str, Any]:
+        threshold = ADAPTIVE_THRESHOLDS[sensitivity]
+        if classifier == "rules":
+            level = self._complexity_score(messages)
+            return {"level": level, "threshold": threshold, "source": "rules", "consult": level >= threshold}
+        try:
+            level, model = await self.classifier.classify(
+                self._latest_user_text(messages), self._recent_tool_history(messages),
+            )
+            if self._recent_tool_history(messages):
+                level = max(level, 2)
+            return {
+                "level": level, "threshold": threshold, "source": "local",
+                "classifier_model": model, "consult": level >= threshold,
+            }
+        except Exception as exc:
+            level = self._complexity_score(messages)
+            return {
+                "level": level, "threshold": threshold, "source": "rules_fallback",
+                "classifier_error": type(exc).__name__, "consult": level >= threshold,
+            }
 
     @staticmethod
     def _completion_text(response: Any) -> str:
@@ -474,6 +536,13 @@ class AdvisorPlugin(CustomLogger):
         if not advisor_model:
             return None
         advisor_effort = policy.get("advisor_reasoning_effort")
+        trigger = policy.get("advisor_trigger", "model")
+        if trigger not in {"model", "adaptive", "hybrid", "always"}:
+            raise ValueError("Invalid advisor trigger policy")
+        sensitivity = policy.get("advisor_sensitivity", "balanced")
+        classifier = policy.get("advisor_classifier", "local")
+        if sensitivity not in ADAPTIVE_THRESHOLDS or classifier not in {"local", "rules"}:
+            raise ValueError("Invalid adaptive advisor policy")
 
         messages = data.get("messages") or []
         if has_tool_history(messages) and (
@@ -487,6 +556,30 @@ class AdvisorPlugin(CustomLogger):
             }
             return data
 
+        adaptive_consult = False
+        if trigger in {"adaptive", "hybrid"}:
+            decision = await self._adaptive_decision(messages, classifier, sensitivity)
+            metadata["gateway_advisor_decision"] = {**decision, "trigger": trigger}
+            logger.info(
+                "advisor trigger request_id=%s mode=%s source=%s level=%s threshold=%s consult=%s classifier_error=%s",
+                data.get("litellm_call_id"), trigger, decision["source"],
+                decision["level"], decision["threshold"], decision["consult"],
+                decision.get("classifier_error"),
+            )
+            if decision["source"] == "rules_fallback":
+                logger.warning(
+                    "advisor local classifier unavailable request_id=%s error_type=%s; using gateway rules",
+                    data.get("litellm_call_id"), decision["classifier_error"],
+                )
+            adaptive_consult = decision["consult"]
+            if trigger == "adaptive" and not adaptive_consult:
+                metadata["gateway_advisor"] = {
+                    "status": "skipped", "reason": "below_complexity_threshold",
+                    "model": advisor_model, "level": decision["level"],
+                    "threshold": decision["threshold"],
+                }
+                return data
+
         minimax_gemini_pair = (
             data.get("model") == "minimax"
             and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
@@ -495,8 +588,12 @@ class AdvisorPlugin(CustomLogger):
             data.get("model") in CODEX_SUBSCRIPTION_MODELS | ANTIGRAVITY_ADVISOR_MODELS.keys()
             and advisor_model in {*ADVISOR_MODEL_NAMES, *ANTIGRAVITY_ADVISOR_MODELS}
         )
+        preconsult = (
+            trigger == "always" or adaptive_consult
+            or (trigger == "model" and (minimax_gemini_pair or existing_preconsult_pair))
+        )
         if (
-            (minimax_gemini_pair or existing_preconsult_pair)
+            preconsult
             and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
             and any(not isinstance(message.get("content", ""), str) for message in messages)
         ):
@@ -506,7 +603,7 @@ class AdvisorPlugin(CustomLogger):
                 "model": advisor_model,
             }
             return data
-        if minimax_gemini_pair or existing_preconsult_pair:
+        if preconsult:
             # LiteLLM's router checks run after proxy callbacks. This earlier
             # consultation must use that same counter and configured cap before
             # spending provider tokens. Retire when LiteLLM checks before hooks.
@@ -647,7 +744,8 @@ class AdvisorPlugin(CustomLogger):
                 consultation_id, advisor_model, usage.prompt_tokens,
                 usage.completion_tokens, data["model"], advisor_effort,
             )
-            return data
+            if trigger != "hybrid":
+                return data
 
         raw_tools = data.get("tools")
         if raw_tools is None:
