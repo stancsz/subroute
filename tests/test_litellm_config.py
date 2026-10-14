@@ -296,7 +296,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     assert "depends_on" not in experts
     assert {model["model_name"] for model in expert_models} == {
         "codex-sol-advisor", "codex-astra-advisor", "codex-luna-advisor",
-        "codex-gpt-6.1-sol-advisor",
+        "codex-gpt-6.1-sol-advisor", "gemini-3.8-flash-advisor",
     }
     assert all(model["model_info"]["selectable"] is False for model in expert_models)
     assert {
@@ -304,6 +304,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     } == {
         "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
         "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
+        "antigravity/gemini-3.8-flash-low",
     }
     assert experts_config()["router_settings"] == {
         "num_retries": 0, "fallbacks": [], "enable_pre_call_checks": True,
@@ -317,6 +318,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     }
     assert gateway_advisors == {
         item["model_name"]: item["litellm_params"]["model"] for item in expert_models
+        if item["litellm_params"]["model"].startswith("codex-advisor/")
     }
     assert gateway_advisors == {
         alias: f"codex-advisor/{model}" for alias, model in ADVISOR_MODEL_NAMES.items()

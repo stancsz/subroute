@@ -1,6 +1,20 @@
 # A deliberately narrow, loopback-only API for compact expert consultations.
 # It exposes no executor aliases, routing state, UI, or advisor orchestration.
 model_list:
+  - model_name: gemini-3.8-flash-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: total
+      display_name: Gemini 3.8 Flash Advisor (Low)
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-3.8-flash-low
+      allowed_openai_params: [reasoning_effort]
+
   - model_name: codex-luna-advisor
     model_info:
       <<: &context_policy
@@ -59,6 +73,8 @@ router_settings:
 
 litellm_settings:
   custom_provider_map:
+    - provider: antigravity
+      custom_handler: subroute.handlers.antigravity.antigravity_handler
     - provider: codex-advisor
       custom_handler: subroute.handlers.codex_advisor.codex_advisor_handler
   drop_params: true
@@ -67,5 +83,6 @@ litellm_settings:
 general_settings:
   # Optional. When unset, loopback is the security boundary, matching port 4000.
   master_key: os.environ/EXPERTS_API_KEY
+  cancel_on_disconnect: true
   disable_spend_logs: true
   disable_error_tracking: true
