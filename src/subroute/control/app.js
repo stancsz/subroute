@@ -9,6 +9,7 @@ const moreCards = document.querySelector("#more-cards"), connectionCount = docum
 const routeModel = document.querySelector("#route-model"), routeMode = document.querySelector("#route-mode"), routeAdvisor = document.querySelector("#route-advisor");
 const routeProvider = document.querySelector("#route-provider"), advisorProvider = document.querySelector("#advisor-provider");
 const routeEffort = document.querySelector("#route-effort"), advisorEffort = document.querySelector("#route-advisor-effort");
+const routeFast = document.querySelector("#route-fast"), routeFastField = document.querySelector("#route-fast-field"), routeFastHelp = document.querySelector("#route-fast-help");
 const advisorTrigger = document.querySelector("#route-advisor-trigger");
 const advisorSensitivity = document.querySelector("#route-advisor-sensitivity"), advisorClassifier = document.querySelector("#route-advisor-classifier");
 const routeStatus = document.querySelector("#route-status"), routeKey = document.querySelector("#route-key");
@@ -45,6 +46,7 @@ function setRoutingDisabled(value) {
   routeModel.disabled = value || !routeProvider.value;
   routeAdvisor.disabled = value || !advisorProvider.value;
   routeEffort.disabled = value || !routeModel.value || routeMode.value === "off" || routeEffort.options.length < 2;
+  routeFast.disabled = value || routeFastField.hidden || routeMode.value === "off";
   advisorEffort.disabled = value || !routeAdvisor.value || advisorEffort.options.length < 2;
   advisorTrigger.disabled = value || !routeAdvisor.value;
   advisorSensitivity.disabled = value || !routeAdvisor.value || !["adaptive", "hybrid"].includes(advisorTrigger.value);
@@ -88,6 +90,14 @@ function renderEfforts(select, choices, model, selected, helpId, advisor = false
   document.querySelector(helpId).textContent = help;
 }
 
+function renderTargetSpeed(selected) {
+  const choice = routingModels.find(item => item.model_id === routeModel.value);
+  const available = choice?.configured && choice.source_id === "openai-subscription";
+  routeFastField.hidden = !available;
+  routeFastHelp.hidden = !available;
+  routeFast.value = available && selected ? "fast" : "standard";
+}
+
 async function renderRouting() {
   routingReady = false;
   try {
@@ -110,6 +120,7 @@ async function renderRouting() {
     advisorSensitivity.value = routing.state.advisor_sensitivity || "balanced";
     advisorClassifier.value = routing.state.advisor_classifier || "local";
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
+    renderTargetSpeed(routing.state.fast_mode);
     renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
     routeKey.textContent = routing.client_api_key_required ? "CLIENT API KEY REQUIRED" : "LOCAL CLIENT KEY BYPASS";
@@ -127,7 +138,7 @@ async function saveActiveRouting() {
   if (!routingReady) return;
   setRoutingDisabled(true); routeStatus.textContent = "Saving routing…";
   try {
-    const state = await request("/api/active-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: routeModel.value, mode: routeMode.value, reasoning_effort: routeEffort.value || null }) });
+    const state = await request("/api/active-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: routeModel.value, mode: routeMode.value, reasoning_effort: routeEffort.value || null, fast_mode: !routeFastField.hidden && routeFast.value === "fast" }) });
     routeStatus.textContent = `Routing saved · policy v${state.policy_version}`; setRoutingDisabled(false);
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
 }
@@ -229,6 +240,7 @@ document.querySelector("#refresh").addEventListener("click", () => load(true)); 
 routeProvider.addEventListener("change", () => {
   renderModelMenu(routeModel, routingModels, routeProvider.value, null);
   renderEfforts(routeEffort, routingModels, "", null, "#route-effort-help");
+  renderTargetSpeed(false);
   setRoutingDisabled(false); routeStatus.textContent = "Choose a target model to save this provider.";
 });
 advisorProvider.addEventListener("change", () => {
@@ -238,9 +250,10 @@ advisorProvider.addEventListener("change", () => {
   if (!advisorProvider.value) saveAdvisorRouting();
   else routeStatus.textContent = "Choose an advisor model to save this provider.";
 });
-routeModel.addEventListener("change", () => { renderEfforts(routeEffort, routingModels, routeModel.value, null, "#route-effort-help"); saveActiveRouting(); });
+routeModel.addEventListener("change", () => { renderEfforts(routeEffort, routingModels, routeModel.value, null, "#route-effort-help"); renderTargetSpeed(false); saveActiveRouting(); });
 routeMode.addEventListener("change", saveActiveRouting);
 routeEffort.addEventListener("change", saveActiveRouting);
+routeFast.addEventListener("change", saveActiveRouting);
 routeAdvisor.addEventListener("change", () => { renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, null, "#route-advisor-effort-help", true); saveAdvisorRouting(); });
 advisorEffort.addEventListener("change", saveAdvisorRouting);
 advisorTrigger.addEventListener("change", saveAdvisorRouting);

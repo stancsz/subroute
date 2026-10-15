@@ -83,6 +83,53 @@ def test_invalid_effort_fails_before_state_changes(control, monkeypatch):
     assert client.post("/api/active-model", json={"model": "codex-luna", "mode": "force", "reasoning_effort": None}).json()["reasoning_effort"] is None
 
 
+def test_fast_mode_is_openai_target_only_and_persists(control, monkeypatch):
+    monkeypatch.setattr(dynamic_router, "control_plane", control)
+    client = TestClient(app, client=("127.0.0.1", 50000))
+    original = control.snapshot()
+    assert client.post("/api/active-model", json={
+        "model": "openrouter", "mode": "force", "fast_mode": True,
+    }).status_code == 422
+    assert control.snapshot() == original
+
+    response = client.post("/api/active-model", json={
+        "model": "codex-luna", "mode": "force", "fast_mode": True,
+    })
+    assert response.status_code == 200
+    assert response.json()["fast_mode"] is True
+    assert RoutingControlPlane(control.config_path, control.state_path).snapshot().fast_mode is True
+    # Existing clients that omit the field retain the current target setting.
+    assert client.post("/api/active-model", json={
+        "model": "codex-luna", "mode": "alias",
+    }).json()["fast_mode"] is True
+    # Selecting another target clears the saved speed setting.
+    assert client.post("/api/active-model", json={
+        "model": "openrouter", "mode": "force",
+    }).json()["fast_mode"] is False
+
+
+@pytest.mark.parametrize("mode,requested,expected", [
+    ("force", "openrouter", True),
+    ("alias", "default", True),
+    ("alias", "codex-luna", False),
+    ("off", "codex-luna", False),
+])
+def test_fast_mode_uses_target_routing_snapshot(control, mode, requested, expected):
+    control.update("codex-luna", mode, fast_mode=True)
+    plugin = DynamicRoutingPlugin(control)
+    data = {"model": requested, "metadata": {}}
+    asyncio.run(plugin.async_pre_call_hook({}, None, data, "acompletion"))
+    control.update("codex-luna", mode, fast_mode=False)
+    assert data["metadata"]["gateway_target_fast_mode"] is expected
+    dispatch = {**data, "api_base": "https://chatgpt.com/backend-api/codex"}
+    result = asyncio.run(plugin.async_pre_call_deployment_hook(dispatch, "acompletion"))
+    assert (result or dispatch).get("service_tier") == ("fast" if expected else None)
+    assert "service_tier" not in data
+    dispatch["metadata"]["advisor_sub_call"] = True
+    advisor_dispatch = asyncio.run(plugin.async_pre_call_deployment_hook(dispatch, "acompletion"))
+    assert "service_tier" not in (advisor_dispatch or dispatch)
+
+
 @pytest.mark.parametrize("mode,requested,expected", [
     ("force", "desktop", "high"), ("alias", "default", "high"),
     ("alias", "codex-luna", None), ("off", "default", None),

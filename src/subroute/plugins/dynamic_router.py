@@ -43,6 +43,7 @@ class RoutingState:
     policy_version: int = 1
     advisor_model: str | None = "codex-gpt-6.1-sol-advisor"
     reasoning_effort: str | None = None
+    fast_mode: bool = False
     advisor_reasoning_effort: str | None = None
     advisor_trigger: AdvisorTrigger = "model"
     advisor_sensitivity: AdvisorSensitivity = "balanced"
@@ -67,6 +68,7 @@ class RoutingUpdate(BaseModel):
     model: str
     mode: RoutingMode
     reasoning_effort: str | None = None
+    fast_mode: bool | None = None
 
 
 class AdvisorUpdate(BaseModel):
@@ -155,6 +157,7 @@ class RoutingControlPlane:
             policy_version=int(raw.get("policy_version", 1)),
             advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")),
             reasoning_effort=raw.get("reasoning_effort"),
+            fast_mode=raw.get("fast_mode", False),
             advisor_reasoning_effort=raw.get("advisor_reasoning_effort"),
             advisor_trigger=raw.get("advisor_trigger", "model"),
             advisor_sensitivity=raw.get("advisor_sensitivity", "balanced"),
@@ -175,6 +178,11 @@ class RoutingControlPlane:
             raise ValueError(f"invalid routing mode: {state.mode!r}")
         if state.policy_version < 1:
             raise ValueError("policy_version must be positive")
+        if not isinstance(state.fast_mode, bool):
+            raise ValueError("fast_mode must be a boolean")
+        active_choice = next(choice for choice in self.choices if choice.model_id == state.active_model)
+        if state.fast_mode and active_choice.source_id != "openai-subscription":
+            raise ValueError("Fast mode requires an OpenAI subscription target")
         if state.advisor_model is not None and state.advisor_model not in self.advisor_models:
             raise ValueError(f"advisor model is not selectable: {state.advisor_model!r}")
         if state.advisor_trigger not in {"model", "adaptive", "hybrid", "always"}:
@@ -222,6 +230,7 @@ class RoutingControlPlane:
                 mode=mode,
                 policy_version=self._state.policy_version + 1,
                 reasoning_effort=settings.get("reasoning_effort", self._state.reasoning_effort if model == self._state.active_model else None),
+                fast_mode=settings.get("fast_mode", self._state.fast_mode if model == self._state.active_model else False),
             )
             self._validate(candidate)
             self._write_atomic(candidate)
@@ -340,6 +349,7 @@ class DynamicRoutingPlugin(CustomLogger):
             state = self.control_plane.snapshot()
             metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
             metadata["gateway_reasoning_effort"] = None
+            metadata["gateway_target_fast_mode"] = False
             # MiMo's ASR model accepts input_audio on its own Chat Completions
             # route. Preserve that explicit model choice; other audio requests
             # use the existing Gemini subscription route below.
@@ -364,6 +374,7 @@ class DynamicRoutingPlugin(CustomLogger):
             state = self.control_plane.snapshot()
             metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
             metadata["gateway_reasoning_effort"] = None
+            metadata["gateway_target_fast_mode"] = False
             metadata["routing"] = {
                 "requested_model": requested_model, "resolved_model": requested_model,
                 "mode": "speech_synthesis", "policy_version": state.policy_version,
@@ -379,6 +390,7 @@ class DynamicRoutingPlugin(CustomLogger):
             state = self.control_plane.snapshot()
             metadata["gateway_policy"] = asdict(state)
             metadata["gateway_reasoning_effort"] = None
+            metadata["gateway_target_fast_mode"] = False
             metadata["routing"] = {
                 "requested_model": requested_model, "resolved_model": "codex-luna",
                 "mode": image_context["reason"], "policy_version": state.policy_version,
@@ -397,6 +409,7 @@ class DynamicRoutingPlugin(CustomLogger):
             state = self.control_plane.snapshot()
             metadata["gateway_policy"] = asdict(state)
             metadata["gateway_reasoning_effort"] = None
+            metadata["gateway_target_fast_mode"] = False
             metadata["routing"] = {
                 "requested_model": requested_model, "resolved_model": IMAGE_MODEL,
                 "mode": "image_generation", "policy_version": state.policy_version,
@@ -423,6 +436,7 @@ class DynamicRoutingPlugin(CustomLogger):
             or (state.mode == "alias" and requested_model in VIRTUAL_ALIASES)
         )
         metadata["gateway_reasoning_effort"] = state.reasoning_effort if routed else None
+        metadata["gateway_target_fast_mode"] = bool(routed and state.fast_mode)
         if resolved_model == requested_model:
             return data
 
@@ -448,9 +462,14 @@ class DynamicRoutingPlugin(CustomLogger):
             effort = (metadata.get("gateway_policy") or {}).get("advisor_reasoning_effort")
         else:
             effort = metadata.get("gateway_reasoning_effort")
-        if effort is None:
+        fast_mode = metadata.get("gateway_target_fast_mode") is True and metadata.get("advisor_sub_call") is not True
+        if effort is None and not fast_mode:
             return None
         updated = kwargs.copy()
+        if fast_mode and str(kwargs.get("api_base", "")).rstrip("/") == "https://chatgpt.com/backend-api/codex":
+            updated["service_tier"] = "fast"
+        if effort is None:
+            return updated if updated != kwargs else None
         if call_type in {"aresponses", "responses"}:
             updated["reasoning"] = {**(kwargs.get("reasoning") or {}), "effort": effort}
         elif call_type in {"anthropic_messages", "aanthropic_messages"}:
@@ -571,7 +590,7 @@ async def update_active_model(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=415, detail="application/json is required")
     try:
         update = RoutingUpdate.model_validate(await request.json())
-        settings = update.model_dump(include={"reasoning_effort"}, exclude_unset=True)
+        settings = update.model_dump(include={"reasoning_effort", "fast_mode"}, exclude_unset=True)
         return asdict(control_plane.update(update.model, update.mode, **settings))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise HTTPException(status_code=422, detail="invalid routing update") from exc

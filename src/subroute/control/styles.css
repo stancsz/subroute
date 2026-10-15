@@ -72,6 +72,7 @@ h1 { margin: 0px; font-size: 25px; line-height: 1.3; letter-spacing: -0.7px; fon
 .route-panel-head small { color: var(--muted); font-size: 11px; }
 .role-pill { color: var(--muted); font-size: 10px; background: rgb(243, 244, 246); padding: 3px 6px; border-radius: 4px; }
 .route-grid label, .route-footer label { display: grid; gap: 6px; color: rgb(52, 64, 84); font-size: 12px; font-weight: 500; }
+.route-grid [hidden] { display: none; }
 .routing-desk select { width: 100%; min-width: 0px; min-height: 38px; border: 1px solid rgb(214, 219, 227); border-radius: 5px; background: rgb(255, 255, 255); color: var(--ink); padding: 7px 10px; font-size: 13px; cursor: pointer; }
 .routing-desk select:hover:not(:disabled) { border-color: rgb(174, 182, 196); }
 .route-help { margin: -3px 0px 0px; color: var(--muted); font-size: 12px; line-height: 1.6; }

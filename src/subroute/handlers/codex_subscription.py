@@ -24,6 +24,11 @@ def _request_options(optional_params: dict[str, Any]) -> dict[str, Any]:
         "max_tokens", "max_output_tokens", "user",
     ):
         options.pop(key, None)
+    if options.get("service_tier") == "fast":
+        # The Codex subscription endpoint currently rejects the public Fast
+        # spelling (HTTP 400) but accepts its documented alias, priority.
+        # Remove this translation when that endpoint accepts fast directly.
+        options["service_tier"] = "priority"
     return options
 
 

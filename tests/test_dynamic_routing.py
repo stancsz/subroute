@@ -95,10 +95,11 @@ def test_alias_mode_resolves_default_but_preserves_explicit_models(tmp_path: Pat
     assert data["metadata"] == {
         "client": "codex",
         "gateway_reasoning_effort": None,
+        "gateway_target_fast_mode": False,
         "gateway_policy": {
             "active_model": "minimax", "mode": "alias", "policy_version": 1,
             "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
+        "reasoning_effort": None, "fast_mode": False, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
         "advisor_sensitivity": "balanced", "advisor_classifier": "local",
         },
         "routing": {
@@ -248,6 +249,7 @@ def test_saved_gpt_5_target_migrates_once_and_preserves_policy(tmp_path, retired
     expected = {
         **saved, "active_model": replacement, "policy_version": 13,
         "advisor_trigger": "model", "advisor_sensitivity": "balanced", "advisor_classifier": "local",
+        "fast_mode": False,
     }
     assert json.loads(state_path.read_text(encoding="utf-8")) == expected
     assert control.resolve("default")[0] == replacement
@@ -319,7 +321,7 @@ def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
+        "reasoning_effort": None, "fast_mode": False, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
         "advisor_sensitivity": "balanced", "advisor_classifier": "local",
     }
     assert not list(tmp_path.glob("*.tmp"))
@@ -355,7 +357,7 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
+        "reasoning_effort": None, "fast_mode": False, "advisor_reasoning_effort": "low", "advisor_trigger": "model",
         "advisor_sensitivity": "balanced", "advisor_classifier": "local",
     }
     assert client.get("/api/active-model").json() == response.json()

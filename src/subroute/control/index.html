@@ -54,6 +54,8 @@
           <label>Model route<select id="route-model" aria-label="Target model" disabled><option value="">Loading models…</option></select></label>
           <label>Reasoning effort<select id="route-effort" aria-label="Target reasoning" aria-describedby="route-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
           <p id="route-effort-help" class="route-help"></p>
+          <label id="route-fast-field" hidden>Speed<select id="route-fast" aria-label="Target speed" aria-describedby="route-fast-help" disabled><option value="standard">Standard</option><option value="fast">Fast</option></select></label>
+          <p id="route-fast-help" class="route-help" hidden>Fast mode uses more OpenAI subscription allowance. It applies to requests routed to this target, not the advisor.</p>
         </div>
         <div class="route-column route-model-panel advisor-panel">
           <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on Messages requests</small></div><span class="role-pill optional">Optional</span></div>

@@ -115,6 +115,8 @@ Actual Claude Code, Codex, OpenCode and Cline CLI formatting tests run directly 
 
 All OpenAI target and Advisor routes use GPT-6 or newer: Luna, Sol, Astra and GPT-6.1 Sol. GPT-6.1 Sol is available as the target alias `codex-gpt-6.1-sol`. GPT-5.6 Terra and the GPT-5.6 Luna reserve route have been removed; saved selections migrate to GPT-6 Sol and GPT-6 Luna respectively. These are selectable models, not a model lock. New routing state defaults to OpenRouter and GPT-6.1 Sol/low. `ACTIVE_MODEL` and `ADVISOR_MODEL` override initialization; persisted state takes precedence on subsequent starts, including explicitly disabled advisors, saved effort and advisor trigger. Existing policies without a trigger keep `model` mode until changed in the control desk. Production retains its saved `force` mode; staging retains its own policy.
 
+The routing desk offers **Speed: Fast** when the target is an OpenAI subscription model. It saves `fast_mode` in the target policy and sends `service_tier: "fast"` only for requests routed to that target. The Codex subscription endpoint currently rejects that spelling, so the narrow subscription transport translates it to the equivalent `priority` tier. The advisor, explicit model requests in alias/off mode, `auto`, and image/audio routes do not inherit the saved target speed. Fast mode uses more OpenAI subscription allowance. Existing saved policies default to Standard, and changing the target clears Fast mode. Remove the transport translation when the subscription endpoint accepts `fast` directly.
+
 - **`alias`** is the default. It resolves `default` using the saved route. `auto` always uses the prioritized provider chain.
 - **`force`** applies the selected route to known model requests except explicit `auto` requests and image generation.
 - **`off`** leaves model dispatch to LiteLLM.
@@ -269,6 +271,8 @@ docker compose up -d gateway-staging
 ### 路由行为
 
 OpenAI 的 Target 和 Advisor 均使用 GPT-6 或更新版本：Luna、Sol、Astra 和 GPT-6.1 Sol。Target 可通过 `codex-gpt-6.1-sol` 选择 GPT-6.1 Sol。GPT-5.6 Terra 与 GPT-5.6 Luna reserve 路由已移除；已保存的旧选择分别迁移到 GPT-6 Sol 与 GPT-6 Luna。
+
+当 Target 选择 OpenAI Subscription 模型时，路由控制台可选择 **Speed: Fast**。该设置只作用于按当前策略路由到 Target 的请求，不作用于 Advisor、显式模型请求（alias/off 模式）、`auto` 或图片/音频特殊路由。Fast 会更快消耗订阅额度；旧策略默认为 Standard，更换 Target 会清除 Fast 设置。Codex 订阅端点目前拒绝 `service_tier: "fast"`，网关仅在该传输层将其转换为等价的 `priority`，待端点直接支持 `fast` 后移除。
 
 - **`alias`** 是默认模式，根据已保存的路由解析 `default`。`auto` 始终使用按优先级排列的服务链。
 - **`force`** 将所选路由应用到已知模型的推理请求，显式使用 `auto` 和图片生成请求除外。

@@ -119,6 +119,18 @@ def test_nonstreaming_collects_native_chat_stream_with_tool_usage_and_terminal_s
     assert stream.closed
 
 
+def test_codex_transport_forwards_fast_service_tier(monkeypatch):
+    captured = {}
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return FakeStream(tool_call_chunks())
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    call_handler(optional_params={"store": False, "service_tier": "fast"})
+    assert captured["service_tier"] == "priority"
+
+
 def test_anthropic_calls_request_usage_from_the_forced_codex_stream(monkeypatch):
     captured = {}
     stream = FakeStream(tool_call_chunks())
@@ -345,6 +357,7 @@ def test_litellm_chat_dispatch_uses_registered_codex_adapter(monkeypatch):
 
     async def fake_inner_acompletion(**kwargs):
         assert kwargs["model"] == "openai/responses/gpt-6-luna"
+        assert kwargs["service_tier"] == "priority"
         return stream
 
     monkeypatch.setattr(litellm, "acompletion", fake_inner_acompletion)
@@ -356,6 +369,7 @@ def test_litellm_chat_dispatch_uses_registered_codex_adapter(monkeypatch):
         extra_headers={"ChatGPT-Account-ID": "fixture-account"},
         stream=False,
         store=False,
+        service_tier="fast",
         max_tokens=64,
     ))
 
