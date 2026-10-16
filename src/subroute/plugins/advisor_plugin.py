@@ -43,6 +43,7 @@ ADVISOR_MODEL_NAMES = {
     "codex-luna-advisor": "gpt-6-luna",
 }
 ANTIGRAVITY_ADVISOR_MODELS = {
+    "gemini-subscription-argon": "gemini-4-argon",
     "gemini-subscription": "gemini-3.8-flash",
     "gemini-subscription-3.7-flash": "gemini-3.7-flash",
     "gemini-subscription-3.6-flash": "gemini-3.6-flash",

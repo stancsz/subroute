@@ -21,6 +21,10 @@ from subroute.audio import AUDIO_REQUEST_BYTES, MAX_AUDIO_BYTES, MAX_AUDIO_FILES
 
 
 MODELS = {
+    "gemini-4-argon": "Gemini 4 Argon (High)",
+    "gemini-4-argon-high": "Gemini 4 Argon (High)",
+    "gemini-4-argon-medium": "Gemini 4 Argon (Medium)",
+    "gemini-4-argon-low": "Gemini 4 Argon (Low)",
     "gemini-3.8-flash": "Gemini 3.8 Flash (High)",
     "gemini-3.8-flash-high": "Gemini 3.8 Flash (High)",
     "gemini-3.8-flash-med": "Gemini 3.8 Flash (Medium)",

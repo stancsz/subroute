@@ -168,6 +168,14 @@ def test_subscription_channels_stay_behind_litellm():
     assert by_name["gemini-subscription"]["litellm_params"]["model"] == (
         "antigravity/gemini-3.8-flash"
     )
+    argon = by_name["gemini-subscription-argon"]
+    assert argon["litellm_params"]["model"] == "antigravity/gemini-4-argon"
+    assert argon["model_info"]["reasoning_efforts"] == ["low", "medium", "high"]
+    assert argon["model_info"]["advisor_selectable"] is True
+    assert argon["model_info"]["advisor_max_input_tokens"] == 32000
+    assert "gemini-subscription-argon" in {
+        model["model_name"] for model in deployments if model["model_info"].get("advisor_selectable")
+    }
     for name in (
         "gemini-subscription",
         "gemini-subscription-3.7-flash",

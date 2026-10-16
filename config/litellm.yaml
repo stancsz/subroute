@@ -93,6 +93,20 @@ model_list:
       model: antigravity/gemini-3.8-flash
       allowed_openai_params: [reasoning_effort]
 
+  - model_name: gemini-subscription-argon
+    model_info:
+      <<: *context_policy
+      advisor_max_input_tokens: 32000
+      display_name: Gemini 4 Argon
+      provider: Gemini
+      source_id: gemini-subscription
+      access: Subscription
+      reasoning_efforts: [low, medium, high]
+      capabilities: [text, tools, buffered-sse]
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-4-argon
+      allowed_openai_params: [reasoning_effort]
   - model_name: gemini-subscription-3.7-flash
     model_info:
       <<: *context_policy

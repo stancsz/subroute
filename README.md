@@ -70,6 +70,7 @@ Model:    auto
 To enable the LiteLLM Admin UI, set `GATEWAY_MASTER_KEY` in the local `.env` file and recreate the gateway. This also requires API clients to send `Authorization: Bearer <GATEWAY_MASTER_KEY>`. The UI uses `UI_USERNAME` and `UI_PASSWORD` (Compose defaults: `admin` and `password`). Without a master key, the loopback API accepts requests without a bearer token, but Admin UI login is unavailable.
 
 `auto` tries MiniMax M3 first, then Gemini 3.8 Flash through the subscription integration, then Codex Luna through the subscription integration if the preceding provider returns an error. Selecting MiniMax, OpenRouter, or either Xiaomi MiMo route also enables ordered fallback across those routes, with GPT-6 Luna last. A provider failure can still incur cost. Other fixed model aliases remain fail-closed. Available models are listed in this checkout's [`config/litellm.yaml`](config/litellm.yaml).
+Gemini 4 Argon is available as the selectable `gemini-subscription-argon` target and gateway Advisor through the authenticated Antigravity CLI, in production and staging. Advisor requests use the existing 32K input budget; target requests retain Subroute's 256K context budget. It supports low, medium and high reasoning effort and does not join `auto` or Advisor fallback chains. CLI inventory confirms availability, while a live request is still needed to verify response compatibility.
 
 Speech routes are available through LiteLLM. MiniMax TTS uses LiteLLM's standard `POST /v1/audio/speech` endpoint with model `minimax-tts` and `MINIMAX_API_KEY`:
 
