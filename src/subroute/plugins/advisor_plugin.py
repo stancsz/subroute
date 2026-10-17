@@ -1,4 +1,4 @@
-"""Opt-in Advisor tool injection for LiteLLM's Anthropic Messages endpoint."""
+"""Apply the saved Advisor policy across LiteLLM chat, Responses, and Messages."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import uuid
 import logging
 import asyncio
 import json
+from collections import OrderedDict
 from typing import Any
 from fastapi import HTTPException
 
@@ -23,10 +24,15 @@ from subroute.handlers.antigravity import invoke_agy, model_with_effort, prompt_
 from subroute.handlers.antigravity import AntigravityBridgeError, AntigravityRequestTooLargeError
 from subroute.handlers.codex_advisor import CodexAdvisorError
 from subroute.plugins.advisor_classifier import LocalComplexityClassifier, has_high_risk_intent
+from subroute.advisor_frequency import AdvisorFrequencyGate
+from subroute.advisor_ranker import AdvisorRequestRanker, AdvisorRankerUnavailable
 
 
 ADVISOR_TOOL_TYPE = "advisor_20260301"
 SUPPORTED_CALL_TYPES = frozenset({"anthropic_messages", "aanthropic_messages"})
+MESSAGE_CALL_TYPES = frozenset({"completion", "acompletion", *SUPPORTED_CALL_TYPES})
+RESPONSES_CALL_TYPES = frozenset({"responses", "aresponses"})
+ADVISOR_CALL_TYPES = MESSAGE_CALL_TYPES | RESPONSES_CALL_TYPES
 TOOL_HISTORY_ADVISORS = frozenset({
     "codex-gpt-6.1-sol-advisor",
     "codex-sol-advisor",
@@ -43,8 +49,8 @@ ADVISOR_MODEL_NAMES = {
     "codex-luna-advisor": "gpt-6-luna",
 }
 ANTIGRAVITY_ADVISOR_MODELS = {
-    "gemini-subscription-argon": "gemini-4-argon",
     "gemini-subscription": "gemini-3.8-flash",
+    "gemini-subscription-argon": "gemini-4-argon",
     "gemini-subscription-3.7-flash": "gemini-3.7-flash",
     "gemini-subscription-3.6-flash": "gemini-3.6-flash",
     "gemini-subscription-pro": "gemini-3.1-pro",
@@ -59,6 +65,12 @@ ADVISOR_TOOL_MODEL_ALIASES = {
     "gemini-subscription": "gemini-3.8-flash-advisor",
 }
 ADAPTIVE_THRESHOLDS = {"frequent": 1, "balanced": 2, "conservative": 3}
+ADVISOR_BRIEF_INSTRUCTIONS = (
+    "Advise the calling model on the current task. Give only the most useful correction, "
+    "risk, or next step, grounded in the supplied context. Use at most three short bullets "
+    "and 120 words. Do not repeat the request, narrate your reasoning, or write the final "
+    "answer. If the approach is sound, say so briefly."
+)
 logger = logging.getLogger(__name__)
 _SECRET_FIELD = re.compile(
     r"(?i)\b(authorization|api[\s_-]?key|access[\s_-]?token|refresh[\s_-]?token|token|password)(['\"]?\s*[:=]\s*['\"]?)([^'\"\s,;}\]]+)"
@@ -110,6 +122,25 @@ class AdvisorPlugin(CustomLogger):
             raise ValueError("max_uses must be between 1 and LiteLLM's hard cap of 5")
         self.max_uses = max_uses
         self.classifier = LocalComplexityClassifier()
+        self.request_ranker = AdvisorRequestRanker()
+        self.frequency_gate = AdvisorFrequencyGate()
+        self._ranked_attempts: OrderedDict[str, None] = OrderedDict()
+
+    @staticmethod
+    def _frequency_policy_key(policy: dict) -> str:
+        return json.dumps({key: policy.get(key) for key in (
+            "policy_version", "advisor_model", "advisor_classifier", "advisor_sensitivity", "advisor_trigger",
+        )}, sort_keys=True)
+
+    def frequency_state(self, policy: dict) -> dict:
+        rates = {"conservative": 0.3, "balanced": 0.5, "frequent": 0.7}
+        return {
+            "classifier": policy.get("advisor_classifier", "local"),
+            "policy_version": policy.get("policy_version"),
+            "target_rate": rates.get(policy.get("advisor_sensitivity", "balanced")),
+            "scope": "process_policy",
+            **self.frequency_gate.snapshot(self._frequency_policy_key(policy)),
+        }
 
     @staticmethod
     def _context_limits(router: Any, model: str) -> tuple[int | None, int | None]:
@@ -125,6 +156,91 @@ class AdvisorPlugin(CustomLogger):
         return limit, compact_limit
 
     @staticmethod
+    def _responses_messages(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Project supported Responses input into advisor messages without mutating it."""
+        if data.get("previous_response_id"):
+            raise ValueError("Responses advisor context cannot resolve previous_response_id")
+        messages: list[dict[str, Any]] = []
+        instructions = data.get("instructions")
+        if instructions is not None:
+            if not isinstance(instructions, str):
+                raise ValueError("Responses instructions must be text for advisor context")
+            if instructions:
+                messages.append({"role": "developer", "content": instructions})
+        source = data.get("input")
+        if isinstance(source, str):
+            return [*messages, {"role": "user", "content": source}]
+        if not isinstance(source, list):
+            raise ValueError("Responses input must be text or a list for advisor context")
+        calls: set[str] = set()
+        for item in source:
+            if not isinstance(item, dict):
+                raise ValueError("Responses input items must be objects for advisor context")
+            item_type = item.get("type", "message")
+            if item_type == "message":
+                role = item.get("role")
+                if not isinstance(role, str) or role not in {"system", "developer", "user", "assistant"}:
+                    raise ValueError("Responses message role is unsupported for advisor context")
+                content = item.get("content", "")
+                if isinstance(content, str):
+                    messages.append({"role": "developer" if role == "system" else role, "content": content})
+                    continue
+                if not isinstance(content, list):
+                    raise ValueError("Responses message content is unsupported for advisor context")
+                parts: list[dict[str, Any]] = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        raise ValueError("Responses content parts must be objects for advisor context")
+                    part_type = part.get("type")
+                    if part_type in {"input_text", "output_text"} and isinstance(part.get("text"), str):
+                        parts.append({"type": "text", "text": part["text"]})
+                    elif part_type == "input_image" and isinstance(part.get("image_url"), str):
+                        parts.append({"type": "image_url", "image_url": {
+                            "url": part["image_url"], "detail": part.get("detail", "auto"),
+                        }})
+                    else:
+                        raise ValueError("Responses content type is unsupported for advisor context")
+                messages.append({"role": "developer" if role == "system" else role, "content": parts})
+            elif item_type == "function_call":
+                call_id = item.get("call_id")
+                name = item.get("name")
+                arguments = item.get("arguments", "{}")
+                if not isinstance(call_id, str) or not call_id or call_id in calls:
+                    raise ValueError("Responses function call id is invalid for advisor context")
+                if not isinstance(name, str) or not name or not isinstance(arguments, (str, dict)):
+                    raise ValueError("Responses function call is invalid for advisor context")
+                calls.add(call_id)
+                messages.append({"role": "assistant", "tool_calls": [{
+                    "id": call_id, "type": "function", "function": {
+                        "name": name, "arguments": arguments,
+                    },
+                }]})
+            elif item_type == "function_call_output":
+                call_id, output = item.get("call_id"), item.get("output")
+                if not isinstance(call_id, str) or call_id not in calls or not isinstance(output, str):
+                    raise ValueError("Responses function output has no supported matching call")
+                messages.append({"role": "tool", "tool_call_id": call_id, "content": output})
+            else:
+                raise ValueError("Responses input item is unsupported for advisor context")
+        if not any(message.get("role") == "user" for message in messages):
+            raise ValueError("Responses advisor context requires a user message")
+        return messages
+
+    @classmethod
+    def _request_messages(cls, data: dict[str, Any], call_type: str) -> list[dict[str, Any]]:
+        if call_type in RESPONSES_CALL_TYPES:
+            return cls._responses_messages(data)
+        messages = data.get("messages")
+        if not isinstance(messages, list) or not all(isinstance(item, dict) for item in messages):
+            raise ValueError("Advisor request messages must be a list of objects")
+        if call_type in {"completion", "acompletion"}:
+            messages = [
+                {**message, "role": "developer"} if message.get("role") == "system" else message
+                for message in messages
+            ]
+        return messages
+
+    @staticmethod
     def _compaction_error_status(exc: AdvisorContextCompactionError) -> int:
         statuses = [attempt.get("status") for attempt in exc.attempts]
         if statuses and statuses[-1] == "over_budget":
@@ -135,11 +251,12 @@ class AdvisorPlugin(CustomLogger):
 
     @staticmethod
     async def _count_context_tokens(router: Any, data: dict, messages: list[dict[str, Any]]) -> int:
-        request_kwargs = {**data, "messages": messages}
+        request_kwargs = {key: value for key, value in data.items() if key not in {"input", "instructions"}}
+        request_kwargs["messages"] = messages
         return await asyncio.to_thread(
             router._count_pre_call_check_tokens,
             messages=messages,
-            input=data.get("input"),
+            input=None,
             request_kwargs=request_kwargs,
         )
 
@@ -211,6 +328,12 @@ class AdvisorPlugin(CustomLogger):
         latest_user = cls._latest_user_index(messages)
         return latest_user >= 0 and has_tool_history(messages[max(0, latest_user - 6):latest_user])
 
+    @staticmethod
+    def _brief_advisor_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # Add direction only to the gateway's preconsultation copy. The target
+        # keeps its exact conversation and tool ordering.
+        return [{"role": "developer", "content": ADVISOR_BRIEF_INSTRUCTIONS}, *messages]
+
     @classmethod
     def _complexity_score(cls, messages: list[dict[str, Any]]) -> int:
         """Deterministic intent and structure score, also used as local fallback."""
@@ -229,7 +352,22 @@ class AdvisorPlugin(CustomLogger):
 
     async def _adaptive_decision(
         self, messages: list[dict[str, Any]], classifier: str, sensitivity: str,
+        *, request_id: str | None = None, policy: dict | None = None,
     ) -> dict[str, Any]:
+        if classifier == "ranked":
+            if not request_id or policy is None:
+                raise ValueError("Ranked selection requires the captured request policy and ID")
+            try:
+                score = await self.request_ranker.rank(self._latest_user_text(messages))
+            except AdvisorRankerUnavailable as exc:
+                logger.error("advisor ranker unavailable request_id=%s error_type=%s", request_id, type(exc).__name__)
+                raise HTTPException(status_code=503, detail="Advisor ranker unavailable; base request was not sent") from exc
+            decision = self.frequency_gate.choose(
+                request_id, score, {"conservative": 0.3, "balanced": 0.5, "frequent": 0.7}[sensitivity],
+                self._frequency_policy_key(policy),
+            )
+            return {**decision, "source": "ranked", "level": None, "threshold": None,
+                    "classifier_model": "multilingual-minilm-logistic-v1"}
         threshold = ADAPTIVE_THRESHOLDS[sensitivity]
         if classifier == "rules":
             level = self._complexity_score(messages)
@@ -485,7 +623,7 @@ class AdvisorPlugin(CustomLogger):
         data: dict,
         call_type: str,
     ) -> dict | None:
-        """Consult the selected advisor on Messages requests; an empty selection disables it."""
+        """Apply the selected advisor policy to supported requests; an empty selection disables it."""
 
         _, metadata = get_or_create_metadata_bucket(data)
         if metadata.get("advisor_sub_call") is True:
@@ -524,7 +662,7 @@ class AdvisorPlugin(CustomLogger):
                 )
                 return data
             return None
-        if call_type not in SUPPORTED_CALL_TYPES:
+        if call_type not in ADVISOR_CALL_TYPES:
             return None
         if data.get("gateway_image_request") is not None:
             # The image intent exception owns this request; do not add a
@@ -544,10 +682,22 @@ class AdvisorPlugin(CustomLogger):
             raise ValueError("Invalid advisor trigger policy")
         sensitivity = policy.get("advisor_sensitivity", "balanced")
         classifier = policy.get("advisor_classifier", "local")
-        if sensitivity not in ADAPTIVE_THRESHOLDS or classifier not in {"local", "rules"}:
+        if sensitivity not in ADAPTIVE_THRESHOLDS or classifier not in {"local", "rules", "ranked"}:
             raise ValueError("Invalid adaptive advisor policy")
 
-        messages = data.get("messages") or []
+        try:
+            messages = self._request_messages(data, call_type)
+        except ValueError as exc:
+            metadata["gateway_advisor"] = {
+                "status": "skipped", "reason": "unsupported_request_context",
+                "model": advisor_model, "call_type": call_type,
+            }
+            logger.info(
+                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=unsupported_request_context error_type=%s",
+                data.get("litellm_call_id"), call_type, trigger, data.get("model"),
+                advisor_model, type(exc).__name__,
+            )
+            return data
         if has_tool_history(messages) and (
             advisor_model not in TOOL_HISTORY_ADVISORS
             or not supports_tool_history(messages)
@@ -556,16 +706,49 @@ class AdvisorPlugin(CustomLogger):
                 "status": "skipped",
                 "reason": "unsupported_tool_history",
                 "model": advisor_model,
+                "call_type": call_type,
             }
+            logger.info(
+                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=unsupported_tool_history",
+                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
+            )
+            return data
+
+        if (
+            classifier == "ranked" and trigger in {"adaptive", "hybrid"}
+            and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
+            and any(not isinstance(message.get("content", ""), str) for message in messages)
+        ):
+            metadata["gateway_advisor"] = {"status": "skipped", "reason": "unsupported_content",
+                                           "model": advisor_model, "call_type": call_type}
             return data
 
         adaptive_consult = False
         if trigger in {"adaptive", "hybrid"}:
-            decision = await self._adaptive_decision(messages, classifier, sensitivity)
+            if classifier == "ranked":
+                request_id = data.get("litellm_call_id") or metadata.setdefault("gateway_advisor_request_id", str(uuid.uuid4()))
+                # Server-owned request history cannot be forged through caller metadata.
+                # Admission is atomic before the first await; no prompt or advice is cached.
+                if request_id in self._ranked_attempts:
+                    raise HTTPException(status_code=409, detail="Duplicate advisor hook; consultation was not repeated")
+                self._ranked_attempts[request_id] = None
+                if len(self._ranked_attempts) > 1024:
+                    self._ranked_attempts.popitem(last=False)
+                decision = await self._adaptive_decision(messages, classifier, sensitivity, request_id=request_id, policy=policy)
+            else:
+                decision = await self._adaptive_decision(messages, classifier, sensitivity)
             metadata["gateway_advisor_decision"] = {**decision, "trigger": trigger}
+            if classifier == "ranked":
+                # Privacy-safe operational receipt remains visible at the deployed log level.
+                logger.warning(
+                    "advisor ranked_selection request_id=%s policy_version=%s score=%.5f target=%.2f consult=%s selected=%s eligible=%s",
+                    request_id, policy.get("policy_version"), decision["score"], decision["target_rate"],
+                    decision["consult"], decision["selected_count"], decision["eligible_count"],
+                )
             logger.info(
-                "advisor trigger request_id=%s mode=%s source=%s level=%s threshold=%s consult=%s classifier_error=%s",
-                data.get("litellm_call_id"), trigger, decision["source"],
+                "advisor trigger request_id=%s call_type=%s target=%s advisor=%s mode=%s source=%s level=%s threshold=%s consult=%s classifier_error=%s",
+                data.get("litellm_call_id"), call_type, data.get("model"), advisor_model,
+                trigger, decision["source"],
                 decision["level"], decision["threshold"], decision["consult"],
                 decision.get("classifier_error"),
             )
@@ -575,10 +758,10 @@ class AdvisorPlugin(CustomLogger):
                     data.get("litellm_call_id"), decision["classifier_error"],
                 )
             adaptive_consult = decision["consult"]
-            if trigger == "adaptive" and not adaptive_consult:
+            if (trigger == "adaptive" or classifier == "ranked") and not adaptive_consult:
                 metadata["gateway_advisor"] = {
                     "status": "skipped", "reason": "below_complexity_threshold",
-                    "model": advisor_model, "level": decision["level"],
+                    "model": advisor_model, "call_type": call_type, "level": decision["level"],
                     "threshold": decision["threshold"],
                 }
                 return data
@@ -595,6 +778,29 @@ class AdvisorPlugin(CustomLogger):
             trigger == "always" or adaptive_consult
             or (trigger == "model" and (minimax_gemini_pair or existing_preconsult_pair))
         )
+        native_tool_available = call_type in SUPPORTED_CALL_TYPES
+        if trigger == "hybrid" and not adaptive_consult and not native_tool_available:
+            metadata["gateway_advisor"] = {
+                "status": "skipped", "reason": "below_complexity_threshold",
+                "model": advisor_model, "call_type": call_type,
+                "level": metadata.get("gateway_advisor_decision", {}).get("level"),
+                "threshold": metadata.get("gateway_advisor_decision", {}).get("threshold"),
+            }
+            logger.info(
+                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=below_complexity_threshold",
+                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
+            )
+            return data
+        if trigger == "model" and not preconsult and not native_tool_available:
+            metadata["gateway_advisor"] = {
+                "status": "skipped", "reason": "model_trigger_not_preconsulted",
+                "model": advisor_model, "call_type": call_type,
+            }
+            logger.info(
+                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=model_trigger_not_preconsulted",
+                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
+            )
+            return data
         if (
             preconsult
             and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
@@ -604,7 +810,12 @@ class AdvisorPlugin(CustomLogger):
                 "status": "skipped",
                 "reason": "unsupported_content",
                 "model": advisor_model,
+                "call_type": call_type,
             }
+            logger.info(
+                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=unsupported_content",
+                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
+            )
             return data
         if preconsult:
             # LiteLLM's router checks run after proxy callbacks. This earlier
@@ -629,7 +840,7 @@ class AdvisorPlugin(CustomLogger):
                         model=data["model"], llm_provider="subroute",
                     )
                 advisor_messages, compaction = await self._prepare_advisor_messages(
-                    router, advisor_model, data, messages,
+                    router, advisor_model, data, self._brief_advisor_messages(messages),
                 )
                 if compaction is not None:
                     metadata["gateway_advisor_compaction"] = compaction
@@ -667,7 +878,7 @@ class AdvisorPlugin(CustomLogger):
                 gateway_request_id = data.get("litellm_call_id")
                 metadata["gateway_advisor"] = {
                     "status": "failed", "model": advisor_model,
-                    "consultation_id": consultation_id, "reason": reason,
+                    "call_type": call_type, "consultation_id": consultation_id, "reason": reason,
                     "gateway_request_id": gateway_request_id,
                     **({"fallback_attempt": fallback_attempt} if fallback_attempt else {}),
                 }
@@ -685,8 +896,8 @@ class AdvisorPlugin(CustomLogger):
                         exc.target, exc.attempts,
                     )
                 logger.error(
-                    "advisor consultation failed gateway_request_id=%s consultation_id=%s model=%s base_model=%s error_type=%s error=%s",
-                    gateway_request_id, consultation_id, advisor_model,
+                    "advisor consultation failed gateway_request_id=%s consultation_id=%s call_type=%s model=%s base_model=%s error_type=%s error=%s",
+                    gateway_request_id, consultation_id, call_type, advisor_model,
                     data.get("model"), type(exc).__name__, reason,
                 )
                 if isinstance(exc, AdvisorContextCompactionError):
@@ -727,13 +938,23 @@ class AdvisorPlugin(CustomLogger):
                         }
                     },
                 ) from exc
-            data["messages"] = [
-                *messages,
-                {"role": "developer", "content": f"Independent advisor guidance:\n{advice}"},
-            ]
+            if call_type in MESSAGE_CALL_TYPES:
+                data["messages"] = [
+                    *(data.get("messages") or []),
+                    {"role": "developer", "content": f"Independent advisor guidance:\n{advice}"},
+                ]
+            if call_type in RESPONSES_CALL_TYPES:
+                existing_instructions = data.get("instructions")
+                guidance = f"Independent advisor guidance:\n{advice}"
+                data["instructions"] = (
+                    f"{existing_instructions}\n\n{guidance}"
+                    if isinstance(existing_instructions, str) and existing_instructions
+                    else guidance
+                )
             metadata["gateway_advisor"] = {
                 "status": "advice_injected", "model": advisor_model,
                 "resolved_model": resolved_advisor_model,
+                "call_type": call_type,
                 "consultation_id": consultation_id, "usage_source": "provider",
                 "input_tokens": usage.prompt_tokens,
                 "output_tokens": usage.completion_tokens,
@@ -743,12 +964,15 @@ class AdvisorPlugin(CustomLogger):
             if metadata.get("gateway_advisor_compaction"):
                 metadata["gateway_advisor"]["compaction"] = metadata["gateway_advisor_compaction"]
             logger.warning(
-                "advisor advice_injected consultation_id=%s model=%s input_tokens=%s output_tokens=%s base_model=%s reasoning_effort=%s",
-                consultation_id, advisor_model, usage.prompt_tokens,
+                "advisor advice_injected consultation_id=%s call_type=%s model=%s input_tokens=%s output_tokens=%s base_model=%s reasoning_effort=%s",
+                consultation_id, call_type, advisor_model, usage.prompt_tokens,
                 usage.completion_tokens, data["model"], advisor_effort,
             )
-            if trigger != "hybrid":
+            if trigger != "hybrid" or not native_tool_available or adaptive_consult:
                 return data
+
+        if not native_tool_available:
+            return data
 
         raw_tools = data.get("tools")
         if raw_tools is None:
@@ -766,11 +990,23 @@ class AdvisorPlugin(CustomLogger):
                     "type": ADVISOR_TOOL_TYPE,
                     "name": "advisor",
                     "model": ADVISOR_TOOL_MODEL_ALIASES.get(advisor_model, advisor_model),
-                    "max_uses": self.max_uses,
+                    "max_uses": 1 if trigger == "hybrid" else self.max_uses,
                     "caching": {"type": "ephemeral", "ttl": "5m"},
                 }
             )
             data["tools"] = tools
+        if trigger == "hybrid":
+            decision = metadata.get("gateway_advisor_decision") or {}
+            metadata["gateway_advisor"] = {
+                "status": "tool_offered", "reason": "below_complexity_threshold",
+                "model": advisor_model, "call_type": call_type,
+                "level": decision.get("level"), "threshold": decision.get("threshold"),
+            }
+            logger.info(
+                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=tool_offered reason=below_complexity_threshold level=%s threshold=%s",
+                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
+                decision.get("level"), decision.get("threshold"),
+            )
         return data
 
 

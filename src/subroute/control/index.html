@@ -58,15 +58,23 @@
           <p id="route-fast-help" class="route-help" hidden>Fast mode uses more OpenAI subscription allowance. It applies to requests routed to this target, not the advisor.</p>
         </div>
         <div class="route-column route-model-panel advisor-panel">
-          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on Messages requests</small></div><span class="role-pill optional">Optional</span></div>
+          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on eligible API requests</small></div><span class="role-pill optional">Optional</span></div>
           <label>Provider<select id="advisor-provider" aria-label="Advisor provider" disabled><option value="">Loading providers…</option></select></label>
           <label>Model route<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
           <label>Reasoning effort<select id="route-advisor-effort" aria-label="Advisor reasoning" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
           <p id="route-advisor-effort-help" class="route-help"></p>
           <label>When to consult<select id="route-advisor-trigger" aria-label="Advisor trigger" aria-describedby="route-advisor-trigger-help" disabled><option value="model">Current behavior</option><option value="adaptive">Adaptive before target</option><option value="hybrid">Adaptive + target may ask</option><option value="always">Every eligible request</option></select></label>
-          <label>Adaptive sensitivity<select id="route-advisor-sensitivity" aria-label="Advisor sensitivity" disabled><option value="conservative">Less often</option><option value="balanced">Balanced</option><option value="frequent">More often</option></select></label>
-          <label>Complexity check<select id="route-advisor-classifier" aria-label="Advisor classifier" disabled><option value="local">Local model, rules fallback</option><option value="rules">Gateway rules only</option></select></label>
-          <p id="route-advisor-trigger-help" class="route-help">Adaptive checks run before the target. Combined mode also lets the target request advice on any turn, including after preconsultation. The local check uses Ollama and falls back to rules if unavailable.</p>
+          <label>Selection method<select id="route-advisor-classifier" aria-label="Advisor selection method" disabled><option value="ranked">Learned ranking</option><option value="local">Local model, rules fallback (legacy)</option><option value="rules">Gateway rules (legacy)</option></select></label>
+          <div class="advisor-frequency-control">
+            <div class="frequency-heading"><label for="route-advisor-frequency">Target selection rate</label><output id="route-advisor-frequency-value" for="route-advisor-frequency">~50%</output></div>
+            <input id="route-advisor-frequency" type="range" min="0" max="2" step="1" value="1" aria-valuetext="Balanced, about 50 percent" aria-describedby="route-advisor-frequency-help route-advisor-frequency-state" disabled>
+            <div class="frequency-stops" aria-hidden="true"><span>Less often<small>~30%</small></span><span>Balanced<small>~50%</small></span><span>More often<small>~70%</small></span></div>
+          </div>
+            <p id="route-advisor-frequency-help" class="route-help">Approximate targets favor higher estimated review priority. Short windows and changing traffic can vary.</p>
+          <p id="route-advisor-frequency-state" class="route-help">Waiting for gateway policy.</p>
+          <div class="advisor-frequency-stats"><p id="route-advisor-frequency-stats">Selection statistics unavailable</p><small>Current process · current policy</small></div>
+          <details id="route-advisor-advanced" class="advisor-advanced" hidden><summary>Advanced · legacy sensitivity</summary><label>Adaptive sensitivity<select id="route-advisor-sensitivity" aria-label="Advisor sensitivity" disabled><option value="conservative">Less often</option><option value="balanced">Balanced</option><option value="frequent">More often</option></select></label></details>
+          <p id="route-advisor-trigger-help" class="route-help">Learned ranking selects requests before the target in Adaptive and Combined modes. Each selected request gets one preconsultation; unselected requests cannot call the advisor.</p>
         </div>
       </div>
       <div class="route-footer">

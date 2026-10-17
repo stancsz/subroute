@@ -32,7 +32,10 @@ services:
       retries: 30
 
   gateway:
-    image: ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56
+    image: subroute-gateway:advisor-ranker-v1
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
     restart: unless-stopped
     depends_on:
       postgres:
@@ -74,7 +77,10 @@ services:
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000", "--host", "0.0.0.0", "--telemetry", "False"]
 
   gateway-staging:
-    image: ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56
+    image: subroute-gateway:advisor-ranker-v1
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
     restart: unless-stopped
     depends_on:
       postgres-staging:

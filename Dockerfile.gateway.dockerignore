@@ -1,0 +1,6 @@
+**
+!Dockerfile.gateway
+!models/
+!models/advisor-ranker/
+!models/advisor-ranker/model_optimized.onnx
+!models/advisor-ranker/tokenizer.json

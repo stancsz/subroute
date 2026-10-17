@@ -7,6 +7,7 @@ from litellm.llms.anthropic.experimental_pass_through.messages.interceptors.advi
 )
 
 from subroute.plugins.advisor_plugin import (
+    ADVISOR_BRIEF_INSTRUCTIONS,
     ADVISOR_TOOL_TYPE,
     AdvisorPlugin,
 )
@@ -289,7 +290,7 @@ def test_gateway_trigger_controls_openrouter_advisor_call(monkeypatch, sensitivi
         assert data["metadata"]["gateway_advisor"]["reason"] == "below_complexity_threshold"
 
 
-def test_hybrid_keeps_native_tool_available_after_preconsult(monkeypatch):
+def test_hybrid_limits_complex_messages_turn_to_one_preconsult(monkeypatch):
     from litellm.types.utils import Usage
     from subroute.plugins import advisor_plugin
 
@@ -323,9 +324,96 @@ def test_hybrid_keeps_native_tool_available_after_preconsult(monkeypatch):
     data = {"model": "openrouter", "messages": [{"role": "user", "content": "Review the implementation"}],
             "metadata": {"gateway_policy": policy}}
     run(plugin, data)
-    assert data["tools"][0]["type"] == ADVISOR_TOOL_TYPE
+    assert "tools" not in data
     assert data["metadata"]["gateway_advisor"]["status"] == "advice_injected"
     assert calls == ["gpt-6-luna"]
+
+
+def test_hybrid_preconsults_complex_responses_and_injects_instructions(monkeypatch):
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    async def fake_collect(model, messages, **kwargs):
+        assert model == "gpt-6-luna"
+        assert messages == [
+            {"role": "developer", "content": ADVISOR_BRIEF_INSTRUCTIONS},
+            {"role": "developer", "content": "Keep answers concise."},
+            {"role": "user", "content": "x" * 1200},
+        ]
+        return "Check the failure path.", Usage(prompt_tokens=10, completion_tokens=4, total_tokens=14)
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fake_collect)
+    data = {
+        "model": "openrouter",
+        "instructions": "Keep answers concise.",
+        "input": "x" * 1200,
+        "metadata": {"gateway_policy": {
+            "advisor_model": "codex-luna-advisor", "advisor_trigger": "hybrid",
+            "advisor_sensitivity": "balanced", "advisor_classifier": "rules",
+        }},
+    }
+
+    run(AdvisorPlugin(), data, "aresponses")
+
+    assert data["instructions"] == (
+        "Keep answers concise.\n\nIndependent advisor guidance:\nCheck the failure path."
+    )
+    assert data["input"] == "x" * 1200
+    assert "tools" not in data
+    assert data["metadata"]["gateway_advisor"]["status"] == "advice_injected"
+    assert data["metadata"]["gateway_advisor"]["call_type"] == "aresponses"
+
+
+@pytest.mark.parametrize("call_type,data", [
+    ("acompletion", {"messages": [{"role": "user", "content": "simple"}]}),
+    ("aresponses", {"input": "simple"}),
+])
+def test_hybrid_skips_below_threshold_chat_and_responses(call_type, data, monkeypatch):
+    from copy import deepcopy
+    from subroute.plugins import advisor_plugin
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("Below-threshold Chat and Responses requests must not preconsult")
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", unexpected)
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", unexpected)
+    original = deepcopy(data)
+    data.update({"model": "openrouter", "metadata": {"gateway_policy": {
+        "advisor_model": "codex-luna-advisor", "advisor_trigger": "hybrid",
+        "advisor_sensitivity": "frequent", "advisor_classifier": "rules",
+    }}})
+
+    run(AdvisorPlugin(), data, call_type)
+
+    assert {key: value for key, value in data.items() if key != "metadata"} == {
+        **original, "model": "openrouter",
+    }
+    assert data["metadata"]["gateway_advisor"]["status"] == "skipped"
+    assert data["metadata"]["gateway_advisor"]["reason"] == "below_complexity_threshold"
+    assert data["metadata"]["gateway_advisor"]["call_type"] == call_type
+
+
+def test_responses_previous_response_id_skips_without_partial_context(monkeypatch):
+    from subroute.plugins import advisor_plugin
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("Unresolvable Responses state must not trigger an advisor call")
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", unexpected)
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", unexpected)
+    data = {
+        "model": "openrouter", "previous_response_id": "resp_prior", "input": "Review this",
+        "metadata": {"gateway_policy": {
+            "advisor_model": "codex-luna-advisor", "advisor_trigger": "always",
+        }},
+    }
+
+    run(AdvisorPlugin(), data, "aresponses")
+
+    assert data["previous_response_id"] == "resp_prior"
+    assert data["input"] == "Review this"
+    assert data["metadata"]["gateway_advisor"]["status"] == "skipped"
+    assert data["metadata"]["gateway_advisor"]["reason"] == "unsupported_request_context"
 
 
 def test_local_classifier_failure_uses_rules_without_extra_provider_call(monkeypatch):
@@ -356,17 +444,22 @@ def test_local_classifier_failure_uses_rules_without_extra_provider_call(monkeyp
     assert data["metadata"]["gateway_advisor_decision"]["classifier_error"] == "TimeoutError"
 
 
-def test_gateway_trigger_skips_non_messages_and_unsupported_gemini_content(monkeypatch):
+def test_gateway_trigger_consults_chat_and_skips_unsupported_gemini_content(monkeypatch):
     from subroute.plugins import advisor_plugin
+    from litellm.types.utils import Usage
 
-    async def unexpected(*args, **kwargs):
-        pytest.fail("Ineligible requests must not call the advisor")
+    async def fake_invoke(model, prompt, *, advisor=False):
+        assert model == "gemini-3.8-flash"
+        assert advisor is True
+        return "Check the edge case.", Usage(prompt_tokens=6, completion_tokens=4, total_tokens=10)
 
-    monkeypatch.setattr(advisor_plugin, "invoke_agy", unexpected)
+    monkeypatch.setattr(advisor_plugin, "invoke_agy", fake_invoke)
     data = {"model": "openrouter", "messages": [{"role": "user", "content": "x" * 1200}],
             "metadata": {"gateway_policy": {"advisor_model": "gemini-subscription", "advisor_trigger": "always"}}}
-    assert run(AdvisorPlugin(), data, "acompletion") is None
-    assert "gateway_advisor" not in data["metadata"]
+    run(AdvisorPlugin(), data, "acompletion")
+    assert data["messages"][-1]["content"] == "Independent advisor guidance:\nCheck the edge case."
+    assert data["metadata"]["gateway_advisor"]["call_type"] == "acompletion"
+    assert "tools" not in data
 
     data["messages"] = [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}]
     run(AdvisorPlugin(), data)
@@ -384,7 +477,10 @@ def test_codex_subscription_pair_collects_sol_and_injects_advice(monkeypatch, ef
     async def fake_collect(model, messages, **kwargs):
         assert model == "gpt-6-sol"
         assert kwargs.get("reasoning_effort") == effort
-        assert messages == [{"role": "user", "content": "review this design"}]
+        assert messages == [
+            {"role": "developer", "content": ADVISOR_BRIEF_INSTRUCTIONS},
+            {"role": "user", "content": "review this design"},
+        ]
         return "Check the error path.", Usage(
             prompt_tokens=11, completion_tokens=7, total_tokens=18
         )
@@ -426,7 +522,10 @@ def test_codex_luna_advisor_preconsults_and_injects_advice(monkeypatch, target, 
     async def fake_collect(model, messages, **kwargs):
         assert model == "gpt-6-luna"
         assert kwargs.get("reasoning_effort") == effort
-        assert messages == [{"role": "user", "content": "review this design"}]
+        assert messages == [
+            {"role": "developer", "content": ADVISOR_BRIEF_INSTRUCTIONS},
+            {"role": "user", "content": "review this design"},
+        ]
         return "Check the fallback boundary.", Usage(
             prompt_tokens=13, completion_tokens=8, total_tokens=21
         )
@@ -471,7 +570,7 @@ def test_preconsult_target_collects_antigravity_advice(monkeypatch, alias, expec
     async def fake_invoke(model, prompt, *, advisor=False):
         assert advisor is True
         assert model == expected
-        assert prompt == "[User]:\nreview this design"
+        assert prompt == f"[Developer]:\n{ADVISOR_BRIEF_INSTRUCTIONS}\n\n[User]:\nreview this design"
         return "Check the failure handling.", Usage(
             prompt_tokens=9, completion_tokens=6, total_tokens=15
         )
@@ -506,7 +605,7 @@ def test_minimax_gemini_pair_injects_advice_before_main_call(monkeypatch):
     async def fake_invoke(model, prompt, *, advisor=False):
         assert advisor is True
         assert model == "gemini-3.8-flash-medium"
-        assert prompt == "[User]:\nreview this design"
+        assert prompt == f"[Developer]:\n{ADVISOR_BRIEF_INSTRUCTIONS}\n\n[User]:\nreview this design"
         return "Use isolated fixtures and deterministic state.", Usage(
             prompt_tokens=9, completion_tokens=7, total_tokens=16
         )
@@ -530,6 +629,36 @@ def test_minimax_gemini_pair_injects_advice_before_main_call(monkeypatch):
     }
     assert data["metadata"]["gateway_advisor"]["status"] == "advice_injected"
     assert data["metadata"]["gateway_advisor"]["usage_source"] == "provider"
+
+
+def test_preconsult_brief_preserves_target_conversation(monkeypatch):
+    from copy import deepcopy
+    from litellm.types.utils import Usage
+    from subroute.plugins import advisor_plugin
+
+    messages = [
+        {"role": "system", "content": "Keep this constraint."},
+        {"role": "user", "content": "Earlier requirement."},
+        {"role": "assistant", "content": "Earlier decision."},
+        {"role": "user", "content": "Review this change."},
+    ]
+    original = deepcopy(messages)
+
+    async def collect(model, advisor_messages, **kwargs):
+        assert model == "gpt-6-luna"
+        assert advisor_messages[0] == {"role": "developer", "content": ADVISOR_BRIEF_INSTRUCTIONS}
+        assert advisor_messages[1:] == original
+        return "Check the boundary.", Usage(prompt_tokens=12, completion_tokens=5, total_tokens=17)
+
+    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", collect)
+    data = {"model": "minimax", "messages": messages,
+            "metadata": {"gateway_policy": {"advisor_model": "codex-luna-advisor", "advisor_trigger": "always"}}}
+
+    run(AdvisorPlugin(), data)
+
+    assert messages == original
+    assert data["messages"][:-1] == original
+    assert data["messages"][-1]["content"] == "Independent advisor guidance:\nCheck the boundary."
 
 
 def test_minimax_gemini_pair_skips_structured_content_without_changing_request(monkeypatch):
@@ -560,6 +689,7 @@ def test_minimax_gemini_pair_skips_structured_content_without_changing_request(m
         "status": "skipped",
         "reason": "unsupported_content",
         "model": "gemini-subscription",
+        "call_type": "anthropic_messages",
     }
 
 
@@ -608,6 +738,7 @@ def test_unsupported_tool_history_skips_only_advisor(advisor_model):
         "status": "skipped",
         "reason": "unsupported_tool_history",
         "model": advisor_model,
+        "call_type": "anthropic_messages",
     }
 
 

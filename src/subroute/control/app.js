@@ -12,6 +12,9 @@ const routeEffort = document.querySelector("#route-effort"), advisorEffort = doc
 const routeFast = document.querySelector("#route-fast"), routeFastField = document.querySelector("#route-fast-field"), routeFastHelp = document.querySelector("#route-fast-help");
 const advisorTrigger = document.querySelector("#route-advisor-trigger");
 const advisorSensitivity = document.querySelector("#route-advisor-sensitivity"), advisorClassifier = document.querySelector("#route-advisor-classifier");
+const advisorFrequency = document.querySelector("#route-advisor-frequency"), advisorFrequencyValue = document.querySelector("#route-advisor-frequency-value");
+const advisorFrequencyStats = document.querySelector("#route-advisor-frequency-stats");
+const frequencyPresets = ["conservative", "balanced", "frequent"], frequencyNames = ["Less often", "Balanced", "More often"], frequencyRates = [30, 50, 70];
 const routeStatus = document.querySelector("#route-status"), routeKey = document.querySelector("#route-key");
 const policySummary = document.querySelector("#policy-summary");
 new MutationObserver(() => {
@@ -23,6 +26,7 @@ new MutationObserver(() => {
 }).observe(routeStatus, {childList:true, subtree:true, characterData:true});
 let workingDirectory = null, routingReady = false;
 let routingModels = [], advisorModels = [];
+let currentPolicyVersion = null, frequencyPending = false;
 
 async function request(path, options) {
   let response;
@@ -49,8 +53,39 @@ function setRoutingDisabled(value) {
   routeFast.disabled = value || routeFastField.hidden || routeMode.value === "off";
   advisorEffort.disabled = value || !routeAdvisor.value || advisorEffort.options.length < 2;
   advisorTrigger.disabled = value || !routeAdvisor.value;
-  advisorSensitivity.disabled = value || !routeAdvisor.value || !["adaptive", "hybrid"].includes(advisorTrigger.value);
-  advisorClassifier.disabled = advisorSensitivity.disabled;
+  const selectionDisabled = value || !routeAdvisor.value || !["adaptive", "hybrid"].includes(advisorTrigger.value);
+  advisorClassifier.disabled = selectionDisabled;
+  advisorSensitivity.disabled = selectionDisabled || advisorClassifier.value === "ranked";
+  advisorFrequency.disabled = selectionDisabled || advisorClassifier.value !== "ranked";
+  renderAdvisorFrequency(value);
+}
+
+function renderAdvisorFrequency(busy = false) {
+  const index = Number(advisorFrequency.value);
+  const ranked = advisorClassifier.value === "ranked";
+  advisorTrigger.querySelector('[value="hybrid"]').textContent = ranked ? "Combined (ranked selection)" : "Adaptive + target may ask";
+  advisorFrequencyValue.textContent = `~${frequencyRates[index]}%`;
+  advisorFrequency.setAttribute("aria-valuetext", `${frequencyNames[index]}, about ${frequencyRates[index]} percent`);
+  document.querySelectorAll(".frequency-stops span").forEach((node, i) => node.classList.toggle("selected", i === index));
+  document.querySelector("#route-advisor-advanced").hidden = ranked;
+  document.querySelector("#route-advisor-frequency-state").textContent = busy ? "Selection control is unavailable while policy loads or saves." : !routeAdvisor.value ? "Choose an advisor to enable selection." : !["adaptive", "hybrid"].includes(advisorTrigger.value) ? "This trigger does not use the target selection rate. Choose Adaptive or Combined." : !ranked ? "This legacy method uses Advanced sensitivity. Choose Learned ranking to use the target rate." : "Applies to Adaptive and Combined modes; selected requests receive one preconsultation.";
+  document.querySelector("#route-advisor-trigger-help").textContent = ranked ? "Learned ranking selects requests before the target in Adaptive and Combined modes. Each selected request gets one preconsultation; unselected requests cannot call the advisor." : "Legacy Adaptive checks run before the target. Combined mode lets the target request advice on supported Messages turns below the threshold. The local model falls back to rules if unavailable.";
+}
+
+async function refreshAdvisorFrequency() {
+  if (frequencyPending || document.hidden) return;
+  if (!routingReady) { advisorFrequencyStats.textContent = "Selection statistics unavailable"; return; }
+  if (advisorClassifier.value !== "ranked" || !routeAdvisor.value || !["adaptive", "hybrid"].includes(advisorTrigger.value)) {
+    advisorFrequencyStats.textContent = "Selection statistics do not apply to this advisor policy"; return;
+  }
+  frequencyPending = true;
+  try {
+    const stats = await request("/api/advisor-frequency");
+    if (stats.classifier !== advisorClassifier.value || stats.policy_version !== currentPolicyVersion || stats.scope !== "process_policy" || !Number.isInteger(stats.eligible_count) || !Number.isInteger(stats.selected_count) || stats.selected_count < 0 || stats.eligible_count < stats.selected_count || !Number.isFinite(stats.observed_rate) || stats.observed_rate < 0 || stats.observed_rate > 1) throw new Error("Statistics unavailable for current policy");
+    const rate = stats.eligible_count ? `${Math.round(stats.observed_rate * 100)}%` : "--";
+    advisorFrequencyStats.textContent = `Selected ${stats.selected_count} of ${stats.eligible_count} eligible requests (${rate})`;
+  } catch (_) { advisorFrequencyStats.textContent = "Selection statistics unavailable"; }
+  finally { frequencyPending = false; }
 }
 
 function renderProviderMenu(select, choices, selected, advisor = false) {
@@ -118,19 +153,23 @@ async function renderRouting() {
     routeMode.value = routing.state.mode;
     advisorTrigger.value = routing.state.advisor_trigger || "model";
     advisorSensitivity.value = routing.state.advisor_sensitivity || "balanced";
-    advisorClassifier.value = routing.state.advisor_classifier || "local";
+    advisorFrequency.value = String(Math.max(0, frequencyPresets.indexOf(advisorSensitivity.value)));
+    advisorClassifier.value = routing.state.advisor_classifier ?? "ranked";
+    currentPolicyVersion = routing.state.policy_version;
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
     renderTargetSpeed(routing.state.fast_mode);
     renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
     routeKey.textContent = routing.client_api_key_required ? "CLIENT API KEY REQUIRED" : "LOCAL CLIENT KEY BYPASS";
     setRoutingDisabled(false); routingReady = true;
+    refreshAdvisorFrequency();
   } catch (error) {
     if (!routingModels.length) {
       for (const select of [routeProvider, advisorProvider, routeModel, routeAdvisor, routeEffort, advisorEffort]) select.replaceChildren(option("", "Unavailable"));
       const unavailable = option("", "Policy unavailable"); unavailable.dataset.unavailable = "true"; routeMode.prepend(unavailable); routeMode.value = "";
     }
     setRoutingDisabled(true); routeStatus.textContent = error.message; routeKey.textContent = "GATEWAY UNAVAILABLE";
+    advisorFrequencyStats.textContent = "Selection statistics unavailable";
   }
 }
 
@@ -139,17 +178,30 @@ async function saveActiveRouting() {
   setRoutingDisabled(true); routeStatus.textContent = "Saving routing…";
   try {
     const state = await request("/api/active-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: routeModel.value, mode: routeMode.value, reasoning_effort: routeEffort.value || null, fast_mode: !routeFastField.hidden && routeFast.value === "fast" }) });
-    routeStatus.textContent = `Routing saved · policy v${state.policy_version}`; setRoutingDisabled(false);
+    currentPolicyVersion = state.policy_version;
+    routeStatus.textContent = `Routing saved · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorFrequency();
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
 }
 
 async function saveAdvisorRouting() {
   if (!routingReady) return;
+  const previousFocus = document.activeElement;
+  if (advisorClassifier.value === "ranked") advisorSensitivity.value = frequencyPresets[Number(advisorFrequency.value)];
   setRoutingDisabled(true); routeStatus.textContent = "Saving advisor…";
+  advisorFrequencyStats.textContent = "Loading current policy statistics…";
   try {
     const state = await request("/api/advisor-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ advisor_model: routeAdvisor.value || null, reasoning_effort: advisorEffort.value || null, advisor_trigger: advisorTrigger.value, advisor_sensitivity: advisorSensitivity.value, advisor_classifier: advisorClassifier.value }) });
-    routeStatus.textContent = `Advisor ${state.advisor_model ? "saved" : "disabled"} · policy v${state.policy_version}`; setRoutingDisabled(false);
+    currentPolicyVersion = state.policy_version;
+    routeStatus.textContent = `Advisor ${state.advisor_model ? "saved" : "disabled"} · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorFrequency();
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
+  finally {
+    // Disabling a keyboard-operated control moves focus to the document body.
+    // Restore it after saving unless the user has focused another element.
+    if (previousFocus?.isConnected && !previousFocus.disabled &&
+        (document.activeElement === document.body || document.activeElement === previousFocus)) {
+      previousFocus.focus({ preventScroll: true });
+    }
+  }
 }
 
 function renderSources(sources, usageMap, usageFallback = "Provider quota data unavailable") {
@@ -257,7 +309,9 @@ routeFast.addEventListener("change", saveActiveRouting);
 routeAdvisor.addEventListener("change", () => { renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, null, "#route-advisor-effort-help", true); saveAdvisorRouting(); });
 advisorEffort.addEventListener("change", saveAdvisorRouting);
 advisorTrigger.addEventListener("change", saveAdvisorRouting);
-advisorSensitivity.addEventListener("change", saveAdvisorRouting);
+advisorSensitivity.addEventListener("change", () => { advisorFrequency.value = String(frequencyPresets.indexOf(advisorSensitivity.value)); saveAdvisorRouting(); });
+advisorFrequency.addEventListener("input", () => renderAdvisorFrequency());
+advisorFrequency.addEventListener("change", saveAdvisorRouting);
 advisorClassifier.addEventListener("change", saveAdvisorRouting);
 const menuToggle = document.querySelector("#menu-toggle");
 function closeNavigation() {
@@ -289,5 +343,7 @@ menuToggle.addEventListener("click", () => {
 document.querySelectorAll("[data-view]").forEach(link => link.addEventListener("click", event => { event.preventDefault(); location.hash = link.dataset.view; showSection(); document.querySelector("#page-title").focus({preventScroll:true}); window.scrollTo(0,0); }));
 document.addEventListener("keydown", event => { if (event.key === "Escape" && document.body.classList.contains("menu-open")) { closeNavigation(); menuToggle.focus(); } });
 window.addEventListener("hashchange", showSection);
+setInterval(() => { if (!document.hidden) refreshAdvisorFrequency(); }, 10000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAdvisorFrequency(); });
 showSection();
 load(false);

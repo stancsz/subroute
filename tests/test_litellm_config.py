@@ -65,7 +65,11 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     assert antigravity_env["GEMINI_FORCE_FILE_STORAGE"] == "true"
     assert set(services["postgres"]["volumes"]).isdisjoint(services["postgres-staging"]["volumes"])
     assert prod["image"] == staging["image"]
-    assert "@sha256:" in prod["image"]
+    assert prod["build"] == staging["build"]
+    recipe = (ROOT / prod["build"]["dockerfile"]).read_text()
+    assert "FROM ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56" in recipe
+    assert "onnxruntime==1.31.0 flatbuffers==25.12.19" in recipe
+    assert ":latest" not in prod["image"] and ":latest" not in recipe
 
 
 def test_compose_publishes_gateway_ports_on_loopback():

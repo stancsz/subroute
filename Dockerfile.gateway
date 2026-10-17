@@ -1,0 +1,11 @@
+FROM python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS ranking-deps
+
+# Other ONNX dependencies (numpy, protobuf, packaging) belong to the pinned base.
+RUN python -m pip install --no-cache-dir --no-deps --target /ranking-deps onnxruntime==1.31.0 flatbuffers==25.12.19
+
+# Keep LiteLLM and its existing protocol/provider stack on the deployed digest.
+FROM ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56
+COPY --from=ranking-deps /ranking-deps/ /app/.venv/lib/python3.13/site-packages/
+RUN python -c "import onnxruntime; assert onnxruntime.__version__ == '1.31.0'"
+
+COPY models/advisor-ranker/ /opt/subroute/advisor-ranker/

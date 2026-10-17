@@ -25,7 +25,7 @@ from subroute.ui_control import register_ui_routes, source_configuration
 RoutingMode = Literal["alias", "force", "off"]
 AdvisorTrigger = Literal["model", "adaptive", "hybrid", "always"]
 AdvisorSensitivity = Literal["conservative", "balanced", "frequent"]
-AdvisorClassifier = Literal["local", "rules"]
+AdvisorClassifier = Literal["local", "rules", "ranked"]
 VIRTUAL_ALIASES = frozenset({"default", "auto"})
 RETIRED_MODEL_ALIASES = {
     "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
@@ -189,7 +189,7 @@ class RoutingControlPlane:
             raise ValueError(f"invalid advisor trigger: {state.advisor_trigger!r}")
         if state.advisor_sensitivity not in {"conservative", "balanced", "frequent"}:
             raise ValueError(f"invalid advisor sensitivity: {state.advisor_sensitivity!r}")
-        if state.advisor_classifier not in {"local", "rules"}:
+        if state.advisor_classifier not in {"local", "rules", "ranked"}:
             raise ValueError(f"invalid advisor classifier: {state.advisor_classifier!r}")
         for model, effort in (
             (state.active_model, state.reasoning_effort),
@@ -603,6 +603,13 @@ async def advisor_model_state(request: Request) -> dict[str, Any]:
     return asdict(control_plane.snapshot())
 
 
+async def advisor_frequency_state(request: Request) -> dict[str, Any]:
+    _require_local_control_request(request)
+    # The configured callback owns the process-local gate; this endpoint only reads it.
+    from subroute.plugins.advisor_plugin import advisor_plugin_instance
+    return advisor_plugin_instance.frequency_state(asdict(control_plane.snapshot()))
+
+
 async def update_advisor_model(request: Request) -> dict[str, Any]:
     _require_local_control_request(request)
     if request.headers.get("content-type", "").partition(";")[0].strip().lower() != "application/json":
@@ -630,6 +637,7 @@ def _register_routes() -> None:
         ("/api/active-model", update_active_model, ["POST"], None),
         ("/api/routing-options", routing_options, ["GET"], None),
         ("/api/advisor-model", advisor_model_state, ["GET"], None),
+        ("/api/advisor-frequency", advisor_frequency_state, ["GET"], None),
         ("/api/advisor-model", update_advisor_model, ["POST"], None),
     )
     for path, endpoint, methods, response_class in routes:

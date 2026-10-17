@@ -15,13 +15,14 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8", "pyyaml>=6"]
+ranking = ["onnxruntime==1.31.0", "flatbuffers==25.12.19"]
 music = ["mcp==1.28.1", "mutagen==1.47.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-subroute = ["control/*.html", "control/*.css", "control/*.js"]
+subroute = ["control/*.html", "control/*.css", "control/*.js", "data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

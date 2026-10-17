@@ -252,6 +252,7 @@ def test_native_custom_provider_transmits_target_or_advisor_effort(control, monk
 
 
 @pytest.mark.parametrize("model,effort,expected", [
+    ("gemini-4-argon", "medium", "gemini-4-argon-medium"),
     ("gemini-3.8-flash", "medium", "gemini-3.8-flash-medium"),
     ("gemini-3.7-flash", "low", "gemini-3.7-flash-low"),
     ("gemini-3.6-flash", "high", "gemini-3.6-flash-high"),
@@ -272,6 +273,7 @@ def test_routing_choices_follow_configured_sources_without_exposing_credentials(
     choices = {item["model_id"]: item for item in result["models"]}
     assert "openai" not in choices
     assert "gemini-api" not in choices
+    assert choices["gemini-subscription-argon"]["reasoning_efforts"] == ["low", "medium", "high"]
     assert choices["codex-luna"]["configured"] is True
     assert choices["codex-luna"]["provider"] == "OpenAI"
     assert next(item for item in result["advisor_models"] if item["model_id"] == "gemini-subscription")["configured"] is True
