@@ -56,3 +56,11 @@ def test_advisor_frequency_is_the_only_selection_control_and_is_accessible():
     assert "eligible API requests" in markup
     assert "higher estimated review priority" in markup
     assert markup.index('id="route-advisor-effort"') < markup.index('id="route-advisor-frequency"') < markup.index('id="route-advisor-frequency-stats"')
+    assert parsed.by_id["route-advisor-analytics-window"][0] == "select"
+    assert parsed.by_id["route-advisor-analytics-window"][1]["aria-describedby"] == "route-advisor-analytics-meaning"
+    assert '<option value="30">30 minutes</option>' in markup
+    assert '<option value="60" selected>1 hour</option>' in markup
+    assert '<option value="120">2 hours</option>' in markup
+    assert "Invoked means consultation started, including failures." in markup
+    assert "This gateway · last 1 hour" in markup
+    assert "Current process · current policy" not in markup

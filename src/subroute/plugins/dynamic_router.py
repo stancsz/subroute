@@ -8,6 +8,8 @@ import logging
 import os
 import tempfile
 import threading
+import uuid
+from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -324,8 +326,6 @@ class DynamicRoutingPlugin(CustomLogger):
         call_type: str,
     ) -> dict | None:
         requested_model = data.get("model")
-        if requested_model == "current":
-            raise HTTPException(status_code=404, detail="unknown model")
         # This request snapshot is server-owned, never a client override.
         data.pop("gateway_image_request", None)
         if isinstance(data.get("extra_body"), dict):
@@ -333,6 +333,18 @@ class DynamicRoutingPlugin(CustomLogger):
         if call_type in {"aresponses", "responses"}:
             data.setdefault("litellm_metadata", {})
         _, metadata = get_or_create_metadata_bucket(data)
+        # The accounting callback owns the root ID. Never accept caller markers.
+        from subroute.plugins.advisor_plugin import advisor_plugin_instance, ADVISOR_CALL_TYPES
+        from subroute.usage_accounting import trace_context
+        metadata.pop("_gateway_analytics_id", None)
+        metadata.pop("_gateway_analytics_ok", None)
+        if call_type in ADVISOR_CALL_TYPES:
+            trace = trace_context.get()
+            request_id = trace.request_id if trace is not None else str(uuid.uuid4())
+            metadata["_gateway_analytics_id"] = request_id
+            metadata["_gateway_analytics_ok"] = await advisor_plugin_instance.analytics.record(request_id)
+        if requested_model == "current":
+            raise HTTPException(status_code=404, detail="unknown model")
         from subroute.plugins.image_intent import image_request_context
         from subroute.audio import audio_route
 
@@ -605,6 +617,27 @@ async def advisor_frequency_state(request: Request) -> dict[str, Any]:
     return advisor_plugin_instance.frequency_state(asdict(control_plane.snapshot()))
 
 
+async def advisor_analytics_state(request: Request) -> dict[str, Any]:
+    _require_local_control_request(request)
+    try:
+        raw = request.query_params.get("minutes", "60")
+        if raw not in {"30", "60", "120"}:
+            raise ValueError("Window must be 30, 60, or 120 minutes")
+        from subroute.plugins.advisor_plugin import advisor_plugin_instance
+        stats = await advisor_plugin_instance.analytics.summary(int(raw))
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    return {
+        **stats,
+        "total_requests": stats["total"], "eligible_requests": stats["eligible"],
+        "invoked_requests": stats["invoked"], "successful_advice": stats["successful"],
+        "failed_advice": stats["failed"],
+        "coverage": {"complete": not stats["partial_window"] and not stats["counts_may_be_incomplete"],
+                     "started_at": datetime.fromtimestamp(stats["coverage_verified_start_ms"] / 1000, timezone.utc).isoformat()
+                     if stats["coverage_verified_start_ms"] is not None else None},
+    }
+
+
 async def update_advisor_model(request: Request) -> dict[str, Any]:
     _require_local_control_request(request)
     if request.headers.get("content-type", "").partition(";")[0].strip().lower() != "application/json":
@@ -633,6 +666,7 @@ def _register_routes() -> None:
         ("/api/routing-options", routing_options, ["GET"], None),
         ("/api/advisor-model", advisor_model_state, ["GET"], None),
         ("/api/advisor-frequency", advisor_frequency_state, ["GET"], None),
+        ("/api/advisor-analytics", advisor_analytics_state, ["GET"], None),
         ("/api/advisor-model", update_advisor_model, ["POST"], None),
     )
     for path, endpoint, methods, response_class in routes:

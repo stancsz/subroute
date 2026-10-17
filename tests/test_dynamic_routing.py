@@ -92,7 +92,7 @@ def test_alias_mode_resolves_default_but_preserves_explicit_models(tmp_path: Pat
 
     assert run(plugin, data) is data
     assert data["model"] == "minimax"
-    assert data["metadata"] == {
+    assert {k:v for k,v in data["metadata"].items() if not k.startswith("_gateway_analytics_")} == {
         "client": "codex",
         "gateway_reasoning_effort": None,
         "gateway_target_fast_mode": False,
@@ -153,7 +153,7 @@ def test_unknown_model_is_rejected_before_force_routing(tmp_path: Path):
 
     assert error.value.status_code == 404
     assert data["model"] == "does-not-exist"
-    assert data["metadata"] == {}
+    assert {k:v for k,v in data["metadata"].items() if not k.startswith("_gateway_analytics_")} == {}
 
 
 @pytest.mark.parametrize("prompt", ["hello", "Draw a cat"])

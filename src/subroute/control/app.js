@@ -12,6 +12,9 @@ const routeEffort = document.querySelector("#route-effort"), advisorEffort = doc
 const routeFast = document.querySelector("#route-fast"), routeFastField = document.querySelector("#route-fast-field"), routeFastHelp = document.querySelector("#route-fast-help");
 const advisorFrequency = document.querySelector("#route-advisor-frequency"), advisorFrequencyValue = document.querySelector("#route-advisor-frequency-value");
 const advisorFrequencyStats = document.querySelector("#route-advisor-frequency-stats");
+const advisorAnalyticsWindow = document.querySelector("#route-advisor-analytics-window");
+const advisorAnalyticsRatios = document.querySelector("#route-advisor-analytics-ratios"), advisorAnalyticsFailures = document.querySelector("#route-advisor-analytics-failures");
+const advisorAnalyticsCoverage = document.querySelector("#route-advisor-analytics-coverage"), advisorAnalyticsScope = document.querySelector("#route-advisor-analytics-scope");
 const frequencyPresets = ["conservative", "balanced", "frequent"], frequencyNames = ["Less often", "Balanced", "More often"], frequencyRates = [30, 50, 70];
 const routeStatus = document.querySelector("#route-status"), routeKey = document.querySelector("#route-key");
 const policySummary = document.querySelector("#policy-summary");
@@ -24,7 +27,7 @@ new MutationObserver(() => {
 }).observe(routeStatus, {childList:true, subtree:true, characterData:true});
 let workingDirectory = null, routingReady = false;
 let routingModels = [], advisorModels = [];
-let currentPolicyVersion = null, frequencyPending = false;
+let analyticsPending = false;
 
 async function request(path, options) {
   let response;
@@ -62,20 +65,39 @@ function renderAdvisorFrequency(busy = false) {
   document.querySelector("#route-advisor-frequency-state").textContent = busy ? "Frequency control is unavailable while policy loads or saves." : !routeAdvisor.value ? "Choose an advisor to enable selection." : "Selected requests receive one advisor consultation before the target responds.";
 }
 
-async function refreshAdvisorFrequency() {
-  if (frequencyPending || document.hidden) return;
-  if (!routingReady) { advisorFrequencyStats.textContent = "Selection statistics unavailable"; return; }
-  if (!routeAdvisor.value) {
-    advisorFrequencyStats.textContent = "Choose an advisor to see selection statistics"; return;
-  }
-  frequencyPending = true;
+function clearAdvisorAnalytics(message) {
+  advisorFrequencyStats.textContent = message;
+  advisorAnalyticsRatios.textContent = "";
+  advisorAnalyticsFailures.hidden = true;
+  advisorAnalyticsCoverage.textContent = "";
+}
+
+async function refreshAdvisorAnalytics() {
+  if (analyticsPending || document.hidden) return;
+  const minutes = Number(advisorAnalyticsWindow.value);
+  const windowLabel = {30: "30 minutes", 60: "1 hour", 120: "2 hours"}[minutes];
+  advisorAnalyticsScope.textContent = `This gateway · last ${windowLabel}`;
+  analyticsPending = true;
   try {
-    const stats = await request("/api/advisor-frequency");
-    if (stats.classifier !== "ranked" || stats.policy_version !== currentPolicyVersion || stats.scope !== "process_policy" || !Number.isInteger(stats.eligible_count) || !Number.isInteger(stats.selected_count) || stats.selected_count < 0 || stats.eligible_count < stats.selected_count || !Number.isFinite(stats.observed_rate) || stats.observed_rate < 0 || stats.observed_rate > 1) throw new Error("Statistics unavailable for current policy");
-    const rate = stats.eligible_count ? `${Math.round(stats.observed_rate * 100)}%` : "--";
-    advisorFrequencyStats.textContent = `Selected ${stats.selected_count} of ${stats.eligible_count} eligible requests (${rate})`;
-  } catch (_) { advisorFrequencyStats.textContent = "Selection statistics unavailable"; }
-  finally { frequencyPending = false; }
+    const stats = await request(`/api/advisor-analytics?minutes=${minutes}`);
+    if (Number(advisorAnalyticsWindow.value) !== minutes) return;
+    const countFields = ["total_requests", "eligible_requests", "invoked_requests", "successful_advice", "failed_advice", "provider_attempts"];
+    if (stats.window_minutes !== minutes || !countFields.every(field => Number.isSafeInteger(stats[field]) && stats[field] >= 0) || stats.invoked_requests > stats.eligible_requests || stats.eligible_requests > stats.total_requests || typeof stats.coverage?.complete !== "boolean") throw new Error("Incompatible activity statistics");
+    const percentage = (numerator, denominator) => denominator ? `${(numerator / denominator * 100).toFixed(1)}%` : "--";
+    advisorFrequencyStats.textContent = `${stats.invoked_requests} advisor invoked / ${stats.eligible_requests} eligible / ${stats.total_requests} total`;
+    advisorAnalyticsRatios.textContent = `Invoked / eligible ${percentage(stats.invoked_requests, stats.eligible_requests)} · Eligible / total ${percentage(stats.eligible_requests, stats.total_requests)} · Invoked / total ${percentage(stats.invoked_requests, stats.total_requests)}`;
+    advisorAnalyticsFailures.hidden = !stats.failed_advice && stats.provider_attempts === stats.invoked_requests;
+    advisorAnalyticsFailures.textContent = `${stats.failed_advice} advisor failures · ${stats.provider_attempts} provider attempts`;
+    const started = new Date(typeof stats.coverage.started_at === "string" ? stats.coverage.started_at : NaN);
+    const coverage = stats.coverage.complete ? "Full window verified" : Number.isFinite(started.getTime()) ? `Partial window · coverage verified since ${started.toLocaleString()}` : "Still collecting history";
+    advisorAnalyticsCoverage.textContent = `${coverage}${stats.counts_may_be_incomplete ? " · Counts may be incomplete" : ""}`;
+  } catch (_) {
+    if (Number(advisorAnalyticsWindow.value) === minutes) clearAdvisorAnalytics("Advisor activity unavailable");
+  }
+  finally {
+    analyticsPending = false;
+    if (Number(advisorAnalyticsWindow.value) !== minutes && !document.hidden) refreshAdvisorAnalytics();
+  }
 }
 
 function renderProviderMenu(select, choices, selected, advisor = false) {
@@ -143,21 +165,20 @@ async function renderRouting() {
     routeMode.value = routing.state.mode;
     const frequencyIndex = frequencyPresets.indexOf(routing.state.advisor_sensitivity);
     advisorFrequency.value = String(frequencyIndex < 0 ? 1 : frequencyIndex);
-    currentPolicyVersion = routing.state.policy_version;
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
     renderTargetSpeed(routing.state.fast_mode);
     renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
     routeKey.textContent = routing.client_api_key_required ? "CLIENT API KEY REQUIRED" : "LOCAL CLIENT KEY BYPASS";
     setRoutingDisabled(false); routingReady = true;
-    refreshAdvisorFrequency();
+    refreshAdvisorAnalytics();
   } catch (error) {
     if (!routingModels.length) {
       for (const select of [routeProvider, advisorProvider, routeModel, routeAdvisor, routeEffort, advisorEffort]) select.replaceChildren(option("", "Unavailable"));
       const unavailable = option("", "Policy unavailable"); unavailable.dataset.unavailable = "true"; routeMode.prepend(unavailable); routeMode.value = "";
     }
     setRoutingDisabled(true); routeStatus.textContent = error.message; routeKey.textContent = "GATEWAY UNAVAILABLE";
-    advisorFrequencyStats.textContent = "Selection statistics unavailable";
+    clearAdvisorAnalytics("Advisor activity unavailable");
   }
 }
 
@@ -166,8 +187,7 @@ async function saveActiveRouting() {
   setRoutingDisabled(true); routeStatus.textContent = "Saving routing…";
   try {
     const state = await request("/api/active-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: routeModel.value, mode: routeMode.value, reasoning_effort: routeEffort.value || null, fast_mode: !routeFastField.hidden && routeFast.value === "fast" }) });
-    currentPolicyVersion = state.policy_version;
-    routeStatus.textContent = `Routing saved · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorFrequency();
+    routeStatus.textContent = `Routing saved · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorAnalytics();
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
 }
 
@@ -175,11 +195,9 @@ async function saveAdvisorRouting() {
   if (!routingReady) return;
   const previousFocus = document.activeElement;
   setRoutingDisabled(true); routeStatus.textContent = "Saving advisor…";
-  advisorFrequencyStats.textContent = "Loading current policy statistics…";
   try {
     const state = await request("/api/advisor-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ advisor_model: routeAdvisor.value || null, reasoning_effort: advisorEffort.value || null, advisor_sensitivity: frequencyPresets[Number(advisorFrequency.value)] }) });
-    currentPolicyVersion = state.policy_version;
-    routeStatus.textContent = `Advisor ${state.advisor_model ? "saved" : "disabled"} · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorFrequency();
+    routeStatus.textContent = `Advisor ${state.advisor_model ? "saved" : "disabled"} · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorAnalytics();
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
   finally {
     // Disabling a keyboard-operated control moves focus to the document body.
@@ -327,7 +345,8 @@ menuToggle.addEventListener("click", () => {
 document.querySelectorAll("[data-view]").forEach(link => link.addEventListener("click", event => { event.preventDefault(); location.hash = link.dataset.view; showSection(); document.querySelector("#page-title").focus({preventScroll:true}); window.scrollTo(0,0); }));
 document.addEventListener("keydown", event => { if (event.key === "Escape" && document.body.classList.contains("menu-open")) { closeNavigation(); menuToggle.focus(); } });
 window.addEventListener("hashchange", showSection);
-setInterval(() => { if (!document.hidden) refreshAdvisorFrequency(); }, 10000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAdvisorFrequency(); });
+advisorAnalyticsWindow.addEventListener("change", () => { clearAdvisorAnalytics("Loading advisor activity…"); refreshAdvisorAnalytics(); });
+setInterval(() => { if (!document.hidden) refreshAdvisorAnalytics(); }, 10000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAdvisorAnalytics(); });
 showSection();
 load(false);

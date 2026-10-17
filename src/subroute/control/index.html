@@ -70,7 +70,16 @@
           </div>
           <p id="route-advisor-frequency-help" class="route-help">Approximate targets favor higher estimated review priority. Short windows and changing traffic can vary.</p>
           <p id="route-advisor-frequency-state" class="route-help">Waiting for gateway policy.</p>
-          <div class="advisor-frequency-stats"><p id="route-advisor-frequency-stats">Selection statistics unavailable</p><small>Current process · current policy</small></div>
+          <div class="advisor-frequency-stats">
+            <div class="analytics-heading"><label for="route-advisor-analytics-window">Advisor activity</label><select id="route-advisor-analytics-window" aria-describedby="route-advisor-analytics-meaning"><option value="30">30 minutes</option><option value="60" selected>1 hour</option><option value="120">2 hours</option></select></div>
+            <p id="route-advisor-frequency-stats">Advisor activity unavailable</p>
+            <p id="route-advisor-analytics-ratios"></p>
+            <p id="route-advisor-analytics-failures" hidden></p>
+            <small id="route-advisor-analytics-scope">This gateway · last 1 hour</small>
+            <small id="route-advisor-analytics-coverage"></small>
+            <small id="route-advisor-analytics-meaning">Eligible means an advisor is enabled and the context is supported. Invoked means consultation started, including failures.</small>
+            <small>Counts cover Chat, Responses and Messages requests reaching routing; health checks and authentication rejections are excluded. Stored counts persist across policy changes and restarts.</small>
+          </div>
         </div>
       </div>
       <div class="route-footer">

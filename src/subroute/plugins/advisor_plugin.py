@@ -23,6 +23,7 @@ from subroute.handlers.codex_advisor import (
 from subroute.handlers.antigravity import invoke_agy, model_with_effort, prompt_from_messages
 from subroute.handlers.antigravity import AntigravityBridgeError, AntigravityRequestTooLargeError
 from subroute.handlers.codex_advisor import CodexAdvisorError
+from subroute.advisor_analytics import AdvisorAnalytics
 from subroute.advisor_frequency import AdvisorFrequencyGate
 from subroute.advisor_ranker import AdvisorRequestRanker, AdvisorRankerUnavailable
 
@@ -104,9 +105,15 @@ class AdvisorPlugin(CustomLogger):
 
     def __init__(self) -> None:
         super().__init__()
+        self.analytics = AdvisorAnalytics()
         self.request_ranker = AdvisorRequestRanker()
         self.frequency_gate = AdvisorFrequencyGate()
         self._ranked_attempts: OrderedDict[str, None] = OrderedDict()
+
+    async def _record_analytics(self, metadata: dict, **markers) -> None:
+        request_id = metadata.get("_gateway_analytics_id")
+        if request_id and metadata.get("_gateway_analytics_ok") is True:
+            metadata["_gateway_analytics_ok"] = await self.analytics.record(request_id, **markers)
 
     @staticmethod
     def _frequency_policy_key(policy: dict) -> str:
@@ -624,7 +631,12 @@ class AdvisorPlugin(CustomLogger):
         self._ranked_attempts[request_id] = None
         if len(self._ranked_attempts) > 1024:
             self._ranked_attempts.popitem(last=False)
-        decision = await self._ranked_decision(messages, request_id=request_id, policy=policy)
+        await self._record_analytics(metadata, eligible=True)
+        try:
+            decision = await self._ranked_decision(messages, request_id=request_id, policy=policy)
+        except Exception:
+            await self._record_analytics(metadata, failed=True)
+            raise
         metadata["gateway_advisor_decision"] = decision
         logger.warning(
             "advisor ranked_selection request_id=%s policy_version=%s score=%.5f target=%.2f consult=%s selected=%s eligible=%s",
@@ -635,6 +647,8 @@ class AdvisorPlugin(CustomLogger):
             metadata["gateway_advisor"] = {"status": "skipped", "reason": "not_selected_by_ranking",
                                            "model": advisor_model, "call_type": call_type}
             return data
+
+        await self._record_analytics(metadata, selected=True)
 
         # LiteLLM's router checks run after proxy callbacks. This earlier
         # consultation must use that same counter and configured cap before
@@ -669,6 +683,7 @@ class AdvisorPlugin(CustomLogger):
                     compaction["final_estimated_tokens"], compaction["attempts"],
                 )
             try:
+                await self._record_analytics(metadata, invoked=True, provider_attempts=1)
                 advice, usage = await self._invoke_advisor(
                     advisor_model, advisor_messages, advisor_effort,
                 )
@@ -685,13 +700,16 @@ class AdvisorPlugin(CustomLogger):
                     data.get("litellm_call_id"), consultation_id, advisor_model,
                     fallback_model, fallback_attempt["reason"],
                 )
+                await self._record_analytics(metadata, invoked=True, provider_attempts=2)
                 advice, usage = await self._invoke_advisor(
                     fallback_model, advisor_messages, advisor_effort,
                 )
                 resolved_advisor_model = fallback_model
         except ContextWindowExceededError:
+            await self._record_analytics(metadata, failed=True)
             raise
         except Exception as exc:
+            await self._record_analytics(metadata, failed=True)
             reason = _safe_error_reason(exc)
             gateway_request_id = data.get("litellm_call_id")
             metadata["gateway_advisor"] = {
@@ -756,6 +774,7 @@ class AdvisorPlugin(CustomLogger):
                     }
                 },
             ) from exc
+        await self._record_analytics(metadata, successful=True)
         if call_type in MESSAGE_CALL_TYPES:
             data["messages"] = [
                 *(data.get("messages") or []),
