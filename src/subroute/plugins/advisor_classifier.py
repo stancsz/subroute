@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from typing import Any
 
 import httpx
@@ -31,6 +32,35 @@ CLASSIFIER_FORMAT = {
     "additionalProperties": False,
 }
 CLASSIFIER_DEADLINE_SECONDS = 8.5
+
+
+def has_high_risk_intent(prompt: str) -> bool:
+    """Recognize explicit risky work, without treating examples as instructions."""
+    text = re.sub(r"```.*?(?:```|$)|`[^`]*`|\"[^\"]*\"|'[^'\n]*'|“[^”]*”|「[^」]*」", " ", prompt[:32000], flags=re.S)
+    clauses = re.split(r"[.!?;\n。！？；]|\b(?:and|then|but)\b|然后|并且", text, flags=re.I)
+    action = (
+        r"^(?:(?:please|can you|could you|help me|we need to)\s+)*"
+        r"(?:fix|debug|review|design|implement|audit|secure|migrate|prevent|investigate|"
+        r"resolve|harden|handle|repair|build|add|change|update|remove|disable|enable|delete|deploy)\b"
+        r"|^(?:请|帮我|请帮我|我们需要|需要)*(?:修复|排查|审查|审核|设计|实现|迁移|防止|解决|加固|处理|修改|添加|删除|部署)"
+    )
+    risk = (
+        r"\b(?:race|concurren\w*|deadlock|idempoten\w*|billing|payment\w*|charg\w*|"
+        r"auth(?:entication|orization|enticate|orize)?|permission\w*|secret\w*|credential\w*|security|access control|"
+        r"retr(?:y|ies)|timeout\w*|failure\w*|recovery|data loss|rollback|production)\b"
+        r"|并发|竞态|死锁|幂等|计费|支付|扣款|鉴权|认证|权限|密钥|凭据|安全|重试|超时|故障|恢复|数据丢失|回滚|生产环境"
+    )
+    cosmetic = (
+        r"^(?:please\s+)?(?:update|change|review|add|remove)\b.*"
+        r"\b(?:label|text|wording|spelling|caption|heading|tooltip|colou?r)\b"
+        r"|^(?:请|帮我|请帮我)*(?:修改|添加|删除|审查).*(?:文案|拼写|标题|配色)"
+    )
+    return any(
+        re.search(action, clause.strip(), re.I)
+        and re.search(risk, clause, re.I)
+        and not re.search(cosmetic, clause, re.I)
+        for clause in clauses
+    )
 
 
 class LocalComplexityClassifier:

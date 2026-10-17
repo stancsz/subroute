@@ -22,7 +22,7 @@ from subroute.handlers.codex_advisor import (
 from subroute.handlers.antigravity import invoke_agy, model_with_effort, prompt_from_messages
 from subroute.handlers.antigravity import AntigravityBridgeError, AntigravityRequestTooLargeError
 from subroute.handlers.codex_advisor import CodexAdvisorError
-from subroute.plugins.advisor_classifier import LocalComplexityClassifier
+from subroute.plugins.advisor_classifier import LocalComplexityClassifier, has_high_risk_intent
 
 
 ADVISOR_TOOL_TYPE = "advisor_20260301"
@@ -213,7 +213,7 @@ class AdvisorPlugin(CustomLogger):
 
     @classmethod
     def _complexity_score(cls, messages: list[dict[str, Any]]) -> int:
-        """Fallback score when local classification is disabled or unavailable."""
+        """Deterministic intent and structure score, also used as local fallback."""
         prompt = cls._latest_user_text(messages)
         score = 2 if len(prompt) >= 1200 else 1 if len(prompt) >= 400 else 0
         sample = prompt[:32000]
@@ -223,6 +223,8 @@ class AdvisorPlugin(CustomLogger):
             score += 1
         if cls._recent_tool_history(messages):
             score += 2
+        if has_high_risk_intent(prompt):
+            score = max(score, 3)
         return min(score, 3)
 
     async def _adaptive_decision(
