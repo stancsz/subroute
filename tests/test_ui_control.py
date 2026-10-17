@@ -22,7 +22,7 @@ def test_shared_control_desk_serves_assets_and_sanitized_sources():
     assert all("credentials" not in source for source in status.json()["sources"])
 
 
-def test_advisor_frequency_control_preserves_accessible_native_and_legacy_controls():
+def test_advisor_frequency_is_the_only_selection_control_and_is_accessible():
     client = TestClient(app, client=("127.0.0.1", 50000))
     markup = client.get("/control").text
 
@@ -50,9 +50,9 @@ def test_advisor_frequency_control_preserves_accessible_native_and_legacy_contro
     assert slider["aria-valuetext"] == "Balanced, about 50 percent"
     for description in slider["aria-describedby"].split():
         assert description in parsed.by_id
-    assert parsed.by_id["route-advisor-advanced"][0] == "details"
-    assert parsed.by_id["route-advisor-sensitivity"][0] == "select"
-    assert 'value="ranked">Learned ranking' in markup
+    for removed in ["route-advisor-advanced", "route-advisor-sensitivity", "route-advisor-trigger", "route-advisor-classifier"]:
+        assert removed not in parsed.by_id
+    assert "Advisor frequency" in markup
     assert "eligible API requests" in markup
     assert "higher estimated review priority" in markup
-    assert markup.index('id="route-advisor-trigger"') < markup.index('id="route-advisor-classifier"') < markup.index('id="route-advisor-frequency"') < markup.index('id="route-advisor-frequency-stats"') < markup.index('id="route-advisor-advanced"')
+    assert markup.index('id="route-advisor-effort"') < markup.index('id="route-advisor-frequency"') < markup.index('id="route-advisor-frequency-stats"')

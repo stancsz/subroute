@@ -91,9 +91,6 @@ h1 { margin: 0px; font-size: 25px; line-height: 1.3; letter-spacing: -0.7px; fon
 .advisor-frequency-stats { padding: 11px 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); }
 .advisor-frequency-stats p { margin: 0 0 3px; font-size: 12px; overflow-wrap: anywhere; }
 .advisor-frequency-stats small { color: var(--muted); font-size: 10px; }
-.advisor-advanced { border-top: 1px solid var(--line); padding-top: 10px; }
-.advisor-advanced summary { cursor: pointer; color: var(--muted); font-size: 11px; }
-.advisor-advanced label { margin-top: 12px; }
 .route-footer { display: grid; grid-template-columns: minmax(200px, 0.75fr) 1.25fr; gap: 12px 22px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
 .policy-description { align-self: end; margin: 0px 0px 3px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .save-status { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); font-size: 12px; }

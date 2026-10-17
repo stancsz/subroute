@@ -23,23 +23,20 @@ ROOT = Path(__file__).parents[1]
     ("aanthropic_messages", "metadata"),
     ("aresponses", "litellm_metadata"),
 ])
-def test_dedicated_advisor_keeps_luna_for_image_advice(control, call_type, bucket):
+def test_retired_subcall_flag_cannot_override_image_routing(control, call_type, bucket):
     control.update("minimax", "force", reasoning_effort=None)
     plugin = DynamicRoutingPlugin(control)
     data = {"model": "codex-luna-advisor", "messages": [{"role": "user", "content": "Generate an image of a blue square"}],
             "input": "Generate an image of a blue square", bucket: {
                 "advisor_sub_call": True, "gateway_policy": {"advisor_reasoning_effort": "low"},
             }}
-    assert asyncio.run(plugin.async_pre_call_hook({}, None, data, call_type)) is None
-    assert data["model"] == "codex-luna-advisor"
-    assert "gateway_image_request" not in data
-    updated = asyncio.run(plugin.async_pre_call_deployment_hook(data, call_type))
-    if call_type == "aresponses":
-        assert updated["reasoning"]["effort"] == "low"
-    elif call_type == "aanthropic_messages":
-        assert updated["output_config"]["effort"] == "low"
-    else:
-        assert updated["reasoning_effort"] == "low"
+    assert asyncio.run(plugin.async_pre_call_hook({}, None, data, call_type)) is data
+    assert data["model"] == "codex-luna"
+    assert data["gateway_image_request"] is not None
+    metadata = data["litellm_metadata"] if call_type == "aresponses" else data["metadata"]
+    assert metadata["gateway_policy"]["active_model"] == "minimax"
+    assert metadata["gateway_reasoning_effort"] is None
+    assert asyncio.run(plugin.async_pre_call_deployment_hook(data, call_type)) is None
 
 
 @pytest.fixture
@@ -127,7 +124,7 @@ def test_fast_mode_uses_target_routing_snapshot(control, mode, requested, expect
     assert "service_tier" not in data
     dispatch["metadata"]["advisor_sub_call"] = True
     advisor_dispatch = asyncio.run(plugin.async_pre_call_deployment_hook(dispatch, "acompletion"))
-    assert "service_tier" not in (advisor_dispatch or dispatch)
+    assert (advisor_dispatch or dispatch).get("service_tier") == ("fast" if expected else None)
 
 
 @pytest.mark.parametrize("mode,requested,expected", [
@@ -146,7 +143,7 @@ def test_effort_only_overrides_routed_requests_and_uses_one_snapshot(control, mo
     assert data["reasoning_effort"] == "low"  # Hook copies the original.
 
 
-@pytest.mark.parametrize("advisor_call,expected", [(False, "high"), (True, "low")])
+@pytest.mark.parametrize("advisor_call,expected", [(False, "high"), (True, "high")])
 def test_responses_override_preserves_other_reasoning_fields(control, advisor_call, expected):
     plugin = DynamicRoutingPlugin(control)
     data = {"reasoning": {"effort": "medium", "summary": "auto"}, "metadata": {
@@ -246,9 +243,9 @@ def test_native_custom_provider_transmits_target_or_advisor_effort(control, monk
     ))
     assert result["content"][0]["text"] == "OK"
     if provider == "antigravity":
-        assert captured == [(f"{model}-{'low' if advisor_call else 'high'}", None)]
+        assert captured == [(f"{model}-high", None)]
     else:
-        assert captured == [(model, "low")]
+        assert captured == [(model, "high")]
 
 
 @pytest.mark.parametrize("model,effort,expected", [

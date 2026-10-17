@@ -67,6 +67,15 @@ def test_oversized_messages_fail_before_an_advisor_consultation(monkeypatch):
     async def unexpected_consultation(*args, **kwargs):
         pytest.fail("The oversized request reached the provider")
 
+    from subroute.advisor_ranker import AdvisorRequestRanker
+    from subroute.advisor_frequency import AdvisorFrequencyGate
+    async def score(self, prompt):
+        return .9
+    monkeypatch.setattr(AdvisorRequestRanker, "rank", score)
+    monkeypatch.setattr(AdvisorFrequencyGate, "choose", lambda self, *args: {
+        "consult": True, "score": .9, "target_rate": .5,
+        "selected_count": 1, "eligible_count": 1,
+    })
     monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", unexpected_consultation)
     data = {
         "model": "codex-luna", "messages": [{"role": "user", "content": "ok"}],

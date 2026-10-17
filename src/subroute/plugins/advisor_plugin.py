@@ -23,7 +23,6 @@ from subroute.handlers.codex_advisor import (
 from subroute.handlers.antigravity import invoke_agy, model_with_effort, prompt_from_messages
 from subroute.handlers.antigravity import AntigravityBridgeError, AntigravityRequestTooLargeError
 from subroute.handlers.codex_advisor import CodexAdvisorError
-from subroute.plugins.advisor_classifier import LocalComplexityClassifier, has_high_risk_intent
 from subroute.advisor_frequency import AdvisorFrequencyGate
 from subroute.advisor_ranker import AdvisorRequestRanker, AdvisorRankerUnavailable
 
@@ -38,9 +37,6 @@ TOOL_HISTORY_ADVISORS = frozenset({
     "codex-sol-advisor",
     "codex-astra-advisor",
     "codex-luna-advisor",
-})
-CODEX_SUBSCRIPTION_MODELS = frozenset({
-    "codex-subscription", "codex-gpt-6.1-sol", "codex-astra", "codex-luna",
 })
 ADVISOR_MODEL_NAMES = {
     "codex-gpt-6.1-sol-advisor": "gpt-6.1-sol",
@@ -59,12 +55,6 @@ ADVISOR_PROVIDER_FALLBACKS = {
     "gemini-subscription": "codex-gpt-6.1-sol-advisor",
     "codex-gpt-6.1-sol-advisor": "gemini-subscription",
 }
-ADVISOR_TOOL_MODEL_ALIASES = {
-    # The public Gemini alias is also a target model, so advisor calls use a
-    # private LiteLLM group to keep fallback policy scoped to consultation.
-    "gemini-subscription": "gemini-3.8-flash-advisor",
-}
-ADAPTIVE_THRESHOLDS = {"frequent": 1, "balanced": 2, "conservative": 3}
 ADVISOR_BRIEF_INSTRUCTIONS = (
     "Advise the calling model on the current task. Give only the most useful correction, "
     "risk, or next step, grounded in the supplied context. Use at most three short bullets "
@@ -112,16 +102,8 @@ class AdvisorContextCompactionError(RuntimeError):
 class AdvisorPlugin(CustomLogger):
     """Enable advisor orchestration from the captured routing policy."""
 
-    def __init__(
-        self,
-        *,
-        max_uses: int = 3,
-    ) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        if not 1 <= max_uses <= 5:
-            raise ValueError("max_uses must be between 1 and LiteLLM's hard cap of 5")
-        self.max_uses = max_uses
-        self.classifier = LocalComplexityClassifier()
         self.request_ranker = AdvisorRequestRanker()
         self.frequency_gate = AdvisorFrequencyGate()
         self._ranked_attempts: OrderedDict[str, None] = OrderedDict()
@@ -129,13 +111,13 @@ class AdvisorPlugin(CustomLogger):
     @staticmethod
     def _frequency_policy_key(policy: dict) -> str:
         return json.dumps({key: policy.get(key) for key in (
-            "policy_version", "advisor_model", "advisor_classifier", "advisor_sensitivity", "advisor_trigger",
+            "policy_version", "advisor_model", "advisor_sensitivity",
         )}, sort_keys=True)
 
     def frequency_state(self, policy: dict) -> dict:
         rates = {"conservative": 0.3, "balanced": 0.5, "frequent": 0.7}
         return {
-            "classifier": policy.get("advisor_classifier", "local"),
+            "classifier": "ranked",
             "policy_version": policy.get("policy_version"),
             "target_rate": rates.get(policy.get("advisor_sensitivity", "balanced")),
             "scope": "process_policy",
@@ -323,71 +305,25 @@ class AdvisorPlugin(CustomLogger):
             )
         return ""
 
-    @classmethod
-    def _recent_tool_history(cls, messages: list[dict[str, Any]]) -> bool:
-        latest_user = cls._latest_user_index(messages)
-        return latest_user >= 0 and has_tool_history(messages[max(0, latest_user - 6):latest_user])
-
     @staticmethod
     def _brief_advisor_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # Add direction only to the gateway's preconsultation copy. The target
         # keeps its exact conversation and tool ordering.
         return [{"role": "developer", "content": ADVISOR_BRIEF_INSTRUCTIONS}, *messages]
 
-    @classmethod
-    def _complexity_score(cls, messages: list[dict[str, Any]]) -> int:
-        """Deterministic intent and structure score, also used as local fallback."""
-        prompt = cls._latest_user_text(messages)
-        score = 2 if len(prompt) >= 1200 else 1 if len(prompt) >= 400 else 0
-        sample = prompt[:32000]
-        if "```" in sample or re.search(r"(?m)^(?:diff --git |@@ |\+\+\+ |--- )", sample):
-            score += 1
-        if len(re.findall(r"(?m)^\s*(?:\d+[.)]|[-*])\s+", sample)) >= 2:
-            score += 1
-        if cls._recent_tool_history(messages):
-            score += 2
-        if has_high_risk_intent(prompt):
-            score = max(score, 3)
-        return min(score, 3)
-
-    async def _adaptive_decision(
-        self, messages: list[dict[str, Any]], classifier: str, sensitivity: str,
-        *, request_id: str | None = None, policy: dict | None = None,
+    async def _ranked_decision(
+        self, messages: list[dict[str, Any]], *, request_id: str, policy: dict,
     ) -> dict[str, Any]:
-        if classifier == "ranked":
-            if not request_id or policy is None:
-                raise ValueError("Ranked selection requires the captured request policy and ID")
-            try:
-                score = await self.request_ranker.rank(self._latest_user_text(messages))
-            except AdvisorRankerUnavailable as exc:
-                logger.error("advisor ranker unavailable request_id=%s error_type=%s", request_id, type(exc).__name__)
-                raise HTTPException(status_code=503, detail="Advisor ranker unavailable; base request was not sent") from exc
-            decision = self.frequency_gate.choose(
-                request_id, score, {"conservative": 0.3, "balanced": 0.5, "frequent": 0.7}[sensitivity],
-                self._frequency_policy_key(policy),
-            )
-            return {**decision, "source": "ranked", "level": None, "threshold": None,
-                    "classifier_model": "multilingual-minilm-logistic-v1"}
-        threshold = ADAPTIVE_THRESHOLDS[sensitivity]
-        if classifier == "rules":
-            level = self._complexity_score(messages)
-            return {"level": level, "threshold": threshold, "source": "rules", "consult": level >= threshold}
         try:
-            level, model = await self.classifier.classify(
-                self._latest_user_text(messages), self._recent_tool_history(messages),
-            )
-            if self._recent_tool_history(messages):
-                level = max(level, 2)
-            return {
-                "level": level, "threshold": threshold, "source": "local",
-                "classifier_model": model, "consult": level >= threshold,
-            }
-        except Exception as exc:
-            level = self._complexity_score(messages)
-            return {
-                "level": level, "threshold": threshold, "source": "rules_fallback",
-                "classifier_error": type(exc).__name__, "consult": level >= threshold,
-            }
+            score = await self.request_ranker.rank(self._latest_user_text(messages))
+        except AdvisorRankerUnavailable as exc:
+            logger.error("advisor ranker unavailable request_id=%s error_type=%s", request_id, type(exc).__name__)
+            raise HTTPException(status_code=503, detail="Advisor ranker unavailable; base request was not sent") from exc
+        decision = self.frequency_gate.choose(
+            request_id, score, {"conservative": 0.3, "balanced": 0.5, "frequent": 0.7}[policy.get("advisor_sensitivity", "balanced")],
+            self._frequency_policy_key(policy),
+        )
+        return {**decision, "source": "ranked", "classifier_model": "multilingual-minilm-logistic-v1"}
 
     @staticmethod
     def _completion_text(response: Any) -> str:
@@ -626,50 +562,16 @@ class AdvisorPlugin(CustomLogger):
         """Apply the selected advisor policy to supported requests; an empty selection disables it."""
 
         _, metadata = get_or_create_metadata_bucket(data)
-        if metadata.get("advisor_sub_call") is True:
-            from litellm.proxy import proxy_server
-
-            router = proxy_server.llm_router
-            if router is None:
-                raise HTTPException(status_code=503, detail="Advisor context limit is unavailable")
-            try:
-                messages, compaction = await self._prepare_advisor_messages(
-                    router, data.get("model", ""), data, data.get("messages") or [],
-                )
-            except AdvisorContextCompactionError as exc:
-                metadata["gateway_advisor_compaction"] = {
-                    "status": "failed", "original_estimated_tokens": exc.input_tokens,
-                    "limit_tokens": exc.limit, "target_tokens": exc.target,
-                    "attempts": exc.attempts,
-                }
-                raise HTTPException(
-                    status_code=self._compaction_error_status(exc),
-                    detail={"error": {
-                        "type": "advisor_context_compaction_failed",
-                        "message": "Advisor context exceeded its limit; bounded compaction failed",
-                        "request_id": data.get("litellm_call_id"),
-                        "compaction": metadata["gateway_advisor_compaction"],
-                    }},
-                ) from exc
-            if compaction is not None:
-                metadata["gateway_advisor_compaction"] = compaction
-                data["messages"] = messages
-                logger.warning(
-                    "advisor context compacted request_id=%s model=%s provider=%s original_estimated_tokens=%s final_estimated_tokens=%s attempts=%s",
-                    data.get("litellm_call_id"), data.get("model"), compaction["provider"],
-                    compaction["original_estimated_tokens"], compaction["final_estimated_tokens"],
-                    compaction["attempts"],
-                )
-                return data
-            return None
         if call_type not in ADVISOR_CALL_TYPES:
             return None
+        tools = data.get("tools")
+        if isinstance(tools, list) and any(isinstance(tool, dict) and tool.get("type") == ADVISOR_TOOL_TYPE for tool in tools):
+            raise HTTPException(status_code=400, detail="Native advisor tools are retired; use the saved advisor frequency")
         if data.get("gateway_image_request") is not None:
             # The image intent exception owns this request; do not add a
             # saved advisor call, instructions, or provider spending.
             return None
-        # Native advisor calls retain metadata. Never turn a consultation into
-        # another consultation, including Gemini aliases shared with targets.
+        # The routing callback captures the authoritative saved policy.
         policy = metadata.get("gateway_policy")
         if not isinstance(policy, dict):
             return None
@@ -677,13 +579,9 @@ class AdvisorPlugin(CustomLogger):
         if not advisor_model:
             return None
         advisor_effort = policy.get("advisor_reasoning_effort")
-        trigger = policy.get("advisor_trigger", "model")
-        if trigger not in {"model", "adaptive", "hybrid", "always"}:
-            raise ValueError("Invalid advisor trigger policy")
         sensitivity = policy.get("advisor_sensitivity", "balanced")
-        classifier = policy.get("advisor_classifier", "local")
-        if sensitivity not in ADAPTIVE_THRESHOLDS or classifier not in {"local", "rules", "ranked"}:
-            raise ValueError("Invalid adaptive advisor policy")
+        if sensitivity not in {"conservative", "balanced", "frequent"}:
+            raise ValueError("Invalid advisor frequency policy")
 
         try:
             messages = self._request_messages(data, call_type)
@@ -693,8 +591,8 @@ class AdvisorPlugin(CustomLogger):
                 "model": advisor_model, "call_type": call_type,
             }
             logger.info(
-                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=unsupported_request_context error_type=%s",
-                data.get("litellm_call_id"), call_type, trigger, data.get("model"),
+                "advisor decision request_id=%s call_type=%s target=%s advisor=%s status=skipped reason=unsupported_request_context error_type=%s",
+                data.get("litellm_call_id"), call_type, data.get("model"),
                 advisor_model, type(exc).__name__,
             )
             return data
@@ -709,307 +607,186 @@ class AdvisorPlugin(CustomLogger):
                 "call_type": call_type,
             }
             logger.info(
-                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=unsupported_tool_history",
-                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
+                "advisor decision request_id=%s call_type=%s target=%s advisor=%s status=skipped reason=unsupported_tool_history",
+                data.get("litellm_call_id"), call_type, data.get("model"), advisor_model,
             )
             return data
 
-        if (
-            classifier == "ranked" and trigger in {"adaptive", "hybrid"}
-            and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
-            and any(not isinstance(message.get("content", ""), str) for message in messages)
-        ):
+        if (advisor_model in ANTIGRAVITY_ADVISOR_MODELS
+                and any(not isinstance(message.get("content", ""), str) for message in messages)):
             metadata["gateway_advisor"] = {"status": "skipped", "reason": "unsupported_content",
                                            "model": advisor_model, "call_type": call_type}
             return data
 
-        adaptive_consult = False
-        if trigger in {"adaptive", "hybrid"}:
-            if classifier == "ranked":
-                request_id = data.get("litellm_call_id") or metadata.setdefault("gateway_advisor_request_id", str(uuid.uuid4()))
-                # Server-owned request history cannot be forged through caller metadata.
-                # Admission is atomic before the first await; no prompt or advice is cached.
-                if request_id in self._ranked_attempts:
-                    raise HTTPException(status_code=409, detail="Duplicate advisor hook; consultation was not repeated")
-                self._ranked_attempts[request_id] = None
-                if len(self._ranked_attempts) > 1024:
-                    self._ranked_attempts.popitem(last=False)
-                decision = await self._adaptive_decision(messages, classifier, sensitivity, request_id=request_id, policy=policy)
-            else:
-                decision = await self._adaptive_decision(messages, classifier, sensitivity)
-            metadata["gateway_advisor_decision"] = {**decision, "trigger": trigger}
-            if classifier == "ranked":
-                # Privacy-safe operational receipt remains visible at the deployed log level.
-                logger.warning(
-                    "advisor ranked_selection request_id=%s policy_version=%s score=%.5f target=%.2f consult=%s selected=%s eligible=%s",
-                    request_id, policy.get("policy_version"), decision["score"], decision["target_rate"],
-                    decision["consult"], decision["selected_count"], decision["eligible_count"],
-                )
-            logger.info(
-                "advisor trigger request_id=%s call_type=%s target=%s advisor=%s mode=%s source=%s level=%s threshold=%s consult=%s classifier_error=%s",
-                data.get("litellm_call_id"), call_type, data.get("model"), advisor_model,
-                trigger, decision["source"],
-                decision["level"], decision["threshold"], decision["consult"],
-                decision.get("classifier_error"),
-            )
-            if decision["source"] == "rules_fallback":
-                logger.warning(
-                    "advisor local classifier unavailable request_id=%s error_type=%s; using gateway rules",
-                    data.get("litellm_call_id"), decision["classifier_error"],
-                )
-            adaptive_consult = decision["consult"]
-            if (trigger == "adaptive" or classifier == "ranked") and not adaptive_consult:
-                metadata["gateway_advisor"] = {
-                    "status": "skipped", "reason": "below_complexity_threshold",
-                    "model": advisor_model, "call_type": call_type, "level": decision["level"],
-                    "threshold": decision["threshold"],
-                }
-                return data
+        request_id = data.get("litellm_call_id") or metadata.setdefault("gateway_advisor_request_id", str(uuid.uuid4()))
+        if request_id in self._ranked_attempts:
+            raise HTTPException(status_code=409, detail="Duplicate advisor hook; consultation was not repeated")
+        self._ranked_attempts[request_id] = None
+        if len(self._ranked_attempts) > 1024:
+            self._ranked_attempts.popitem(last=False)
+        decision = await self._ranked_decision(messages, request_id=request_id, policy=policy)
+        metadata["gateway_advisor_decision"] = decision
+        logger.warning(
+            "advisor ranked_selection request_id=%s policy_version=%s score=%.5f target=%.2f consult=%s selected=%s eligible=%s",
+            request_id, policy.get("policy_version"), decision["score"], decision["target_rate"],
+            decision["consult"], decision["selected_count"], decision["eligible_count"],
+        )
+        if not decision["consult"]:
+            metadata["gateway_advisor"] = {"status": "skipped", "reason": "not_selected_by_ranking",
+                                           "model": advisor_model, "call_type": call_type}
+            return data
 
-        minimax_gemini_pair = (
-            data.get("model") == "minimax"
-            and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
-        )
-        existing_preconsult_pair = (
-            data.get("model") in CODEX_SUBSCRIPTION_MODELS | ANTIGRAVITY_ADVISOR_MODELS.keys()
-            and advisor_model in {*ADVISOR_MODEL_NAMES, *ANTIGRAVITY_ADVISOR_MODELS}
-        )
-        preconsult = (
-            trigger == "always" or adaptive_consult
-            or (trigger == "model" and (minimax_gemini_pair or existing_preconsult_pair))
-        )
-        native_tool_available = call_type in SUPPORTED_CALL_TYPES
-        if trigger == "hybrid" and not adaptive_consult and not native_tool_available:
-            metadata["gateway_advisor"] = {
-                "status": "skipped", "reason": "below_complexity_threshold",
-                "model": advisor_model, "call_type": call_type,
-                "level": metadata.get("gateway_advisor_decision", {}).get("level"),
-                "threshold": metadata.get("gateway_advisor_decision", {}).get("threshold"),
-            }
-            logger.info(
-                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=below_complexity_threshold",
-                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
-            )
-            return data
-        if trigger == "model" and not preconsult and not native_tool_available:
-            metadata["gateway_advisor"] = {
-                "status": "skipped", "reason": "model_trigger_not_preconsulted",
-                "model": advisor_model, "call_type": call_type,
-            }
-            logger.info(
-                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=model_trigger_not_preconsulted",
-                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
-            )
-            return data
-        if (
-            preconsult
-            and advisor_model in ANTIGRAVITY_ADVISOR_MODELS
-            and any(not isinstance(message.get("content", ""), str) for message in messages)
-        ):
-            metadata["gateway_advisor"] = {
-                "status": "skipped",
-                "reason": "unsupported_content",
-                "model": advisor_model,
-                "call_type": call_type,
-            }
-            logger.info(
-                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=skipped reason=unsupported_content",
-                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
-            )
-            return data
-        if preconsult:
-            # LiteLLM's router checks run after proxy callbacks. This earlier
-            # consultation must use that same counter and configured cap before
-            # spending provider tokens. Retire when LiteLLM checks before hooks.
-            from litellm import ContextWindowExceededError
-            from litellm.proxy import proxy_server
+        # LiteLLM's router checks run after proxy callbacks. This earlier
+        # consultation must use that same counter and configured cap before
+        # spending provider tokens. Retire when LiteLLM checks before hooks.
+        from litellm import ContextWindowExceededError
+        from litellm.proxy import proxy_server
 
-            router = proxy_server.llm_router
-            consultation_id = uuid.uuid4().hex
-            advisor_messages = messages
-            resolved_advisor_model = advisor_model
-            fallback_attempt: dict[str, str] | None = None
+        router = proxy_server.llm_router
+        consultation_id = uuid.uuid4().hex
+        advisor_messages = messages
+        resolved_advisor_model = advisor_model
+        fallback_attempt: dict[str, str] | None = None
+        try:
+            if router is None:
+                raise RuntimeError("Advisor context limit is unavailable")
+            target_limit, _ = router.get_configured_token_limits(data["model"])
+            original_tokens = await self._count_context_tokens(router, data, messages)
+            if target_limit is not None and original_tokens > target_limit:
+                raise ContextWindowExceededError(
+                    message=f"Max Input Tokens={target_limit}, Got={original_tokens}; advisor was not called",
+                    model=data["model"], llm_provider="subroute",
+                )
+            advisor_messages, compaction = await self._prepare_advisor_messages(
+                router, advisor_model, data, self._brief_advisor_messages(messages),
+            )
+            if compaction is not None:
+                metadata["gateway_advisor_compaction"] = compaction
+                logger.warning(
+                    "advisor context compacted request_id=%s consultation_id=%s model=%s provider=%s original_estimated_tokens=%s final_estimated_tokens=%s attempts=%s",
+                    data.get("litellm_call_id"), consultation_id, advisor_model,
+                    compaction["provider"], compaction["original_estimated_tokens"],
+                    compaction["final_estimated_tokens"], compaction["attempts"],
+                )
             try:
-                if router is None:
-                    raise RuntimeError("Advisor context limit is unavailable")
-                target_limit, _ = router.get_configured_token_limits(data["model"])
-                original_tokens = await self._count_context_tokens(router, data, messages)
-                if target_limit is not None and original_tokens > target_limit:
-                    raise ContextWindowExceededError(
-                        message=f"Max Input Tokens={target_limit}, Got={original_tokens}; advisor was not called",
-                        model=data["model"], llm_provider="subroute",
-                    )
-                advisor_messages, compaction = await self._prepare_advisor_messages(
-                    router, advisor_model, data, self._brief_advisor_messages(messages),
+                advice, usage = await self._invoke_advisor(
+                    advisor_model, advisor_messages, advisor_effort,
                 )
-                if compaction is not None:
-                    metadata["gateway_advisor_compaction"] = compaction
-                    logger.warning(
-                        "advisor context compacted request_id=%s consultation_id=%s model=%s provider=%s original_estimated_tokens=%s final_estimated_tokens=%s attempts=%s",
-                        data.get("litellm_call_id"), consultation_id, advisor_model,
-                        compaction["provider"], compaction["original_estimated_tokens"],
-                        compaction["final_estimated_tokens"], compaction["attempts"],
-                    )
-                try:
-                    advice, usage = await self._invoke_advisor(
-                        advisor_model, advisor_messages, advisor_effort,
-                    )
-                except Exception as first_error:
-                    fallback_model = ADVISOR_PROVIDER_FALLBACKS.get(advisor_model)
-                    if fallback_model is None:
-                        raise
-                    fallback_attempt = {
-                        "failed_model": advisor_model,
-                        "reason": _safe_error_reason(first_error),
-                    }
-                    logger.warning(
-                        "advisor fallback request_id=%s consultation_id=%s failed_model=%s fallback_model=%s reason=%s",
-                        data.get("litellm_call_id"), consultation_id, advisor_model,
-                        fallback_model, fallback_attempt["reason"],
-                    )
-                    advice, usage = await self._invoke_advisor(
-                        fallback_model, advisor_messages, advisor_effort,
-                    )
-                    resolved_advisor_model = fallback_model
-            except ContextWindowExceededError:
-                raise
-            except Exception as exc:
-                reason = _safe_error_reason(exc)
-                gateway_request_id = data.get("litellm_call_id")
-                metadata["gateway_advisor"] = {
-                    "status": "failed", "model": advisor_model,
-                    "call_type": call_type, "consultation_id": consultation_id, "reason": reason,
-                    "gateway_request_id": gateway_request_id,
-                    **({"fallback_attempt": fallback_attempt} if fallback_attempt else {}),
+            except Exception as first_error:
+                fallback_model = ADVISOR_PROVIDER_FALLBACKS.get(advisor_model)
+                if fallback_model is None:
+                    raise
+                fallback_attempt = {
+                    "failed_model": advisor_model,
+                    "reason": _safe_error_reason(first_error),
                 }
-                if isinstance(exc, AdvisorContextCompactionError):
-                    metadata["gateway_advisor_compaction"] = {
-                        "status": "failed",
-                        "original_estimated_tokens": exc.input_tokens,
-                        "limit_tokens": exc.limit,
-                        "target_tokens": exc.target,
-                        "attempts": exc.attempts,
-                    }
-                    logger.error(
-                        "advisor context compaction failed request_id=%s advisor=%s original_estimated_tokens=%s limit_tokens=%s target_tokens=%s attempts=%s",
-                        gateway_request_id, advisor_model, exc.input_tokens, exc.limit,
-                        exc.target, exc.attempts,
-                    )
-                logger.error(
-                    "advisor consultation failed gateway_request_id=%s consultation_id=%s call_type=%s model=%s base_model=%s error_type=%s error=%s",
-                    gateway_request_id, consultation_id, call_type, advisor_model,
-                    data.get("model"), type(exc).__name__, reason,
+                logger.warning(
+                    "advisor fallback request_id=%s consultation_id=%s failed_model=%s fallback_model=%s reason=%s",
+                    data.get("litellm_call_id"), consultation_id, advisor_model,
+                    fallback_model, fallback_attempt["reason"],
                 )
-                if isinstance(exc, AdvisorContextCompactionError):
-                    status_code = self._compaction_error_status(exc)
-                elif isinstance(exc, AntigravityRequestTooLargeError):
-                    status_code = 413
-                elif isinstance(exc, ValueError):
-                    status_code = 400
-                elif isinstance(exc, TimeoutError):
-                    status_code = 504
-                elif isinstance(exc, (AntigravityBridgeError, CodexAdvisorError)):
-                    upstream_status = exc.status_code
-                    status_code = upstream_status if upstream_status == 429 else (
-                        504 if upstream_status == 504 else 502
-                    )
-                else:
-                    status_code = 502
-                error_type = (
-                    "advisor_context_compaction_failed"
-                    if isinstance(exc, AdvisorContextCompactionError)
-                    else "advisor_consultation_failed"
+                advice, usage = await self._invoke_advisor(
+                    fallback_model, advisor_messages, advisor_effort,
                 )
-                error_message = (
-                    "Advisor context exceeded its limit; bounded compaction failed; base request was not sent"
-                    if isinstance(exc, AdvisorContextCompactionError)
-                    else "Selected advisor failed; base request was not sent"
-                )
-                raise HTTPException(
-                    status_code=status_code,
-                    detail={
-                        "error": {
-                            "type": error_type,
-                            "message": error_message,
-                            "request_id": gateway_request_id,
-                            "consultation_id": consultation_id,
-                            **({"compaction": metadata["gateway_advisor_compaction"]}
-                               if isinstance(exc, AdvisorContextCompactionError) else {}),
-                        }
-                    },
-                ) from exc
-            if call_type in MESSAGE_CALL_TYPES:
-                data["messages"] = [
-                    *(data.get("messages") or []),
-                    {"role": "developer", "content": f"Independent advisor guidance:\n{advice}"},
-                ]
-            if call_type in RESPONSES_CALL_TYPES:
-                existing_instructions = data.get("instructions")
-                guidance = f"Independent advisor guidance:\n{advice}"
-                data["instructions"] = (
-                    f"{existing_instructions}\n\n{guidance}"
-                    if isinstance(existing_instructions, str) and existing_instructions
-                    else guidance
-                )
+                resolved_advisor_model = fallback_model
+        except ContextWindowExceededError:
+            raise
+        except Exception as exc:
+            reason = _safe_error_reason(exc)
+            gateway_request_id = data.get("litellm_call_id")
             metadata["gateway_advisor"] = {
-                "status": "advice_injected", "model": advisor_model,
-                "resolved_model": resolved_advisor_model,
-                "call_type": call_type,
-                "consultation_id": consultation_id, "usage_source": "provider",
-                "input_tokens": usage.prompt_tokens,
-                "output_tokens": usage.completion_tokens,
-                "reasoning_effort": advisor_effort,
+                "status": "failed", "model": advisor_model,
+                "call_type": call_type, "consultation_id": consultation_id, "reason": reason,
+                "gateway_request_id": gateway_request_id,
                 **({"fallback_attempt": fallback_attempt} if fallback_attempt else {}),
             }
-            if metadata.get("gateway_advisor_compaction"):
-                metadata["gateway_advisor"]["compaction"] = metadata["gateway_advisor_compaction"]
-            logger.warning(
-                "advisor advice_injected consultation_id=%s call_type=%s model=%s input_tokens=%s output_tokens=%s base_model=%s reasoning_effort=%s",
-                consultation_id, call_type, advisor_model, usage.prompt_tokens,
-                usage.completion_tokens, data["model"], advisor_effort,
-            )
-            if trigger != "hybrid" or not native_tool_available or adaptive_consult:
-                return data
-
-        if not native_tool_available:
-            return data
-
-        raw_tools = data.get("tools")
-        if raw_tools is None:
-            tools: list[dict[str, Any]] = []
-        elif isinstance(raw_tools, list) and all(
-            isinstance(tool, dict) for tool in raw_tools
-        ):
-            tools = list(raw_tools)
-        else:
-            raise ValueError("tools must be a list of objects")
-
-        if not any(tool.get("type") == ADVISOR_TOOL_TYPE for tool in tools):
-            tools.append(
-                {
-                    "type": ADVISOR_TOOL_TYPE,
-                    "name": "advisor",
-                    "model": ADVISOR_TOOL_MODEL_ALIASES.get(advisor_model, advisor_model),
-                    "max_uses": 1 if trigger == "hybrid" else self.max_uses,
-                    "caching": {"type": "ephemeral", "ttl": "5m"},
+            if isinstance(exc, AdvisorContextCompactionError):
+                metadata["gateway_advisor_compaction"] = {
+                    "status": "failed",
+                    "original_estimated_tokens": exc.input_tokens,
+                    "limit_tokens": exc.limit,
+                    "target_tokens": exc.target,
+                    "attempts": exc.attempts,
                 }
+                logger.error(
+                    "advisor context compaction failed request_id=%s advisor=%s original_estimated_tokens=%s limit_tokens=%s target_tokens=%s attempts=%s",
+                    gateway_request_id, advisor_model, exc.input_tokens, exc.limit,
+                    exc.target, exc.attempts,
+                )
+            logger.error(
+                "advisor consultation failed gateway_request_id=%s consultation_id=%s call_type=%s model=%s base_model=%s error_type=%s error=%s",
+                gateway_request_id, consultation_id, call_type, advisor_model,
+                data.get("model"), type(exc).__name__, reason,
             )
-            data["tools"] = tools
-        if trigger == "hybrid":
-            decision = metadata.get("gateway_advisor_decision") or {}
-            metadata["gateway_advisor"] = {
-                "status": "tool_offered", "reason": "below_complexity_threshold",
-                "model": advisor_model, "call_type": call_type,
-                "level": decision.get("level"), "threshold": decision.get("threshold"),
-            }
-            logger.info(
-                "advisor decision request_id=%s call_type=%s trigger=%s target=%s advisor=%s status=tool_offered reason=below_complexity_threshold level=%s threshold=%s",
-                data.get("litellm_call_id"), call_type, trigger, data.get("model"), advisor_model,
-                decision.get("level"), decision.get("threshold"),
+            if isinstance(exc, AdvisorContextCompactionError):
+                status_code = self._compaction_error_status(exc)
+            elif isinstance(exc, AntigravityRequestTooLargeError):
+                status_code = 413
+            elif isinstance(exc, ValueError):
+                status_code = 400
+            elif isinstance(exc, TimeoutError):
+                status_code = 504
+            elif isinstance(exc, (AntigravityBridgeError, CodexAdvisorError)):
+                upstream_status = exc.status_code
+                status_code = upstream_status if upstream_status == 429 else (
+                    504 if upstream_status == 504 else 502
+                )
+            else:
+                status_code = 502
+            error_type = (
+                "advisor_context_compaction_failed"
+                if isinstance(exc, AdvisorContextCompactionError)
+                else "advisor_consultation_failed"
             )
+            error_message = (
+                "Advisor context exceeded its limit; bounded compaction failed; base request was not sent"
+                if isinstance(exc, AdvisorContextCompactionError)
+                else "Selected advisor failed; base request was not sent"
+            )
+            raise HTTPException(
+                status_code=status_code,
+                detail={
+                    "error": {
+                        "type": error_type,
+                        "message": error_message,
+                        "request_id": gateway_request_id,
+                        "consultation_id": consultation_id,
+                        **({"compaction": metadata["gateway_advisor_compaction"]}
+                           if isinstance(exc, AdvisorContextCompactionError) else {}),
+                    }
+                },
+            ) from exc
+        if call_type in MESSAGE_CALL_TYPES:
+            data["messages"] = [
+                *(data.get("messages") or []),
+                {"role": "developer", "content": f"Independent advisor guidance:\n{advice}"},
+            ]
+        if call_type in RESPONSES_CALL_TYPES:
+            existing_instructions = data.get("instructions")
+            guidance = f"Independent advisor guidance:\n{advice}"
+            data["instructions"] = (
+                f"{existing_instructions}\n\n{guidance}"
+                if isinstance(existing_instructions, str) and existing_instructions
+                else guidance
+            )
+        metadata["gateway_advisor"] = {
+            "status": "advice_injected", "model": advisor_model,
+            "resolved_model": resolved_advisor_model,
+            "call_type": call_type,
+            "consultation_id": consultation_id, "usage_source": "provider",
+            "input_tokens": usage.prompt_tokens,
+            "output_tokens": usage.completion_tokens,
+            "reasoning_effort": advisor_effort,
+            **({"fallback_attempt": fallback_attempt} if fallback_attempt else {}),
+        }
+        if metadata.get("gateway_advisor_compaction"):
+            metadata["gateway_advisor"]["compaction"] = metadata["gateway_advisor_compaction"]
+        logger.warning(
+            "advisor advice_injected consultation_id=%s call_type=%s model=%s input_tokens=%s output_tokens=%s base_model=%s reasoning_effort=%s",
+            consultation_id, call_type, advisor_model, usage.prompt_tokens,
+            usage.completion_tokens, data["model"], advisor_effort,
+        )
         return data
 
 
-advisor_plugin_instance = AdvisorPlugin(
-    max_uses=int(os.getenv("ADVISOR_MAX_USES", "3")),
-)
+advisor_plugin_instance = AdvisorPlugin()

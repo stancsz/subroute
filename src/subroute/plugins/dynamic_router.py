@@ -23,9 +23,9 @@ from subroute.ui_control import register_ui_routes, source_configuration
 
 
 RoutingMode = Literal["alias", "force", "off"]
-AdvisorTrigger = Literal["model", "adaptive", "hybrid", "always"]
+AdvisorTrigger = Literal["adaptive"]
 AdvisorSensitivity = Literal["conservative", "balanced", "frequent"]
-AdvisorClassifier = Literal["local", "rules", "ranked"]
+AdvisorClassifier = Literal["ranked"]
 VIRTUAL_ALIASES = frozenset({"default", "auto"})
 RETIRED_MODEL_ALIASES = {
     "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
@@ -45,9 +45,9 @@ class RoutingState:
     reasoning_effort: str | None = None
     fast_mode: bool = False
     advisor_reasoning_effort: str | None = None
-    advisor_trigger: AdvisorTrigger = "model"
+    advisor_trigger: AdvisorTrigger = "adaptive"
     advisor_sensitivity: AdvisorSensitivity = "balanced"
-    advisor_classifier: AdvisorClassifier = "local"
+    advisor_classifier: AdvisorClassifier = "ranked"
 
 
 @dataclass(frozen=True)
@@ -72,11 +72,10 @@ class RoutingUpdate(BaseModel):
 
 
 class AdvisorUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
     advisor_model: str | None
     reasoning_effort: str | None = None
-    advisor_trigger: AdvisorTrigger | None = None
     advisor_sensitivity: AdvisorSensitivity | None = None
-    advisor_classifier: AdvisorClassifier | None = None
 
 
 def _load_choices(config_path: Path) -> tuple[ModelChoice, ...]:
@@ -159,12 +158,15 @@ class RoutingControlPlane:
             reasoning_effort=raw.get("reasoning_effort"),
             fast_mode=raw.get("fast_mode", False),
             advisor_reasoning_effort=raw.get("advisor_reasoning_effort"),
-            advisor_trigger=raw.get("advisor_trigger", "model"),
+            advisor_trigger="adaptive",
             advisor_sensitivity=raw.get("advisor_sensitivity", "balanced"),
-            advisor_classifier=raw.get("advisor_classifier", "local"),
+            advisor_classifier="ranked",
         )
-        if replacement := RETIRED_MODEL_ALIASES.get(state.active_model):
-            state = replace(state, active_model=replacement, policy_version=state.policy_version + 1)
+        replacement = RETIRED_MODEL_ALIASES.get(state.active_model)
+        migrated = raw.get("advisor_trigger") != "adaptive" or raw.get("advisor_classifier") != "ranked"
+        if replacement or migrated:
+            state = replace(state, active_model=replacement or state.active_model,
+                            policy_version=state.policy_version + 1)
             self._validate(state)
             self._write_atomic(state)
         else:
@@ -185,11 +187,11 @@ class RoutingControlPlane:
             raise ValueError("Fast mode requires an OpenAI subscription target")
         if state.advisor_model is not None and state.advisor_model not in self.advisor_models:
             raise ValueError(f"advisor model is not selectable: {state.advisor_model!r}")
-        if state.advisor_trigger not in {"model", "adaptive", "hybrid", "always"}:
+        if state.advisor_trigger != "adaptive":
             raise ValueError(f"invalid advisor trigger: {state.advisor_trigger!r}")
         if state.advisor_sensitivity not in {"conservative", "balanced", "frequent"}:
             raise ValueError(f"invalid advisor sensitivity: {state.advisor_sensitivity!r}")
-        if state.advisor_classifier not in {"local", "rules", "ranked"}:
+        if state.advisor_classifier != "ranked":
             raise ValueError(f"invalid advisor classifier: {state.advisor_classifier!r}")
         for model, effort in (
             (state.active_model, state.reasoning_effort),
@@ -238,6 +240,8 @@ class RoutingControlPlane:
             return candidate
 
     def update_advisor(self, advisor_model: str | None, **settings: Any) -> RoutingState:
+        if settings.keys() - {"reasoning_effort", "advisor_sensitivity"}:
+            raise ValueError("Advisor selection uses learned ranking; only frequency and reasoning effort can be changed")
         with self._lock:
             default_effort = "low" if advisor_model in FAILOVER_ADVISOR_MODELS else None
             candidate = replace(
@@ -250,9 +254,7 @@ class RoutingControlPlane:
                     if advisor_model == self._state.advisor_model
                     else default_effort,
                 ),
-                advisor_trigger=settings.get("advisor_trigger") or self._state.advisor_trigger,
                 advisor_sensitivity=settings.get("advisor_sensitivity") or self._state.advisor_sensitivity,
-                advisor_classifier=settings.get("advisor_classifier") or self._state.advisor_classifier,
             )
             self._validate(candidate)
             self._write_atomic(candidate)
@@ -331,10 +333,6 @@ class DynamicRoutingPlugin(CustomLogger):
         if call_type in {"aresponses", "responses"}:
             data.setdefault("litellm_metadata", {})
         _, metadata = get_or_create_metadata_bucket(data)
-        # An internal advisor request retains its explicit model even when the
-        # user asks for advice about images or audio. It is not a generation task.
-        if metadata.get("advisor_sub_call") is True:
-            return None
         from subroute.plugins.image_intent import image_request_context
         from subroute.audio import audio_route
 
@@ -458,11 +456,8 @@ class DynamicRoutingPlugin(CustomLogger):
 
     async def async_pre_call_deployment_hook(self, kwargs: dict[str, Any], call_type: Any) -> dict | None:
         metadata = kwargs.get(get_metadata_variable_name_from_kwargs(kwargs)) or {}
-        if metadata.get("advisor_sub_call") is True:
-            effort = (metadata.get("gateway_policy") or {}).get("advisor_reasoning_effort")
-        else:
-            effort = metadata.get("gateway_reasoning_effort")
-        fast_mode = metadata.get("gateway_target_fast_mode") is True and metadata.get("advisor_sub_call") is not True
+        effort = metadata.get("gateway_reasoning_effort")
+        fast_mode = metadata.get("gateway_target_fast_mode") is True
         if effort is None and not fast_mode:
             return None
         updated = kwargs.copy()
@@ -617,7 +612,7 @@ async def update_advisor_model(request: Request) -> dict[str, Any]:
     try:
         update = AdvisorUpdate.model_validate(await request.json())
         settings = update.model_dump(
-            include={"reasoning_effort", "advisor_trigger", "advisor_sensitivity", "advisor_classifier"},
+            include={"reasoning_effort", "advisor_sensitivity"},
             exclude_unset=True,
         )
         return asdict(control_plane.update_advisor(update.advisor_model, **settings))

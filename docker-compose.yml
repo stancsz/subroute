@@ -62,7 +62,6 @@ services:
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
-      - ADVISOR_CLASSIFIER_MODEL=${ADVISOR_CLASSIFIER_MODEL:-qwen3.5:4b}
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
@@ -105,7 +104,6 @@ services:
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
-      - ADVISOR_CLASSIFIER_MODEL=${ADVISOR_CLASSIFIER_MODEL:-qwen3.5:4b}
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
