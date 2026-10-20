@@ -1,5 +1,7 @@
 # Subroute 维护性与可靠性目标
 
+**2026-10-20 staging Advisor lock and LAN experts access:** Staging pins its saved Advisor to `gemini-subscription-argon` (Gemini 4 Argon) through a staging-only Compose setting. Startup migrates a cleared/other saved selection to Argon; API writes cannot clear or replace the locked model; the control desk exposes the fixed model while preserving the frequency control. Staging verification: readiness healthy, saved policy v1669 selected Argon, routing options reported the lock and only the Argon route, and a direct `advisor_model: null` update returned 422 while leaving policy unchanged. The experts listener now publishes port 4040 on host interfaces, requires `EXPERTS_API_KEY`, and is restricted by the Windows firewall to the local subnet. Production gateway was not restarted or modified. No paid advisor completion was sent for this change.
+
 **2026-10-20 oversized coding-session context recovery:** Staging logs showed
 repeated `outbound_context_limit_exceeded` 400s at a 196,608-token target, but
 the old logs did not capture Sift's internal failure category, so their exact

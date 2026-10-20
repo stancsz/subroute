@@ -1,4 +1,5 @@
-# A deliberately narrow, loopback-only API for compact expert consultations.
+# A deliberately narrow API for compact expert consultations. Compose requires
+# bearer authentication because the listener is reachable from the LAN.
 # It exposes no executor aliases, routing state, UI, or advisor orchestration.
 model_list:
   - model_name: gemini-4-argon-advisor
@@ -81,7 +82,7 @@ litellm_settings:
   set_verbose: false
 
 general_settings:
-  # Optional. When unset, loopback is the security boundary, matching port 4000.
+  # Required by Docker Compose for the LAN-published experts listener.
   master_key: os.environ/EXPERTS_API_KEY
   cancel_on_disconnect: true
   disable_spend_logs: true

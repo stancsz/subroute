@@ -58,7 +58,7 @@
           <p id="route-fast-help" class="route-help" hidden>Fast mode uses more OpenAI subscription allowance. It applies to requests routed to this target, not the advisor.</p>
         </div>
         <div class="route-column route-model-panel advisor-panel">
-          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small>An optional second opinion on eligible API requests</small></div><span class="role-pill optional">Optional</span></div>
+          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small id="advisor-policy-note">An optional second opinion on eligible API requests</small></div><span id="advisor-lock-pill" class="role-pill optional">Optional</span></div>
           <label>Provider<select id="advisor-provider" aria-label="Advisor provider" disabled><option value="">Loading providers…</option></select></label>
           <label>Model route<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
           <label>Reasoning effort<select id="route-advisor-effort" aria-label="Advisor reasoning" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>

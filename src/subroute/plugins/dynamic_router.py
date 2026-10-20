@@ -34,6 +34,7 @@ RETIRED_MODEL_ALIASES = {
     "codex-terra": "codex-subscription", "codex-reserve": "codex-luna",
 }
 FAILOVER_ADVISOR_MODELS = frozenset({"gemini-subscription", "codex-gpt-6.1-sol-advisor"})
+LOCKED_ADVISOR_MODEL_ENV = "SUBROUTE_LOCKED_ADVISOR_MODEL"
 ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)
 
@@ -134,13 +135,19 @@ class RoutingControlPlane:
         self.choices = _load_choices(config_path)
         self.allowed_models = frozenset(choice.model_id for choice in self.choices if choice.selectable)
         self.advisor_models = frozenset(choice.model_id for choice in self.choices if choice.advisor_selectable)
+        self.locked_advisor_model = os.getenv(LOCKED_ADVISOR_MODEL_ENV) or None
+        if self.locked_advisor_model and self.locked_advisor_model not in self.advisor_models:
+            raise ValueError(
+                f"{LOCKED_ADVISOR_MODEL_ENV} is not a configured advisor model: "
+                f"{self.locked_advisor_model!r}"
+            )
         self._state = self._load_or_create_state()
 
     def _load_or_create_state(self) -> RoutingState:
         if not self.state_path.exists():
             initial_model = os.getenv("ACTIVE_MODEL", "openrouter" if "openrouter" in self.allowed_models else self.choices[0].model_id)
             initial_model = RETIRED_MODEL_ALIASES.get(initial_model, initial_model)
-            advisor_model = os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
+            advisor_model = self.locked_advisor_model or os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
             state = RoutingState(
                 active_model=initial_model,
                 advisor_model=advisor_model,
@@ -152,20 +159,30 @@ class RoutingControlPlane:
             self._write_atomic(state)
             return state
         raw = json.loads(self.state_path.read_text(encoding="utf-8"))
+        saved_advisor_model = raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor"))
+        advisor_model = self.locked_advisor_model or saved_advisor_model
         state = RoutingState(
             active_model=raw["active_model"],
             mode=raw.get("mode", "alias"),
             policy_version=int(raw.get("policy_version", 1)),
-            advisor_model=raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")),
+            advisor_model=advisor_model,
             reasoning_effort=raw.get("reasoning_effort"),
             fast_mode=raw.get("fast_mode", False),
-            advisor_reasoning_effort=raw.get("advisor_reasoning_effort"),
+            advisor_reasoning_effort=(
+                raw.get("advisor_reasoning_effort")
+                if advisor_model == saved_advisor_model
+                else None
+            ),
             advisor_trigger="adaptive",
             advisor_sensitivity=raw.get("advisor_sensitivity", "balanced"),
             advisor_classifier="ranked",
         )
         replacement = RETIRED_MODEL_ALIASES.get(state.active_model)
-        migrated = raw.get("advisor_trigger") != "adaptive" or raw.get("advisor_classifier") != "ranked"
+        migrated = (
+            raw.get("advisor_trigger") != "adaptive"
+            or raw.get("advisor_classifier") != "ranked"
+            or advisor_model != saved_advisor_model
+        )
         if replacement or migrated:
             state = replace(state, active_model=replacement or state.active_model,
                             policy_version=state.policy_version + 1)
@@ -189,6 +206,8 @@ class RoutingControlPlane:
             raise ValueError("Fast mode requires an OpenAI subscription target")
         if state.advisor_model is not None and state.advisor_model not in self.advisor_models:
             raise ValueError(f"advisor model is not selectable: {state.advisor_model!r}")
+        if self.locked_advisor_model and state.advisor_model != self.locked_advisor_model:
+            raise ValueError(f"advisor model is locked to {self.locked_advisor_model!r}")
         if state.advisor_trigger != "adaptive":
             raise ValueError(f"invalid advisor trigger: {state.advisor_trigger!r}")
         if state.advisor_sensitivity not in {"conservative", "balanced", "frequent"}:
@@ -244,6 +263,8 @@ class RoutingControlPlane:
     def update_advisor(self, advisor_model: str | None, **settings: Any) -> RoutingState:
         if settings.keys() - {"reasoning_effort", "advisor_sensitivity"}:
             raise ValueError("Advisor selection uses learned ranking; only frequency and reasoning effort can be changed")
+        if self.locked_advisor_model and advisor_model != self.locked_advisor_model:
+            raise ValueError(f"advisor model is locked to {self.locked_advisor_model!r}")
         with self._lock:
             default_effort = "low" if advisor_model in FAILOVER_ADVISOR_MODELS else None
             candidate = replace(
@@ -591,7 +612,12 @@ async def routing_options(request: Request) -> dict[str, Any]:
     return {
         "state": asdict(control_plane.snapshot()),
         "models": [choice for choice in choices if choice["selectable"]],
-        "advisor_models": [choice for choice in choices if choice["advisor_selectable"]],
+        "advisor_models": [
+            choice for choice in choices
+            if choice["advisor_selectable"]
+            and (not control_plane.locked_advisor_model or choice["model_id"] == control_plane.locked_advisor_model)
+        ],
+        "advisor_model_locked": control_plane.locked_advisor_model is not None,
         "client_api_key_required": bool(os.getenv("GATEWAY_MASTER_KEY")),
     }
 

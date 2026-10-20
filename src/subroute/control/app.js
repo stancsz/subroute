@@ -25,7 +25,7 @@ new MutationObserver(() => {
   policySummary.textContent = failed ? "Not saved · previous policy remains active" : !routingReady ? "Policy unavailable · editing disabled" : (status.includes("Saving") || status.startsWith("Choose")) ? status : `Saved policy ${status.match(/v\d+/)?.[0] || "active"}`;
   document.querySelector("#routing-description").textContent = !routingReady ? "The policy cannot be edited until the gateway reconnects." : "Changes save automatically and apply to new requests.";
 }).observe(routeStatus, {childList:true, subtree:true, characterData:true});
-let workingDirectory = null, routingReady = false;
+let workingDirectory = null, routingReady = false, advisorModelLocked = false;
 let routingModels = [], advisorModels = [];
 let analyticsPending = false;
 
@@ -47,9 +47,10 @@ function setGatewayStatus(online) {
 function option(value, label) { const node = document.createElement("option"); node.value = value; node.textContent = label; return node; }
 
 function setRoutingDisabled(value) {
-  for (const select of [routeProvider, advisorProvider, routeMode]) select.disabled = value;
+  for (const select of [routeProvider, routeMode]) select.disabled = value;
+  advisorProvider.disabled = value || advisorModelLocked;
   routeModel.disabled = value || !routeProvider.value;
-  routeAdvisor.disabled = value || !advisorProvider.value;
+  routeAdvisor.disabled = value || advisorModelLocked || !advisorProvider.value;
   routeEffort.disabled = value || !routeModel.value || routeMode.value === "off" || routeEffort.options.length < 2;
   routeFast.disabled = value || routeFastField.hidden || routeMode.value === "off";
   advisorEffort.disabled = value || !routeAdvisor.value || advisorEffort.options.length < 2;
@@ -100,10 +101,10 @@ async function refreshAdvisorAnalytics() {
   }
 }
 
-function renderProviderMenu(select, choices, selected, advisor = false) {
+function renderProviderMenu(select, choices, selected, advisor = false, locked = false) {
   const visible = choices.filter(item => item.configured || item.model_id === selected);
   const providers = [...new Set(visible.map(item => item.provider))].sort();
-  select.replaceChildren(...(advisor ? [option("", "No advisor")] : []), ...providers.map(provider => option(provider, provider)));
+  select.replaceChildren(...(advisor && !locked ? [option("", "No advisor")] : []), ...providers.map(provider => option(provider, provider)));
   if (!providers.length && !advisor) select.append(option("", "No providers configured"));
   select.value = choices.find(item => item.model_id === selected)?.provider || "";
 }
@@ -157,8 +158,9 @@ async function renderRouting() {
       throw new Error("The page and gateway versions differ. Refresh after the gateway restarts.");
     }
     routingModels = routing.models; advisorModels = routing.advisor_models;
+    advisorModelLocked = routing.advisor_model_locked === true;
     renderProviderMenu(routeProvider, routingModels, routing.state.active_model);
-    renderProviderMenu(advisorProvider, advisorModels, routing.state.advisor_model, true);
+    renderProviderMenu(advisorProvider, advisorModels, routing.state.advisor_model, true, advisorModelLocked);
     renderModelMenu(routeModel, routingModels, routeProvider.value, routing.state.active_model);
     renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, routing.state.advisor_model);
     routeMode.querySelector("[data-unavailable]")?.remove();
@@ -168,6 +170,10 @@ async function renderRouting() {
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
     renderTargetSpeed(routing.state.fast_mode);
     renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
+    document.querySelector("#advisor-policy-note").textContent = advisorModelLocked
+      ? "Gemini 4 Argon is fixed by gateway policy; frequency still controls which eligible requests receive a consultation."
+      : "An optional second opinion on eligible API requests";
+    document.querySelector("#advisor-lock-pill").textContent = advisorModelLocked ? "Model locked" : "Optional";
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
     routeKey.textContent = routing.client_api_key_required ? "CLIENT API KEY REQUIRED" : "LOCAL CLIENT KEY BYPASS";
     setRoutingDisabled(false); routingReady = true;
