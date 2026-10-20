@@ -258,8 +258,8 @@ class ReceiptStore:
                 WHERE attempt_id=$1::uuid AND outcome IN ('pending','interrupted')""",
                 attempt_id, outcome, json.dumps(facts), now_ms())
             return True
-        except Exception:
-            logger.error("usage receipt write failed attempt_id=%s", attempt_id)
+        except Exception as exc:
+            logger.error("usage receipt write failed attempt_id=%s error_type=%s", attempt_id, type(exc).__name__)
             return False
 
     async def checkpoint(self, attempt_id: str, facts: dict):
@@ -419,10 +419,17 @@ class UsageAccounting(CustomLogger):
         return kwargs
 
     async def async_post_call_success_deployment_hook(self, request_data, response, call_type):
+        # Raw stream observers own settlement, including EOF/cancellation and
+        # usage before LiteLLM estimates it. In 1.101.0/1.103.0 Responses also
+        # invokes this redundant hook via run_async_function, blocking the
+        # serving loop while the hook runs in a worker loop. Prisma's async
+        # pool cannot be used there. Keep writes on the existing observer path.
+        if request_data.get("_subroute_stream_observed") is True:
+            return
         ident = attempt_id(request_data)
         if ident:
-            facts = dict(request_data.get("_subroute_observed_usage", {})) if request_data.get("_subroute_stream_observed") else usage_facts(response)
-            outcome = request_data.get("_subroute_stream_outcome", response_outcome(response))
+            facts = usage_facts(response)
+            outcome = response_outcome(response)
             facts["usage_complete"] = outcome == "complete" and "input_tokens" in facts and "output_tokens" in facts
             await self.store.update(ident, facts, outcome)
 
@@ -435,6 +442,10 @@ class UsageAccounting(CustomLogger):
             await self.store.update(ident, facts, "failed")
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time):
+        # Observed streams are settled by their parser/close observer. The
+        # aggregate logger is a duplicate writer and may run after settlement.
+        if kwargs.get("_subroute_stream_observed") is True and kwargs.get("cache_hit") is not True:
+            return
         ident = attempt_id(kwargs)
         if ident:
             if kwargs.get("cache_hit") is True:

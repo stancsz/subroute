@@ -99,6 +99,7 @@ services:
       - ACTIVE_MODEL_STATE_PATH=/app/state/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
       - SUBROUTE_ENVIRONMENT=staging
+      - LITELLM_LOG=INFO
       - SUBROUTE_ACCOUNTING_SECRET
       - GATEWAY_MASTER_KEY
       - CODEX_AUTH_FILE=/root/.codex/auth.json
@@ -151,6 +152,58 @@ services:
       timeout: 3s
       retries: 12
 
+  # Text-only Unsloth GGUF server, included in the default Compose stack.
+  qwen-local:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:b0baccbe2e00b5d74e63f85f9f023c93d61d0f329475269e1e7002e87eb875ea
+    restart: always
+    ports:
+      - "127.0.0.1:8088:8080"
+    volumes:
+      - qwen-local-models:/root/.cache/huggingface
+      - ./sidecars/qwen-local/start.sh:/app/qwen-start.sh:ro
+    entrypoint: ["/bin/sh", "/app/qwen-start.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10m
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command:
+      - --no-mmproj
+      - --alias
+      - qwen3.8-27b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - "73728"
+      - --n-predict
+      - "4096"
+      - --reasoning-effort
+      - low
+      - --reasoning-budget
+      - "512"
+      - --parallel
+      - "1"
+      - --n-gpu-layers
+      - auto
+      - --fit-target
+      - "1536"
+      - --flash-attn
+      - "on"
+      - --cache-type-k
+      - q4_0
+      - --cache-type-v
+      - q4_0
+
 volumes:
   litellm-postgres-data:
   litellm-postgres-staging-data:
@@ -158,3 +211,4 @@ volumes:
   antigravity-config:
   antigravity-data:
   antigravity-gemini:
+  qwen-local-models:

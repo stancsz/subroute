@@ -23,15 +23,27 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
             info = deployment["model_info"]
             is_advisor = experts or deployment["model_name"].endswith("-advisor")
             speech = deployment["model_name"].startswith(("mimo-v2.5-asr", "mimo-v2.5-tts"))
-            context = 32000 if is_advisor else 8000 if speech else 256000
-            assert info["max_input_tokens"] == context, deployment["model_name"]
+            local_qwen = deployment["model_name"] == "qwen3.8-27b"
+            context = 32000 if is_advisor else 8000 if speech else 73728 if local_qwen else 256000
+            assert info["max_input_tokens"] == (65536 if local_qwen else context), deployment["model_name"]
             assert info["context_window"] == context
-            assert info["auto_compact_token_limit"] == context * 0.8
+            assert info["auto_compact_token_limit"] == (65536 if local_qwen else context * 0.8)
             if info.get("advisor_selectable"):
                 if info["max_input_tokens"] == 256000:
                     assert info["advisor_max_input_tokens"] == 32000
-            assert info["auto_compact_token_limit"] == info["context_window"] * 0.8
+            if not local_qwen:
+                assert info["auto_compact_token_limit"] == info["context_window"] * 0.8
             assert info["compaction_scope"] == "total"
+
+
+def test_local_qwen_responses_uses_litellm_chat_bridge():
+    from litellm.responses.main import _will_bridge_to_chat_completions
+
+    deployment = next(item for item in config()["model_list"] if item["model_name"] == "qwen3.8-27b")
+    params = deployment["litellm_params"]
+    assert _will_bridge_to_chat_completions(
+        "qwen3.8-27b", "openai", params.get("use_chat_completions_api", False), deployment["model_info"],
+    )
 
 
 def test_compose_isolates_mutable_state_and_pins_gateway_image():
@@ -77,6 +89,19 @@ def test_compose_publishes_gateway_ports_on_loopback():
 
     assert services["gateway"]["ports"] == ["127.0.0.1:4000:4000"]
     assert services["gateway-staging"]["ports"] == ["127.0.0.1:4005:4005"]
+
+
+def test_local_qwen_reserves_native_64k_input_context_with_quantized_kv():
+    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
+    command = services["qwen-local"]["command"]
+
+    for flag, expected in {
+        "--ctx-size": "73728",
+        "--n-predict": "4096",
+        "--cache-type-k": "q4_0",
+        "--cache-type-v": "q4_0",
+    }.items():
+        assert command[command.index(flag) + 1] == expected
 
 
 def test_antigravity_image_pins_build_dependencies_and_disables_self_update():
@@ -160,6 +185,8 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     assert config()["litellm_settings"]["callbacks"] == [
         "subroute.usage_accounting.usage_accounting",
         "subroute.plugins.dynamic_router.dynamic_routing_plugin",
+        "subroute.sift_plugin.sift_auto_hook",
+        "subroute.sift_plugin.sift_qwen_hook",
         "subroute.plugins.advisor_plugin.advisor_plugin_instance",
         "subroute.plugins.codex_credentials.codex_credential_refresher",
     ]
@@ -177,11 +204,9 @@ def test_subscription_channels_stay_behind_litellm():
     assert argon["model_info"]["reasoning_efforts"] == ["low", "medium", "high"]
     assert argon["model_info"]["advisor_selectable"] is True
     assert argon["model_info"]["advisor_max_input_tokens"] == 32000
-    assert "gemini-subscription-argon" in {
-        model["model_name"] for model in deployments if model["model_info"].get("advisor_selectable")
-    }
     for name in (
         "gemini-subscription",
+        "gemini-subscription-argon",
         "gemini-subscription-3.7-flash",
         "gemini-subscription-3.6-flash",
         "gemini-subscription-pro",
@@ -308,7 +333,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     assert "depends_on" not in experts
     assert {model["model_name"] for model in expert_models} == {
         "codex-sol-advisor", "codex-astra-advisor", "codex-luna-advisor",
-        "codex-gpt-6.1-sol-advisor", "gemini-3.8-flash-advisor",
+        "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
     }
     assert all(model["model_info"]["selectable"] is False for model in expert_models)
     assert {
@@ -316,7 +341,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     } == {
         "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
         "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
-        "antigravity/gemini-3.8-flash-low",
+        "antigravity/gemini-4-argon-low",
     }
     assert experts_config()["router_settings"] == {
         "num_retries": 0, "fallbacks": [], "enable_pre_call_checks": True,

@@ -110,7 +110,16 @@ class Handler(BaseHTTPRequestHandler):
     ("force-chat", True, "completed", False, None, False),
 ])
 def test_actual_native_and_translated_protocol_receipts(monkeypatch, dialect, stream, status, missing, cost, large):
-    store = MemoryStore()
+    class LoopBoundStore(MemoryStore):
+        foreign_writes = 0
+
+        async def update(self, *args, **kwargs):
+            if asyncio.get_running_loop() is not self.owner:
+                self.foreign_writes += 1
+                raise RuntimeError("database client used on a different event loop")
+            return await super().update(*args, **kwargs)
+
+    store = LoopBoundStore()
     monkeypatch.setattr(accounting.usage_accounting, "store", store)
     accounting.install_stream_accounting()
     callback_names = ("callbacks", "input_callback", "success_callback", "failure_callback", "_async_input_callback", "_async_success_callback", "_async_failure_callback")
@@ -124,6 +133,7 @@ def test_actual_native_and_translated_protocol_receipts(monkeypatch, dialect, st
     model = {"messages": "anthropic/claude-3-5-sonnet-20240620", "responses": "openai/gpt-4o-mini", "force-chat": "openai/chat_completions/gpt-4o-mini"}[dialect]
 
     async def scenario():
+        store.owner = asyncio.get_running_loop()
         router = Router(model_list=[{"model_name": "fixture", "litellm_params": {"model": model, "api_key": "fixture-only", "api_base": base}}], num_retries=0)
         await accounting.usage_accounting.async_pre_call_hook({}, None, {}, "completion")
         if dialect == "messages":
@@ -145,6 +155,7 @@ def test_actual_native_and_translated_protocol_receipts(monkeypatch, dialect, st
         assert row["facts"].get("provider_cost_micros") == (round(cost * 1e6) if cost is not None else None), rows
         assert len(rows) == (2 if dialect == "force-chat" else 1), rows
         assert "fixture-only" not in str(rows)
+        assert store.foreign_writes == 0
     try:
         asyncio.run(scenario())
     finally:

@@ -253,11 +253,11 @@ def test_dedicated_experts_allows_all_current_advisors_without_fallback():
     models = {item["model_name"]: item for item in config["model_list"]}
     assert set(models) == {
         "codex-luna-advisor", "codex-sol-advisor", "codex-astra-advisor",
-        "codex-gpt-6.1-sol-advisor", "gemini-3.8-flash-advisor",
+        "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
     }
     for name, item in models.items():
-        if name == "gemini-3.8-flash-advisor":
-            assert item["litellm_params"]["model"] == "antigravity/gemini-3.8-flash-low"
+        if name == "gemini-4-argon-advisor":
+            assert item["litellm_params"]["model"] == "antigravity/gemini-4-argon-low"
             assert item["model_info"]["capabilities"] == ["text"]
             continue
         assert "vision" in item["model_info"]["capabilities"]

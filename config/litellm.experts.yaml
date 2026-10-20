@@ -1,18 +1,18 @@
 # A deliberately narrow, loopback-only API for compact expert consultations.
 # It exposes no executor aliases, routing state, UI, or advisor orchestration.
 model_list:
-  - model_name: gemini-3.8-flash-advisor
+  - model_name: gemini-4-argon-advisor
     model_info:
       max_input_tokens: 32000
       context_window: 32000
       auto_compact_token_limit: 25600
       compaction_scope: total
-      display_name: Gemini 3.8 Flash Advisor (Low)
+      display_name: Gemini 4 Argon Advisor (Low)
       capabilities: [text]
       selectable: false
       advisor_selectable: true
     litellm_params:
-      model: antigravity/gemini-3.8-flash-low
+      model: antigravity/gemini-4-argon-low
       allowed_openai_params: [reasoning_effort]
 
   - model_name: codex-luna-advisor

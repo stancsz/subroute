@@ -289,6 +289,8 @@ def _default_control_plane() -> RoutingControlPlane:
 class DynamicRoutingPlugin(CustomLogger):
     def __init__(self, control_plane: RoutingControlPlane) -> None:
         super().__init__()
+        from subroute.token_counting import install_tool_schema_counting_fix
+        install_tool_schema_counting_fix()
         from subroute.thinking import install_messages_tool_ordering
         install_messages_tool_ordering()
         from subroute.responses_stream import install_responses_stream_repair
@@ -447,6 +449,10 @@ class DynamicRoutingPlugin(CustomLogger):
         )
         metadata["gateway_reasoning_effort"] = state.reasoning_effort if routed else None
         metadata["gateway_target_fast_mode"] = bool(routed and state.fast_mode)
+        if resolved_model == "qwen3.8-27b":
+            from subroute.local_context import frontload_anthropic_system_messages
+
+            data = frontload_anthropic_system_messages(data, call_type)
         if resolved_model == requested_model:
             return data
 

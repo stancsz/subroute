@@ -1,0 +1,13 @@
+Decision: Choose the next real product slice for a checkpointed Qwen/Sift multi-part end-to-end reliability evaluation. Intended action: use a disposable app copy to implement a local appointment-reminder preparation outbox, then independently verify it; do not contact clients or deploy to the main Compose stack.
+
+Evidence:
+- The full goal remains broad Jane/Vagaro functional and visual parity; user specifically requires Qwen 3.8 27B via Subroute/Sift to handle normal requests end to end.
+- Current goal record lists a reminder outbox as unfinished. Existing booking confirmation says no email/text is sent; the product has a metadata-only staff notification inbox.
+- Existing app source supports appointments, cancellation/rescheduling, staff auth and Docker Compose; tests are Node's built-in test runner.
+- Subroute's disposable-workspace plan/execute/verify runner now has orchestration tests for read-only acceptance paths, checkpoint-before-continuation, repair feedback and final acceptance repair. These tests pass, but no representative real feature has been run through this controller.
+- A previous broad gift-card Qwen attempt on a stale snapshot timed out without handoff; prior bounded tasks sometimes succeed, sometimes miss invariants. That does not establish current controller performance.
+- Staging gateway is running. Its current policy is Mimo; the runner temporarily sets Qwen and restores the prior policy.
+
+Constraints: Use only synthetic data in an isolated copy. No external email/SMS, no customer contact, no main DB/Compose changes, no authenticated vendor access. Qwen remains implementation owner; the controller owns checkpointing, scope and validators; independent QA owns acceptance.
+
+Question: Is a local no-send reminder outbox a suitable representative multi-part Qwen trial, and what minimum acceptance should preserve product value while making the result falsifiable? Name the main stop condition.

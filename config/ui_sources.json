@@ -7,6 +7,7 @@
     {"id": "openrouter", "name": "OpenRouter", "kind": "api key", "models": "MiniMax M3", "accent": "violet", "credentials": ["OPENROUTER_API_KEY"]},
     {"id": "freetoken", "name": "FreeToken", "kind": "local endpoint", "models": "freetoken · OpenAI compatible", "accent": "blue", "credentials": ["FREETOKEN_BASE_URL", "FREETOKEN_API_KEY"]},
     {"id": "ollama", "name": "Local Ollama", "kind": "local endpoint", "models": "desktop · qwen2.5-coder", "accent": "gold", "credentials": ["OLLAMA_API_BASE"]},
+    {"id": "qwen-local", "name": "qwen3.8-27b", "kind": "local endpoint", "models": "qwen3.8-27b", "accent": "gold"},
     {"id": "anthropic-subscription", "name": "Anthropic Subscription", "kind": "subscription", "models": "Claude Code account session", "accent": "violet", "available": false},
     {"id": "anthropic", "name": "Anthropic API", "kind": "api key", "models": "Claude API", "accent": "violet", "available": false, "credentials": ["ANTHROPIC_API_KEY"]},
     {"id": "deepseek", "name": "DeepSeek API", "kind": "api key", "models": "DeepSeek V3 / R1", "accent": "blue", "available": false, "credentials": ["DEEPSEEK_API_KEY"]},

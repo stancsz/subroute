@@ -26,5 +26,6 @@ subroute = ["control/*.html", "control/*.css", "control/*.js", "data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+norecursedirs = ["acceptance"]
 pythonpath = ["src"]
 markers = ["live: sends real HTTP requests to a running Subroute gateway and configured providers"]

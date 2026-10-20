@@ -39,6 +39,17 @@ async def main():
         await restarted.ack("staging", [{"attempt_id": ident, "revision": 1}])
         terminal = (await restarted.pending("staging"))[0]
         assert terminal["outcome"] == "complete" and terminal["revision"] == 2
+        # Reproduce the framework's blocking worker-loop success hook with
+        # the actual Prisma store. Stream observers already saved this row.
+        from litellm.litellm_core_utils.asyncify import run_async_function
+        run_async_function(
+            accounting.usage_accounting.async_post_call_success_deployment_hook,
+            {accounting.TAG: ident, "_subroute_stream_observed": True},
+            {"usage": {"input_tokens": 999}}, "aresponses",
+        )
+        preserved = (await store.pending("staging"))[0]
+        assert preserved["revision"] == 2 and preserved["input_tokens"] == 7
+        result["prisma_worker_hook_preserves_observer_receipt"] = True
         await restarted.ack("production", [{"attempt_id": ident, "revision": 2}])
         assert len(await restarted.pending("staging")) == 1
         await restarted.ack("staging", [{"attempt_id": ident, "revision": 2}])
@@ -57,6 +68,7 @@ async def main():
                 yield GenericStreamingChunk(text="", is_finished=True, finish_reason="stop", usage=raw, index=0)
 
         litellm.callbacks = [accounting.usage_accounting]
+        os.environ["SUBROUTE_ENVIRONMENT"] = "production"
         litellm.custom_provider_map = [{"provider": "receipt-fixture", "custom_handler": FixtureLLM()}]
         from litellm.utils import custom_llm_setup
         custom_llm_setup()

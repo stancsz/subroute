@@ -1,0 +1,11 @@
+# Incremental build planner
+
+Implement a deterministic build planner for a small CI system using only the Python standard library. Edit `build_manifest.py` and `incremental.py`. Do not edit tests.
+
+`load_manifest(raw_json)` returns a dictionary of frozen `Target` records keyed by name. The input is exactly `{"targets": [...]}`. Each target has exactly `name`, `command`, `sources`, and `deps`. Names and commands are nonempty strings; names match `[A-Za-z][A-Za-z0-9_.-]*`. `sources` and `deps` are lists of distinct strings. A source is a canonical relative POSIX path: it has no leading slash, backslash, colon, NUL, empty component, `.` component, or `..` component. Dependency names refer to other targets. Reject duplicate JSON keys, target names, source paths within a target, dependencies within a target, unknown dependencies, and malformed values with `BuildError`. Empty manifests are valid. Do not mutate parsed input.
+
+`plan_build(targets, source_digests, previous_fingerprints)` returns a `Plan` with `order`, `rebuild`, and `fingerprints`. `order` is a deterministic topological tuple of all target names, choosing the lexicographically smallest currently ready target. Reject dependency cycles, unknown dependencies, malformed directly supplied targets, missing source digests, and invalid digest values with `BuildError`. Digests and previous fingerprints are lowercase 64-character SHA-256 hex strings. A target fingerprint must depend on its name, command, sorted source paths and their digests, and sorted dependency names and their **current** fingerprints. Use a canonical, unambiguous encoding before hashing. Reordering manifest entries or source/dependency lists must not change fingerprints. `fingerprints` is a fresh dictionary containing every target. `rebuild` contains names whose current fingerprints differ from the previous mapping, in topological order. Missing previous entries mean rebuild. No input may be mutated.
+
+Changing a leaf's source digest therefore rebuilds that leaf and its dependents. An unrelated target stays out of `rebuild`. If source digests, commands, and dependency fingerprints are unchanged, a second call with the first result's fingerprints has an empty rebuild plan.
+
+Run `python -m unittest -q` before and after editing. Report the actual result and any remaining limitation.

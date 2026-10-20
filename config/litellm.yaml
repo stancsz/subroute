@@ -107,6 +107,7 @@ model_list:
     litellm_params:
       model: antigravity/gemini-4-argon
       allowed_openai_params: [reasoning_effort]
+
   - model_name: gemini-subscription-3.7-flash
     model_info:
       <<: *context_policy
@@ -478,6 +479,28 @@ model_list:
       model: ollama/qwen2.5-coder
       api_base: os.environ/OLLAMA_API_BASE
 
+  # Optional Compose profile local-qwen serves Unsloth's 3-bit GGUF through
+  # llama.cpp. The 72K window reserves 64K for input, 4K for output and 4K headroom.
+  - model_name: qwen3.8-27b
+    model_info:
+      max_input_tokens: 65536
+      max_output_tokens: 4096
+      context_window: 73728
+      auto_compact_token_limit: 65536
+      compaction_scope: total
+      display_name: qwen3.8-27b
+      provider: Local
+      source_id: qwen-local
+      access: Local GPU
+      capabilities: [local, text, tools, streaming]
+      disable_background_health_check: true
+    litellm_params:
+      model: openai/qwen3.8-27b
+      api_base: http://qwen-local:8080/v1
+      api_key: local
+      # Codex speaks Responses; LiteLLM owns its bridge to this Chat-only server.
+      use_chat_completions_api: true
+
 router_settings:
   enable_pre_call_checks: true
   # Keep ordinary model requests fail-closed unless their model group has an
@@ -508,6 +531,9 @@ litellm_settings:
   callbacks:
     - subroute.usage_accounting.usage_accounting
     - subroute.plugins.dynamic_router.dynamic_routing_plugin
+    # Heal oversized automatic-route histories before advisor/provider checks.
+    - subroute.sift_plugin.sift_auto_hook
+    - subroute.sift_plugin.sift_qwen_hook
     - subroute.plugins.advisor_plugin.advisor_plugin_instance
     - subroute.plugins.codex_credentials.codex_credential_refresher
   custom_provider_map:
