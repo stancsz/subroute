@@ -24,7 +24,7 @@ import httpx
 import run as dispatch
 
 
-DEFAULT_MAX_FILES_PER_STEP = 6
+DEFAULT_MAX_FILES_PER_STEP = 2
 MAX_PLAN_STEPS = 40
 # Discovery and implementation are separate Qwen child runs. Product-code
 # discovery used 13 reads and 15 searches before returning a handoff, so size
@@ -48,6 +48,11 @@ PLANNER_TIMEOUT = 180
 CHILD_STEP_TIMEOUT = 420
 CHILD_IDLE_TIMEOUT = 300
 CHILD_STEP_TURNS = 32
+SOURCE_SCOUT_TIMEOUT = 180
+SOURCE_SCOUT_MAX_TURNS = 10
+SOURCE_SCOUT_OUTPUT_CHAR_LIMIT = 32_000  # Approximate 8k-token ceiling; checked on returned tool text.
+SOURCE_SCOUT_MAX_READ_LINES = 80
+SOURCE_SCOUT_LIMITS = {"reads": 4, "searches": 3, "inspections": 6}
 EXCLUDED_DIRS = {".git", ".runs", "node_modules", ".venv", "venv", "tmp", "dist", "build", "coverage"}
 AUTONOMOUS_CHILD = "qwen-autonomous-implementer"
 MARKER_PREFIX = "QWEN_AUTONOMOUS_COMPLETE_"
@@ -151,6 +156,37 @@ def load_plan_file(path: Path) -> dict:
     return value
 
 
+def local_js_import_paths(workspace: Path, source_paths: list[str]) -> list[str]:
+    """Return exact one-hop local JavaScript imports for scoped source inspection."""
+    discovered = set()
+    import_pattern = re.compile(
+        r"(?:\brequire\s*\(\s*|\bfrom\s*)['\"](\.[^'\"]+)['\"]"
+    )
+    for source in source_paths:
+        source_path = workspace / source
+        if source_path.suffix.lower() not in {".js", ".cjs", ".mjs"}:
+            continue
+        try:
+            contents = source_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for specifier in import_pattern.findall(contents):
+            base = (source_path.parent / specifier).resolve()
+            candidates = [base] if base.suffix else [
+                base.with_suffix(extension) for extension in (".js", ".cjs", ".mjs", ".json")
+            ] + [base / "index.js"]
+            for candidate in candidates:
+                if not candidate.is_file():
+                    continue
+                try:
+                    relative = relative_target(workspace, candidate.relative_to(workspace.resolve()).as_posix())
+                except (ValueError, OSError):
+                    continue
+                discovered.add(relative)
+                break
+    return sorted(discovered)
+
+
 def message_blocks(event: dict) -> list[dict]:
     """Return structured message blocks while tolerating malformed/scalar events."""
     message = event.get("message")
@@ -160,6 +196,19 @@ def message_blocks(event: dict) -> list[dict]:
     if not isinstance(content, list):
         return []
     return [block for block in content if isinstance(block, dict)]
+
+
+def tool_result_text(result: dict | None) -> str:
+    """Read the model's text blocks without stringifying the surrounding block list."""
+    if not isinstance(result, dict):
+        return ""
+    content = result.get("content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(block.get("text", "") for block in content
+                       if isinstance(block, dict) and block.get("type") == "text")
+    return ""
 
 
 def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEPS,
@@ -198,6 +247,12 @@ def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEP
         if not isinstance(reference_files, list) or len(reference_files) > 40:
             raise ValueError(f"step {step_id} reference_paths must be a list of at most 40 existing files")
         references = [relative_target(workspace, file) for file in reference_files]
+        # Give scout and implementation workers exact read-only access to direct
+        # local modules used by assigned source files. This avoids directory
+        # searches when an imported domain API's signature determines the change.
+        references = sorted((set(references) | set(local_js_import_paths(workspace, paths))) - set(paths))
+        if len(references) > 40:
+            raise ValueError(f"step {step_id} has more than 40 exact read-only references after dependency discovery")
         if len(set(references)) != len(references) or set(references) & set(paths):
             raise ValueError(f"step {step_id} reference_paths must be unique and read-only")
         missing_references = set(references) - existing
@@ -240,6 +295,20 @@ def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEP
         checks = step.get("checks", [])
         if not isinstance(checks, list) or any(not isinstance(check, str) for check in checks):
             raise ValueError(f"step {step_id} checks must be a list of strings")
+        # A planner sometimes places a file in reference_paths even though its
+        # own task/checks say to update it. That makes the requested edit
+        # impossible for the worker; reject and let the one bounded plan repair
+        # promote the path to writable (or split the step).
+        change_verbs = re.compile(r"\b(add|update|modify|edit|change|replace|remove|wire|implement|repoint)\b", re.I)
+        plan_text = "\n".join([task, *checks])
+        for reference in references:
+            for match in re.finditer(re.escape(reference), plan_text, re.I):
+                context = plan_text[max(0, match.start() - 180):match.end() + 180]
+                if change_verbs.search(context):
+                    raise ValueError(
+                        f"step {step_id} describes read-only reference {reference} as a change target; "
+                        "list it in files or remove the change from the step"
+                    )
         covers = step.get("covers", [])
         if not isinstance(covers, list) or any(not isinstance(item, str) for item in covers):
             raise ValueError(f"step {step_id} covers must be a list of requirement ids")
@@ -286,7 +355,11 @@ def planner_prompt(request: str, requirements: list[dict], workspace: Path, file
         "You are the planning lead for a real repository change. Inspect only what you need, "
         "then return one JSON object and no other text. For this planning call, do not use tools; "
         "use the supplied request, requirements, validators, and file inventory and answer immediately. "
-        "Use the fewest implementation steps that fully cover the request. Do not create read-only "
+        "Use the fewest implementation steps that remain dependency-coherent and tractable. "
+        "Prefer one or two writable files per step; split larger tasks into sequential steps "
+        "when a file has a clear predecessor or downstream dependency. Do not group files "
+        "merely to reduce step count, and never weaken or omit acceptance to fit the step limit. "
+        "Do not create read-only "
         "research, inspection, or file-reading steps; the implementation worker can inspect files "
         "within its assigned step before editing. Every step must make an implementation change "
         "to at least one listed file and must map to at least one explicit requirement. Do not "
@@ -298,6 +371,8 @@ def planner_prompt(request: str, requirements: list[dict], workspace: Path, file
         f"Keep each step to at most {max_files_per_step} exact workspace-relative file paths; "
         "use more sequential steps when a feature spans more files. Include source and test "
         "files when appropriate. Use reference_paths for existing supporting files the worker may read but must not edit. "
+        "For each implementation step, include the source file for an imported function or domain API in reference_paths when its behavior or accepted options determine the requested change; for example, if a route must call booking.availableSlots with a new option, include the file that defines booking.availableSlots. "
+        "Before returning, cross-check every explicit file path against the action requested: if the task/checks say to add, update, modify, edit, change, replace, remove, wire, implement, or repoint behavior in that file, it MUST be listed in files, never reference_paths. If the feature needs more than the writable-file limit, split it into ordered implementation steps; do not demote a required change target to read-only. "
         "Each step needs id, title, task, files, reference_paths, depends_on, checks. "
         "Step validators are caller-owned: do not select or omit them; the runner maps each covered requirement to its supplied step_validator_indices. "
         "Do not claim the request is done in the plan. Avoid generated, dependency, data, and "
@@ -408,6 +483,7 @@ def file_hashes(workspace: Path) -> dict[str, str]:
 
 def audit_worker_reads(workspace: Path, events: list[dict], *,
                        allowed_paths: list[str] | None = None,
+                       allowed_ranges: dict[str, list[dict]] | None = None,
                        require_ranged_reads: bool = False,
                        limits: dict | None = None) -> dict:
     reads = []
@@ -435,7 +511,6 @@ def audit_worker_reads(workspace: Path, events: list[dict], *,
                 continue
             tool_name = block.get("name")
             denied = block.get("id") in denied_before_execution
-            counts[tool_name] += 1
             tool_input = block.get("input")
             tool_input = tool_input if isinstance(tool_input, dict) else {}
             raw_path = (tool_input.get("file_path") if tool_name == "Read"
@@ -472,10 +547,11 @@ def audit_worker_reads(workspace: Path, events: list[dict], *,
                       "denied_before_execution": denied}
             reads.append(record)
             if denied:
-                # The PreToolUse guard rejected this request before the file tool ran.
-                # Count it against the call budget, but do not treat it as inspected
-                # evidence or as an unauthorized access.
+                # A guard denial is recorded for diagnosis, but it did not read or
+                # search source and therefore does not consume the successful-work
+                # budget. This lets the model correct a bounded tool mistake.
                 continue
+            counts[tool_name] += 1
             if tool_name == "Read" and allowed is not None and relative not in allowed:
                 violations.append({**record, "reason": "read_path_outside_assigned_step_scope"})
             if tool_name in {"Grep", "Glob"}:
@@ -492,6 +568,21 @@ def audit_worker_reads(workspace: Path, events: list[dict], *,
             if tool_name == "Read" and require_ranged_reads and line_count > MAX_LARGE_FILE_READ_LINES and (
                     not ranged or offset < 1 or limit < 1 or limit > MAX_LARGE_FILE_READ_LINES):
                 violations.append({**record, "reason": "source_read_must_use_a_range_of_at_most_200_lines"})
+            if tool_name in {"Read", "Grep"} and relative in (allowed_ranges or {}) and not denied:
+                if tool_name == "Grep":
+                    violations.append({**record, "reason": "grep_bypassed_verified_source_ranges"})
+                else:
+                    end = offset + limit - 1 if ranged and offset >= 1 and limit >= 1 else None
+                    contained = end is not None and limit <= MAX_LARGE_FILE_READ_LINES and any(
+                        isinstance(item, dict)
+                        and isinstance(item.get("offset"), int) and not isinstance(item.get("offset"), bool)
+                        and isinstance(item.get("limit"), int) and not isinstance(item.get("limit"), bool)
+                        and item["offset"] <= offset
+                        and end <= item["offset"] + item["limit"] - 1
+                        for item in (allowed_ranges or {})[relative]
+                    )
+                    if not contained:
+                        violations.append({**record, "reason": "read_range_outside_verified_source_map"})
             if tool_name == "Read" and line_count > LARGE_FILE_LINE_THRESHOLD and (not ranged or limit > MAX_LARGE_FILE_READ_LINES):
                 violations.append({**record, "reason": "large_file_read_must_use_a_range_of_at_most_200_lines"})
     read_count = counts["Read"]
@@ -658,16 +749,74 @@ def remaining_inspection_budget(audit: dict, *, limits: dict | None = None,
     return remaining
 
 
-def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[str], audit: dict) -> dict:
+def large_source_targets(workspace: Path, paths: list[str]) -> list[str]:
+    """Return existing files whose reads require a bounded source range."""
+    large = []
+    for raw in paths:
+        relative = relative_target(workspace, raw)
+        target = workspace / relative
+        if not target.is_file():
+            continue
+        try:
+            with target.open("r", encoding="utf-8", errors="replace") as source:
+                for count, _ in enumerate(source, start=1):
+                    if count > MAX_LARGE_FILE_READ_LINES:
+                        large.append(relative)
+                        break
+        except OSError:
+            continue
+    return large
+
+
+def needs_source_scout(workspace: Path, step: dict) -> bool:
+    """Scout only when a large assigned source has no bounded planner hint."""
+    hinted = {relative_target(workspace, item["path"])
+              for item in step.get("source_ranges", [])
+              if isinstance(item, dict) and isinstance(item.get("path"), str)}
+    return any(path not in hinted for path in large_source_targets(workspace, step.get("files", [])))
+
+
+def verified_read_ranges(workspace: Path, step: dict, phase: str,
+                         inspection_context: dict | None) -> dict[str, list[dict]]:
+    """Build the one range policy shared by the pre-tool guard and transcript audit."""
+    ranges_by_path: dict[str, list[dict]] = {}
+    if phase == "inspection":
+        for hint in step.get("source_ranges", []):
+            if isinstance(hint, dict) and isinstance(hint.get("path"), str):
+                relative = relative_target(workspace, hint["path"])
+                ranges_by_path.setdefault(relative, []).append(
+                    {"offset": hint.get("offset"), "limit": hint.get("limit")})
+    elif inspection_context:
+        for item in inspection_context.get("files", []):
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+                continue
+            relative = relative_target(workspace, item["path"])
+            ranges = item.get("ranges", [])
+            if isinstance(ranges, list):
+                ranges_by_path[relative] = [
+                    {"offset": span.get("offset"), "limit": span.get("limit")}
+                    for span in ranges if isinstance(span, dict)
+                ]
+    for relative in large_source_targets(workspace, step.get("files", [])):
+        ranges_by_path.setdefault(relative, [])
+    return ranges_by_path
+
+
+def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[str], audit: dict,
+                                required_source_paths: list[str] | None = None,
+                                caller_source_ranges: list[dict] | None = None) -> dict:
     """Require a compact, source-backed report before any implementation child starts."""
     if not isinstance(text, str):
         raise ValueError("inspection handoff is missing; return one compact JSON object and the completion marker")
-    if len(text) > 6_000:
-        raise ValueError(f"inspection handoff is {len(text)} characters; maximum is 6000. Remove prose, use relative workspace paths, group nearby ranges, and keep only implementation-critical evidence.")
     payload = text.strip()
-    completion = re.search(r"QWEN_AUTONOMOUS_COMPLETE_[A-Za-z0-9_-]+$", payload)
+    completion = re.search(r"QWEN_AUTONOMOUS_COMPLETE_[A-Za-z0-9_-]+?(?=agentId:|\s|$)", payload)
     if completion:
+        trailer = payload[completion.end():].strip()
+        if trailer and not (trailer.startswith("agentId:") or trailer.startswith("<usage>")):
+            raise ValueError("inspection handoff has unexpected text after its completion marker")
         payload = payload[:completion.start()].rstrip()
+    if len(payload) > 6_000:
+        raise ValueError(f"inspection handoff is {len(payload)} characters; maximum is 6000. Remove prose, use relative workspace paths, group nearby ranges, and keep only implementation-critical evidence.")
     try:
         report = json.loads(payload)
     except json.JSONDecodeError as exc:
@@ -675,10 +824,10 @@ def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[
     summary = report.get("summary")
     plan = report.get("implementation_plan")
     files = report.get("files")
-    if not isinstance(summary, str) or not summary.strip() or len(summary) > 800:
-        raise ValueError("inspection handoff needs a concise summary under 800 characters")
-    if not isinstance(plan, str) or not plan.strip() or len(plan) > 1800:
-        raise ValueError("inspection handoff needs a concise implementation plan")
+    if not isinstance(summary, str) or not summary.strip() or len(summary) > 1_200:
+        raise ValueError("inspection handoff needs a concise summary under 1200 characters")
+    if not isinstance(plan, str) or not plan.strip() or len(plan) > 2_200:
+        raise ValueError("inspection handoff needs a concise implementation plan under 2200 characters")
     if not isinstance(files, list) or not files or len(files) > 12:
         raise ValueError("inspection handoff must identify source files and relevant ranges")
     allowed = {relative_target(workspace, path) for path in allowed_paths}
@@ -686,11 +835,19 @@ def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[
                     and not item.get("denied_before_execution")
                     and isinstance(item.get("path"), str)]
     read_paths = {item.get("path") for item in read_records}
+    caller_ranges_by_path: dict[str, list[dict]] = {}
+    for hint in caller_source_ranges or []:
+        if isinstance(hint, dict) and isinstance(hint.get("path"), str):
+            caller_ranges_by_path.setdefault(relative_target(workspace, hint["path"]), []).append(hint)
     normalized = []
+    seen_paths = set()
     for item in files:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str):
             raise ValueError("inspection handoff contains an invalid file entry")
         path = relative_target(workspace, item["path"])
+        if path in seen_paths:
+            raise ValueError(f"inspection handoff repeats a file entry: {path}")
+        seen_paths.add(path)
         ranges = item.get("ranges")
         symbols = item.get("symbols")
         if path not in allowed or path not in read_paths:
@@ -702,10 +859,23 @@ def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[
                 or not isinstance(span.get("limit"), int) or isinstance(span.get("limit"), bool)
                 or not 1 <= span["limit"] <= MAX_LARGE_FILE_READ_LINES
                 or not isinstance(span.get("purpose"), str) or not span["purpose"].strip()
-                or len(span["purpose"]) > 120
                 for span in ranges):
             raise ValueError(f"inspection handoff needs ranged evidence (at most 200 lines): {path}")
         for span in ranges:
+            source_path = workspace / path
+            try:
+                with source_path.open("r", encoding="utf-8", errors="replace") as source:
+                    source_line_count = sum(1 for _ in source)
+            except OSError as exc:
+                raise ValueError(f"inspection handoff source file is unreadable: {path}") from exc
+            if span["offset"] + span["limit"] - 1 > source_line_count:
+                raise ValueError(f"inspection handoff range extends beyond end of file: {path}")
+            caller_ranges = caller_ranges_by_path.get(path)
+            if caller_ranges and not any(
+                    span["offset"] >= hint["offset"]
+                    and span["offset"] + span["limit"] <= hint["offset"] + hint["limit"]
+                    for hint in caller_ranges):
+                raise ValueError(f"inspection handoff range exceeds caller-declared source ranges: {path}")
             if not any(
                     record.get("path") == path
                     and (
@@ -721,16 +891,33 @@ def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[
                     )
                     for record in read_records):
                 raise ValueError(f"inspection handoff range was not present in the read audit: {path}")
+        compact_ranges = []
+        for span in ranges:
+            purpose = span["purpose"].strip()
+            if len(purpose) > 120:
+                purpose = purpose[:117].rsplit(" ", 1)[0].rstrip() + "..."
+            compact_ranges.append({**span, "purpose": purpose})
         if (not isinstance(symbols, list) or len(symbols) > 12
                 or any(not isinstance(symbol, str) or len(symbol) > 100 for symbol in symbols)):
             raise ValueError(f"inspection handoff symbols must be a list of strings: {path}")
-        normalized.append({**item, "path": path})
+        normalized.append({**item, "path": path, "ranges": compact_ranges})
     risks = report.get("risks", [])
     if not isinstance(risks, list) or len(risks) > 5 or any(
-            not isinstance(risk, str) or len(risk) > 200 for risk in risks):
+            not isinstance(risk, str) or not risk.strip() for risk in risks):
         raise ValueError("inspection handoff risks must be at most five strings of 200 characters each")
+    compact_risks = []
+    for risk in risks:
+        risk = risk.strip()
+        if len(risk) > 200:
+            risk = risk[:197].rsplit(" ", 1)[0].rstrip() + "..."
+        compact_risks.append(risk)
+    mapped_paths = {item["path"] for item in normalized}
+    missing_ranges = sorted(set(required_source_paths or []) - mapped_paths)
+    if missing_ranges:
+        raise ValueError("inspection handoff must map ranges for large assigned files: "
+                         + ", ".join(missing_ranges))
     return {"summary": summary.strip(), "implementation_plan": plan.strip(), "files": normalized,
-            "risks": risks}
+            "risks": compact_risks}
 
 
 def validate_preverified_inspection(report: dict, step: dict, workspace: Path,
@@ -742,7 +929,10 @@ def validate_preverified_inspection(report: dict, step: dict, workspace: Path,
     allowed = [*step["files"], *(step.get("reference_paths") or []), *read_only_paths]
     audit = {"reads": [{"tool": "Read", "path": item["path"], "offset": item["offset"],
                         "limit": item["limit"]} for item in ranges]}
-    normalized = validate_inspection_handoff(json.dumps(report, ensure_ascii=False), workspace, allowed, audit)
+    normalized = validate_inspection_handoff(
+        json.dumps(report, ensure_ascii=False), workspace, allowed, audit,
+        required_source_paths=large_source_targets(workspace, step["files"]),
+        caller_source_ranges=ranges)
     declared = {(item["path"], item["offset"], item["limit"]) for item in ranges}
     for item in normalized["files"]:
         for span in item["ranges"]:
@@ -782,15 +972,16 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
                     inspection_limits: dict | None = None,
                     early_template_checkpoint: bool = False) -> str:
     absolute = [str((workspace / path).resolve()) for path in step["files"]]
+    source_read_only_paths = [] if phase == "scout" else (read_only_paths or [])
     read_only_absolute = sorted({str((workspace / path).resolve())
-                                 for path in [*(read_only_paths or []), *(step.get("reference_paths") or [])]})
+                                 for path in [*source_read_only_paths, *(step.get("reference_paths") or [])]})
     repair = ""
     if repair_feedback:
         repair = ("\n\nOne repair round only. Fix the visible validator failures below, finish the "
                  "original step contract, and edit only the listed files. Do not weaken tests.\n"
                  + repair_feedback[:5000])
-    if phase not in {"inspection", "implementation"}:
-        raise ValueError("phase must be inspection or implementation")
+    if phase not in {"scout", "inspection", "implementation"}:
+        raise ValueError("phase must be scout, inspection, or implementation")
     step_requirements = [item for item in requirements if item["id"] in step.get("covers", [])]
     budget = inspection_limits or (INSPECTION_PHASE_LIMITS if phase == "inspection"
                                    else IMPLEMENTATION_INITIAL_LIMITS)
@@ -802,8 +993,11 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
         "Small files may be read in full. Prefer relevant ranges and do not reread them. "
     )
     source_hints = step.get("source_ranges") or []
-    source_hint_text = ("Caller-verified source landmarks (read these exact ranges first; they are hints, "
-                        "not a substitute for checking nearby code):\n- " +
+    source_hint_text = (("Caller-verified source ranges (implementation reads are limited to these windows):\n- "
+                        if phase == "implementation" and inspection_context else
+                        "Caller-verified source ranges (inspection reads are limited to these windows):\n- "
+                        if phase == "inspection" else
+                        "Caller-supplied source landmarks (read these ranges first):\n- ") +
                         "\n- ".join(f"{hint['path']} lines {hint['offset']}-{hint['offset'] + hint['limit'] - 1}: {hint['purpose']}"
                                        for hint in source_hints) + "\n") if source_hints else ""
     if phase == "implementation" and inspection_context and read_only_absolute:
@@ -828,7 +1022,28 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
         )
     else:
         acceptance_reading = "Inspect only the scoped edit files and directly relevant dependencies."
-    if phase == "inspection":
+    if phase == "scout":
+        phase_instruction = (
+            "Run a bounded, read-only source scout for this step. Locate only the smallest implementation-critical "
+            "Do not delegate, launch an Agent/subagent, or ask another worker to implement anything. "
+            "ranges in the exact assigned files and declared references. Start with Grep for exact symbols on an "
+            "exact file; set head_limit to 100 or less and context lines (-A/-B/-C) to 5 or less, then confirm "
+            "every reported range with Read. Each Read must include offset and limit <=80, and should cover only "
+            "the specific relevant section; do not read from offset 1 unless the relevant section starts there. Do not read "
+            "sequential chunks, write files, or explore unrelated paths. You have at most ten tool attempts "
+            "(up to four successful Reads, three successful Greps, and six total successful inspections) and 180 seconds. "
+            "Return exactly one JSON object followed by the completion marker, with no prose, fences, or source dumps. "
+            "This scout schema overrides any handoff or output format mentioned in the original request or step task. "
+            "Use this exact compact schema, with the entire JSON under 6000 characters: "
+            "{\"summary\": string (<=1200 chars), \"implementation_plan\": string (<=2200 chars), "
+            "\"files\": [{\"path\": workspace-relative POSIX path, \"symbols\": [up to 12 strings], "
+            "\"ranges\": [{\"offset\": integer, \"limit\": integer <=80, \"purpose\": string <=120 chars}]}], "
+            "\"risks\": [up to 5 strings <=200 chars]}. Include only files and ranges you successfully read. "
+            "Do not include absolute paths, line-number strings, extra fields, or symbol objects; ranges must use the exact "
+            "Read offset and limit. Cite only "
+            "successfully read ranges. If necessary context is unavailable within the budget, report that risk clearly.\n"
+        )
+    elif phase == "inspection":
         phase_instruction = (
             "Inspect the assigned implementation step only. This is a read-only checkpoint: do not edit or write any file. "
             "Read the caller-supplied acceptance contract, then inspect only the named step files and declared read-only references. "
@@ -887,43 +1102,69 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
             "\n\n" + source_hint_text + "\n" + acceptance_reading + "\n\n" + inspection_block +
             "\n\nAllowed edit paths:\n- " + "\n- ".join(absolute) + repair
         ),
-        "tools": (["Read", "Grep"] if phase == "inspection" else
+        "tools": (["Read", "Grep"] if phase in {"scout", "inspection"} else
                   ["Read", "Edit", "Write"] if inspection_context else ["Read", "Grep", "Edit", "Write"]),
         "model": dispatch.MODEL,
-        "maxTurns": CHILD_STEP_TURNS,
+        "maxTurns": SOURCE_SCOUT_MAX_TURNS if phase == "scout" else CHILD_STEP_TURNS,
     }
     return json.dumps({AUTONOMOUS_CHILD: definition})
 
 
-def coordinator_prompt(step: dict, workspace: Path, marker: str, repair: bool) -> str:
+def coordinator_prompt(step: dict, workspace: Path, marker: str, repair: bool, *,
+                       phase: str = "implementation") -> str:
     allowed = "\n".join(f"- {(workspace / path).resolve()}" for path in step["files"])
     references = "\n".join(f"- {(workspace / path).resolve()}"
                             for path in step.get("reference_paths", [])) or "(none)"
-    action = "repair" if repair else "complete"
+    if phase in {"scout", "inspection"}:
+        action = "read-only source inspection"
+        phase_guard = (
+            "The child must only inspect assigned files and declared references, then return the compact JSON "
+            "source-map handoff required by its role. Do not ask it to implement the task, edit files, or claim completion. "
+        )
+    else:
+        action = "repair" if repair else "complete"
+        phase_guard = ""
     return (
-        f"Delegate exactly one foreground {action} task to {AUTONOMOUS_CHILD}. "
+        f"Delegate exactly one foreground {action} task to {AUTONOMOUS_CHILD}. " + phase_guard +
         "Do not inspect or edit files yourself, do not launch other agents, and wait for the "
         "child's terminal result. Return the exact result, including its marker only if the "
         f"child returned it.\n\nStep: {step['id']} — {step['title']}\n"
         f"Task:\n{step['task']}\n\nAllowed edit files:\n{allowed}\n\n"
-        f"Read-only references:\n{references}\n\n"
-        "The worker may read declared references and search within the workspace, but may edit only the allowed edit files.\n\n"
+        f"Read-only references:\n{references}\n\n" +
+        ("The scout may read and search only the exact assigned files and declared references; it may not edit.\n\n"
+         if phase == "scout" else
+         "The worker may read declared references and search within the workspace, but may edit only the allowed edit files.\n\n") +
         f"Marker: {marker}"
     )
 
 
 def worker_tool_settings(workspace: Path, step: dict, read_only_paths: list[str] | None,
                          phase: str, transcript_path: Path,
-                         checkpoint_validators: list[list[str]] | None = None) -> Path:
+                         checkpoint_validators: list[list[str]] | None = None,
+                         inspection_context: dict | None = None) -> Path:
     """Create child scope guards and optional post-edit diagnostics."""
     allowed_reads = sorted(set([*(step.get("files") or []), *(step.get("reference_paths") or []),
-                                *(read_only_paths or [])]))
+                                *([] if phase == "scout" else (read_only_paths or []))]))
     allowed_writes = list(step.get("files") or []) if phase == "implementation" else []
     scope_path = transcript_path.with_suffix(".scope.json")
     settings_path = transcript_path.with_suffix(".settings.json")
+    scout_call_counter_dir = transcript_path.with_suffix(".scout-calls")
+    if phase == "scout":
+        scout_call_counter_dir.mkdir(parents=True, exist_ok=True)
+    relative_ranges = {} if phase == "scout" else verified_read_ranges(workspace, step, phase, inspection_context)
+    read_ranges = {str((workspace / path).resolve()): ranges
+                   for path, ranges in relative_ranges.items()}
     atomic_json(scope_path, {"root": str(workspace.resolve()),
                              "read_allowed": allowed_reads,
-                             "write_allowed": allowed_writes})
+                             "write_allowed": allowed_writes,
+                             "scout_mode": phase == "scout",
+                             "scout_call_counter_dir": str(scout_call_counter_dir),
+                             "scout_tool_call_limit": SOURCE_SCOUT_LIMITS["inspections"],
+                             "scout_tool_limits": {"Read": SOURCE_SCOUT_LIMITS["reads"],
+                                                   "Grep": SOURCE_SCOUT_LIMITS["searches"],
+                                                   "Glob": SOURCE_SCOUT_LIMITS["searches"]},
+                             "range_restricted": sorted(read_ranges),
+                             "read_ranges": read_ranges})
     hook_script = Path(__file__).with_name("tool_scope_guard.py").resolve()
     hooks = {"PreToolUse": [{
         "matcher": "Read|Grep|Edit|Write",
@@ -959,25 +1200,25 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
               read_only_paths: list[str] | None = None,
               phase: str = "implementation", inspection_context: dict | None = None,
               inspection_limits: dict | None = None,
-              checkpoint_validators: list[list[str]] | None = None) -> dict:
+              checkpoint_validators: list[list[str]] | None = None,
+              allow_noop_handoff: bool = False) -> dict:
     timeout = max(1, min(int(timeout), CHILD_STEP_TIMEOUT))
     marker = f"{MARKER_PREFIX}{uuid.uuid4().hex[:12]}"
     spec = step_agent_spec(step, request, requirements, workspace, marker, previous, repair_feedback,
                            read_only_paths, phase=phase, inspection_context=inspection_context,
                            inspection_limits=inspection_limits,
                            early_template_checkpoint=bool(checkpoint_validators))
-    if phase not in {"inspection", "implementation"}:
-        raise ValueError("phase must be inspection or implementation")
-    child_tools = ("Read,Grep" if phase == "inspection" else
+    if phase not in {"scout", "inspection", "implementation"}:
+        raise ValueError("phase must be scout, inspection, or implementation")
+    child_tools = ("Read,Grep" if phase in {"scout", "inspection"} else
                    "Read,Edit,Write" if inspection_context else "Read,Grep,Edit,Write")
     settings_path = worker_tool_settings(workspace, step, read_only_paths, phase, transcript_path,
-                                         checkpoint_validators=checkpoint_validators)
+                                         checkpoint_validators=checkpoint_validators,
+                                         inspection_context=inspection_context)
     command = dispatch.claude_command(dispatch_mode=dispatch.CHILD_MODE, agents=spec,
                                      max_turns=CHILD_STEP_TURNS,
                                      child_tools=child_tools, settings=str(settings_path))
-    prompt = coordinator_prompt(step, workspace, marker, bool(repair_feedback))
-    if phase == "inspection":
-        prompt = prompt.replace("complete task", "inspect the assigned task")
+    prompt = coordinator_prompt(step, workspace, marker, bool(repair_feedback), phase=phase)
     start_utc = datetime.now(timezone.utc).isoformat()
     start = time.perf_counter()
     checkpoint_receipt_path = (
@@ -1032,7 +1273,7 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
                                  and block.get("tool_use_id") == child_id), None)
             if child_result:
                 break
-    child_text = str(child_result.get("content", "")) if child_result else ""
+    child_text = tool_result_text(child_result)
     requested_paths = [str((workspace / path).resolve()) for path in step["files"]]
     changed_targets = []
     for event in events:
@@ -1066,30 +1307,75 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
         telemetry = {"status": "available", "error": None}
     except Exception as exc:
         telemetry = {"status": "unavailable", "error": type(exc).__name__}
+    scout_allowed_paths = [*(step.get("files") or []), *(step.get("reference_paths") or [])]
     read_audit = audit_worker_reads(
-        workspace, events, allowed_paths=[*(step.get("files") or []), *(step.get("reference_paths") or []),
-                                          *(read_only_paths or [])],
+        workspace, events,
+        allowed_paths=(scout_allowed_paths if phase == "scout" else
+                       [*scout_allowed_paths, *(read_only_paths or [])]),
+        allowed_ranges=({} if phase == "scout" else
+                        verified_read_ranges(workspace, step, phase, inspection_context)),
         require_ranged_reads=True,
-        limits=inspection_limits or (INSPECTION_PHASE_LIMITS if phase == "inspection"
+        limits=inspection_limits or (SOURCE_SCOUT_LIMITS if phase == "scout" else
+                                     INSPECTION_PHASE_LIMITS if phase == "inspection"
                                      else IMPLEMENTATION_INITIAL_LIMITS))
+    scout_tool_calls = sum(read_audit["counts_by_tool"].get(name, 0) for name in ("Read", "Grep", "Glob"))
+    scout_tool_result_chars = 0
+    if phase == "scout":
+        tool_ids = {block.get("id") for event in events if event.get("type") == "assistant"
+                    for block in message_blocks(event)
+                    if block.get("type") == "tool_use" and block.get("name") in {"Read", "Grep", "Glob"}}
+        for event in events:
+            if event.get("type") != "user":
+                continue
+            for block in message_blocks(event):
+                if block.get("type") == "tool_result" and block.get("tool_use_id") in tool_ids:
+                    scout_tool_result_chars += len(json.dumps(block.get("content", ""), ensure_ascii=False))
+        scout_tool_result_chars += len(child_text)
+        denied_scout_calls = sum(1 for item in read_audit["reads"] if item.get("denied_before_execution"))
+        read_audit["denied_attempt_count"] = denied_scout_calls
+        if scout_tool_calls > SOURCE_SCOUT_LIMITS["inspections"]:
+            read_audit["violations"].append({"reason": "source_scout_tool_call_budget_exceeded",
+                                             "count": scout_tool_calls,
+                                             "limit": SOURCE_SCOUT_LIMITS["inspections"]})
+        if scout_tool_result_chars > SOURCE_SCOUT_OUTPUT_CHAR_LIMIT:
+            read_audit["violations"].append({"reason": "source_scout_returned_text_budget_exceeded",
+                                             "characters": scout_tool_result_chars,
+                                             "limit": SOURCE_SCOUT_OUTPUT_CHAR_LIMIT})
+        read_audit["within_budget"] = not read_audit["violations"]
     inspection_report = None
     inspection_error = None
-    if phase == "inspection" and marker in child_text:
+    if phase in {"scout", "inspection"} and marker in child_text:
         try:
             inspection_report = validate_inspection_handoff(
                 child_text, workspace,
-                [*(step.get("files") or []), *(step.get("reference_paths") or []), *(read_only_paths or [])],
-                read_audit)
+                (scout_allowed_paths if phase == "scout" else
+                 [*scout_allowed_paths, *(read_only_paths or [])]),
+                read_audit,
+                required_source_paths=large_source_targets(workspace, step.get("files", [])),
+                caller_source_ranges=(step.get("source_ranges", []) if phase == "inspection" else None))
         except (ValueError, json.JSONDecodeError) as exc:
             inspection_error = str(exc)
-    succeeded = (code == 0 and final.get("subtype") == "success" and not final.get("is_error")
+    parent_success = (code == 0 and final.get("subtype") == "success" and not final.get("is_error"))
+    # The read-only child's handoff is independently usable if the coordinator
+    # times out after receiving it. Never apply this recovery to implementation:
+    # all child, scope, marker, report, workspace, and audit checks still apply.
+    parent_handoff_ok = parent_success or (
+        phase == "scout" and child_id is not None and bool(child_result)
+        and not child_result.get("is_error") and marker in child_text
+        and len(agent_calls) == 1 and coordinator_scope_clean
+        and not changed_targets and inspection_report is not None
+        and read_audit["within_budget"]
+    )
+    succeeded = (parent_handoff_ok
                  and child_id is not None and bool(child_result) and not child_result.get("is_error")
                  and marker in child_text and len(agent_calls) == 1
                  and coordinator_scope_clean
                  and read_audit["within_budget"]
                  and set(changed_targets).issubset(set(requested_paths))
-                 and ((phase == "inspection" and not changed_targets and inspection_report is not None)
-                      or (phase == "implementation" and bool(changed_targets))))
+                 and ((phase in {"scout", "inspection"} and not changed_targets and inspection_report is not None)
+                      or (phase == "implementation" and (bool(changed_targets) or allow_noop_handoff))))
+    final_success = (code == 0 and final.get("subtype") == "success" and not final.get("is_error"))
+    child_result_is_error = child_result is None or bool(child_result.get("is_error"))
     event_counts = {}
     for event in events:
         event_type = str(event.get("type", "unknown"))
@@ -1104,15 +1390,20 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
             "child_tool_calls": child_tools,
             "coordinator_tool_calls": coordinator_tool_calls,
             "coordinator_scope_clean": coordinator_scope_clean,
+            "agent_call_count": len(agent_calls),
+            "final_success": final_success,
+            "child_result_is_error": child_result_is_error,
             "child_result": dispatch.redact_text(child_text, (key,))[:1500],
             "final": dispatch.redact_text(str(final.get("result", "")), (key,))[:1500],
             "child_handoff": bool(child_result) and marker in child_text,
             "read_audit": read_audit,
             "inspection_report": inspection_report,
             "inspection_error": inspection_error,
+            "scout_tool_calls": scout_tool_calls if phase == "scout" else None,
+            "scout_tool_result_chars": scout_tool_result_chars if phase == "scout" else None,
             "early_template_checkpoint": checkpoint_receipt,
             "changed_tool_paths": sorted(set(changed_targets)), "allowed_paths": requested_paths,
-            "write_scope_clean": bool(changed_targets) and set(changed_targets).issubset(set(requested_paths)),
+            "write_scope_clean": set(changed_targets).issubset(set(requested_paths)),
             "telemetry": telemetry,
             "qwen_route_calls": qwen_calls, "sift_requests": sift,
             "success": succeeded, "stderr_tail": dispatch.redact_text(stderr[-1200:], (key,))}
@@ -1285,22 +1576,57 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                                        "reads": [], "violations": [], "within_budget": True},
                     }
                 else:
-                    inspection_receipt = run_child(
-                        workspace, step, request, requirements, key, previous,
-                        timeout=worker_timeout,
-                        transcript_path=run_dir / f"{step['id']}-inspection.jsonl",
-                        read_only_paths=read_only_paths or [], phase="inspection",
-                    )
+                    scout_receipt = None
+                    if needs_source_scout(workspace, step):
+                        remaining = total_timeout - (time.monotonic() - started)
+                        scout_timeout = max(1, int(min(SOURCE_SCOUT_TIMEOUT, remaining)))
+                        scout_before = file_hashes(workspace)
+                        scout_receipt = run_child(
+                            workspace, step, request, requirements, key, previous,
+                            timeout=scout_timeout,
+                            transcript_path=run_dir / f"{step['id']}-source-scout.jsonl",
+                            read_only_paths=[], phase="scout",
+                            inspection_limits=SOURCE_SCOUT_LIMITS,
+                        )
+                        scout_after = file_hashes(workspace)
+                        scout_receipt["workspace_unchanged"] = scout_before == scout_after
+                        scout_checkpoint = run_dir / f"{step['id']}-source-scout-checkpoint.json"
+                        atomic_json(scout_checkpoint, {
+                            "step_id": step["id"], "source": "qwen_bounded_source_scout",
+                            "worker": scout_receipt,
+                            "source_map": scout_receipt.get("inspection_report"),
+                            "read_audit": scout_receipt.get("read_audit"),
+                            "workspace_unchanged": scout_before == scout_after,
+                            "before_hashes": scout_before, "after_hashes": scout_after,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                    if scout_receipt is not None:
+                        inspection_receipt = scout_receipt
+                        inspection_receipt["source"] = "qwen_bounded_source_scout"
+                        if not scout_receipt.get("workspace_unchanged"):
+                            inspection_receipt["success"] = False
+                            inspection_receipt["inspection_error"] = "source scout changed workspace files"
+                        if not scout_receipt.get("read_audit", {}).get("within_budget"):
+                            inspection_receipt["success"] = False
+                            inspection_receipt["inspection_error"] = scout_receipt.get("read_audit", {}).get("violations")
+                    else:
+                        inspection_receipt = run_child(
+                            workspace, step, request, requirements, key, previous,
+                            timeout=worker_timeout,
+                            transcript_path=run_dir / f"{step['id']}-inspection.jsonl",
+                            read_only_paths=read_only_paths or [], phase="inspection",
+                        )
                 after_inspection = file_hashes(workspace)
                 inspection_scope_clean = after_inspection == before_step
                 inspection_audit = combine_read_audits(
                     inspection_receipt.get("read_audit", {}), limits=INSPECTION_PHASE_LIMITS)
                 inspection_checkpoint = run_dir / f"{step['id']}-inspection-checkpoint.json"
+                inspected_source_map = preverified if preverified is not None else inspection_receipt.get("inspection_report")
                 atomic_json(inspection_checkpoint, {
                     "step_id": step["id"],
                     "source": inspection_receipt.get("source", "qwen_inspection_worker"),
                     "worker": None if preverified is not None else inspection_receipt,
-                    "source_map": preverified,
+                    "source_map": inspected_source_map,
                     "read_audit": inspection_audit, "workspace_unchanged": inspection_scope_clean,
                     "before_hashes": before_step, "after_hashes": after_inspection,
                     "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1310,7 +1636,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                     "status": "passed" if inspection_receipt["success"] and inspection_scope_clean
                     and inspection_audit["within_budget"] else "failed",
                     "worker": None if preverified is not None else inspection_receipt,
-                    "source_map": preverified, "read_audit": inspection_audit,
+                    "source_map": inspected_source_map, "read_audit": inspection_audit,
                     "workspace_unchanged": inspection_scope_clean,
                     "checkpoint_path": str(inspection_checkpoint),
                 }
@@ -1448,6 +1774,13 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                     diagnostic_text = "\n".join(
                         f"$ {' '.join(result['argv'])}: exit {result['exit']}\n{result['stdout']}\n{result['stderr']}"
                         for result in diagnostic_validation if result["exit"] != 0)
+                    try:
+                        initial_tool_paths = {
+                            Path(path).resolve().relative_to(workspace.resolve()).as_posix()
+                            for path in receipt.get("changed_tool_paths", [])
+                        }
+                    except (OSError, ValueError, TypeError):
+                        initial_tool_paths = set()
                     recovery_reason = ("the previous attempt did not return a valid completion marker or scoped edit"
                                        if not receipt["success"] or not changed
                                        else "caller-mapped step validators failed")
@@ -1468,6 +1801,19 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                         f"{diagnostic_text or '[step validators passed; worker handoff or read audit still failed]'}\n"
                         f"Read audit: {json.dumps(receipt.get('read_audit', {}), ensure_ascii=False)[:1500]}"
                     )
+                    allow_noop_handoff = (
+                        bool(changed) and checks_passed and path_ok
+                        and initial_tool_paths == set(changed)
+                        and receipt.get("final_success") is True
+                        and receipt.get("child_result_is_error") is False
+                        and receipt.get("agent_call_count") == 1
+                        and receipt.get("coordinator_tool_calls") == ["Agent"]
+                        and receipt.get("exit") == 0 and receipt.get("stop_reason") is None
+                        and bool(receipt.get("child_result")) and not receipt.get("child_handoff")
+                        and receipt.get("coordinator_scope_clean") is True
+                        and receipt.get("write_scope_clean") is True
+                        and receipt.get("read_audit", {}).get("within_budget") is True
+                    )
                     repair = run_child(workspace, step, request, requirements, key, previous,
                                        timeout=max(1, int(min(child_budget, remaining))),
                                        transcript_path=run_dir / f"{step['id']}-attempt-2.jsonl",
@@ -1480,7 +1826,8 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                                        checkpoint_validators=(checkpoint_validators
                                                               if any(path.lower().endswith(".ejs")
                                                                      for path in step["files"])
-                                                              else None))
+                                                              else None),
+                                       allow_noop_handoff=allow_noop_handoff)
                     implementation_audit = combine_read_audits(
                         implementation_audit, repair.get("read_audit", {}),
                         limits=IMPLEMENTATION_PHASE_LIMITS)
@@ -1490,6 +1837,26 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                     repair_after = file_hashes(workspace)
                     repair_changed = changed_paths(after_step, repair_after)
                     repair_scope = set(repair_changed).issubset(allowed)
+                    if not repair_changed:
+                        repair_noop_valid = (
+                            allow_noop_handoff
+                            and repair.get("success") is True
+                            and repair.get("final_success") is True
+                            and repair.get("child_result_is_error") is False
+                            and repair.get("child_handoff") is True
+                            and repair.get("agent_call_count") == 1
+                            and repair.get("coordinator_tool_calls") == ["Agent"]
+                            and repair.get("coordinator_scope_clean") is True
+                            and repair.get("write_scope_clean") is True
+                            and repair.get("read_audit", {}).get("within_budget") is True
+                            and not repair.get("changed_tool_paths")
+                            and all(name in {"Read", "Grep", "Glob"}
+                                    for name in repair.get("child_tool_calls", []))
+                            and repair_after == after_step
+                        )
+                        if not repair_noop_valid:
+                            repair["success"] = False
+                            repair["noop_handoff_rejected"] = True
                     repair_validation = run_validators(
                         workspace, step_validators, timeout=min(30, validator_timeout), deadline=deadline)
                     repair_checkpoint_path = save_step_checkpoint(
