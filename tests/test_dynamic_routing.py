@@ -224,6 +224,35 @@ def test_persisted_advisor_wins_over_startup_environment(tmp_path, monkeypatch):
     assert restarted.snapshot().advisor_model == "codex-sol-advisor"
 
 
+def test_removed_active_reasoning_effort_migrates_without_changing_route_policy(tmp_path):
+    control = make_control_plane(tmp_path)
+    saved = {
+        "active_model": "minimax", "mode": "force", "policy_version": 12,
+        "advisor_model": "codex-gpt-6.1-sol-advisor", "reasoning_effort": "high",
+        "fast_mode": False, "advisor_reasoning_effort": "low",
+        "advisor_trigger": "adaptive", "advisor_sensitivity": "frequent",
+        "advisor_classifier": "ranked",
+    }
+    control.state_path.write_text(json.dumps(saved), encoding="utf-8")
+
+    migrated = RoutingControlPlane(control.config_path, control.state_path)
+
+    assert migrated.snapshot().active_model == "minimax"
+    assert migrated.snapshot().mode == "force"
+    assert migrated.snapshot().policy_version == 13
+    assert migrated.snapshot().reasoning_effort is None
+    assert migrated.snapshot().advisor_model == saved["advisor_model"]
+    assert migrated.snapshot().advisor_reasoning_effort == "low"
+    assert migrated.snapshot().advisor_sensitivity == "frequent"
+    persisted = json.loads(control.state_path.read_text(encoding="utf-8"))
+    assert persisted["reasoning_effort"] is None
+    assert persisted["policy_version"] == 13
+
+    restarted = RoutingControlPlane(control.config_path, control.state_path)
+    assert restarted.snapshot() == migrated.snapshot()
+    assert json.loads(control.state_path.read_text(encoding="utf-8")) == persisted
+
+
 def test_default_desk_uses_openrouter_and_sol_low_without_locking_selection(tmp_path, monkeypatch):
     monkeypatch.delenv("ACTIVE_MODEL", raising=False)
     monkeypatch.delenv("ADVISOR_MODEL", raising=False)

@@ -380,7 +380,9 @@ def provider_server(native, reasoning_field, ollama=False):
 @pytest.mark.parametrize("model,native,field", [
     ("anthropic/claude-sonnet-4-6", True, None),
     ("minimax/MiniMax-M3", True, None),
+    ("minimax/MiniMax-M3.1-Flash", True, None),
     ("openrouter/minimax/minimax-m3", False, "reasoning"),
+    ("openrouter/minimax/minimax-m3.1-flash", False, "reasoning"),
     ("openai/mimo-v2.6-pro", False, "reasoning_content"),
     ("openai/local-model", False, "reasoning_content"),
     ("ollama_chat/qwen3", False, "thinking"),

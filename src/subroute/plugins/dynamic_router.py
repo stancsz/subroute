@@ -178,13 +178,22 @@ class RoutingControlPlane:
             advisor_classifier="ranked",
         )
         replacement = RETIRED_MODEL_ALIASES.get(state.active_model)
+        active_choice = next(
+            (choice for choice in self.choices if choice.model_id == state.active_model), None
+        )
+        unsupported_effort = (
+            state.reasoning_effort is not None
+            and (active_choice is None or state.reasoning_effort not in active_choice.reasoning_efforts)
+        )
         migrated = (
             raw.get("advisor_trigger") != "adaptive"
             or raw.get("advisor_classifier") != "ranked"
             or advisor_model != saved_advisor_model
+            or unsupported_effort
         )
         if replacement or migrated:
             state = replace(state, active_model=replacement or state.active_model,
+                            reasoning_effort=None if unsupported_effort else state.reasoning_effort,
                             policy_version=state.policy_version + 1)
             self._validate(state)
             self._write_atomic(state)

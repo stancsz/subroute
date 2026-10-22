@@ -262,6 +262,34 @@ def test_subscription_channels_stay_behind_litellm():
     )
 
 
+def test_minimax_m31_flash_routes_are_selectable_and_fail_over_once_per_provider(tmp_path, monkeypatch):
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    from subroute.plugins.dynamic_router import RoutingControlPlane
+
+    settings = config()
+    by_name = {item["model_name"]: item for item in settings["model_list"]}
+    control = RoutingControlPlane(CONFIG_PATH, tmp_path / "routing-state.json")
+    choices = {choice.model_id: choice for choice in control.choices}
+
+    assert {"minimax-flash", "openrouter-flash"} <= choices.keys()
+    assert choices["minimax-flash"].source_id == "minimax"
+    assert choices["openrouter-flash"].source_id == "openrouter"
+    assert by_name["minimax-flash"]["litellm_params"]["model"] == "minimax/MiniMax-M3.1-Flash"
+    assert by_name["openrouter-flash"]["litellm_params"]["model"] == (
+        "openrouter/minimax/minimax-m3.1-flash"
+    )
+
+    fallbacks = {
+        model: targets
+        for group in settings["router_settings"]["fallbacks"]
+        for model, targets in group.items()
+    }
+    for model in ("minimax-flash", "openrouter-flash"):
+        chain = [model, *fallbacks[model]]
+        providers = [by_name[item]["model_info"]["source_id"] for item in chain]
+        assert len(providers) == len(set(providers)), (model, providers)
+
+
 def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retries():
     settings = config()
     routing = settings["router_settings"]
@@ -272,6 +300,8 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
         {"auto-gemini-subscription": ["auto-codex-luna"]},
         {"minimax": ["openrouter", "mimo-v2.6-pro", "codex-luna"]},
         {"openrouter": ["minimax", "mimo-v2.6-pro", "codex-luna"]},
+        {"minimax-flash": ["openrouter-flash", "mimo-v2.6-pro", "codex-luna"]},
+        {"openrouter-flash": ["minimax-flash", "mimo-v2.6-pro", "codex-luna"]},
         {"mimo-v2.6-pro": ["minimax", "openrouter", "codex-luna"]},
         {"mimo-v2.6-flash": ["minimax", "openrouter", "codex-luna"]},
         {"gemini-3.8-flash-advisor": ["codex-gpt-6.1-sol-advisor"]},
