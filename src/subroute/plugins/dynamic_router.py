@@ -178,8 +178,9 @@ class RoutingControlPlane:
             advisor_classifier="ranked",
         )
         replacement = RETIRED_MODEL_ALIASES.get(state.active_model)
+        routed_model = replacement or state.active_model
         active_choice = next(
-            (choice for choice in self.choices if choice.model_id == state.active_model), None
+            (choice for choice in self.choices if choice.model_id == routed_model), None
         )
         unsupported_effort = (
             state.reasoning_effort is not None
