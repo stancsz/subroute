@@ -124,7 +124,7 @@ services:
     image: ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56
     restart: unless-stopped
     ports:
-      - "0.0.0.0:4040:4040"
+      - "127.0.0.1:4040:4040"
     volumes:
       - ./config:/app/config:ro
       - ./src:/app/src:ro
