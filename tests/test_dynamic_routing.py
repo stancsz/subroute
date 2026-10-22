@@ -156,16 +156,15 @@ def test_unknown_model_is_rejected_before_force_routing(tmp_path: Path):
     assert {k:v for k,v in data["metadata"].items() if not k.startswith("_gateway_analytics_")} == {}
 
 
-@pytest.mark.parametrize("prompt", ["hello", "Draw a cat"])
-def test_removed_current_alias_is_rejected_before_dispatch(tmp_path: Path, prompt: str):
-    from fastapi import HTTPException
-
+def test_default_resolves_to_saved_target_even_when_alias_mode_is_off(tmp_path: Path):
     control = make_control_plane(tmp_path)
-    with pytest.raises(HTTPException) as error:
-        run(DynamicRoutingPlugin(control), {
-            "model": "current", "messages": [{"role": "user", "content": prompt}],
-        })
-    assert error.value.status_code == 404
+    control.update("desktop", "off")
+    data = {"model": "default", "messages": [{"role": "user", "content": "hello"}]}
+
+    assert run(DynamicRoutingPlugin(control), data) is data
+    assert data["model"] == "desktop"
+    assert data["metadata"]["routing"]["resolved_model"] == "desktop"
+    assert data["metadata"]["gateway_policy"]["active_model"] == "desktop"
 
 
 @pytest.mark.parametrize(
@@ -253,13 +252,13 @@ def test_removed_active_reasoning_effort_migrates_without_changing_route_policy(
     assert json.loads(control.state_path.read_text(encoding="utf-8")) == persisted
 
 
-def test_default_desk_uses_openrouter_and_sol_low_without_locking_selection(tmp_path, monkeypatch):
+def test_default_desk_uses_luna_target_and_sol_low_without_locking_selection(tmp_path, monkeypatch):
     monkeypatch.delenv("ACTIVE_MODEL", raising=False)
     monkeypatch.delenv("ADVISOR_MODEL", raising=False)
     config_path = Path(__file__).parents[1] / "config/litellm.yaml"
     state_path = tmp_path / "state.json"
     control = RoutingControlPlane(config_path, state_path)
-    assert control.snapshot().active_model == "openrouter"
+    assert control.snapshot().active_model == "codex-luna"
     assert control.snapshot().advisor_model == "codex-gpt-6.1-sol-advisor"
     assert control.snapshot().advisor_reasoning_effort == "low"
     for model in (
@@ -377,7 +376,7 @@ def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
     }
     assert not list(tmp_path.glob("*.tmp"))
     with pytest.raises(ValueError, match="not selectable"):
-        control.update("current", "alias")
+        control.update("default", "alias")
     assert control.snapshot() == state
 
 
@@ -477,7 +476,7 @@ def test_control_api_rejects_cross_origin_non_json_and_unknown_models(
         headers={"content-type": "text/plain"},
     ).status_code == 415
     response = client.post(
-        "/api/active-model", json={"model": "current", "mode": "alias"}
+        "/api/active-model", json={"model": "default", "mode": "alias"}
     )
     assert response.status_code == 422
     assert "not selectable" in response.json()["detail"]

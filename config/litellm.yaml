@@ -246,6 +246,28 @@ model_list:
       allowed_openai_params: [reasoning_effort]
       store: false
 
+  # Stable client alias for the persisted routing-desk target. The routing
+  # hook replaces this placeholder with the selected target before dispatch.
+  - model_name: default
+    model_info:
+      <<: *context_policy
+      selectable: false
+      display_name: Default target
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max]
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: codex-subscription/gpt-6-luna
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
+      store: false
+
   - model_name: codex-gpt-6.1-sol-advisor
     model_info:
       <<: &advisor_context_policy

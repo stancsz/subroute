@@ -29,6 +29,7 @@ AdvisorTrigger = Literal["adaptive"]
 AdvisorSensitivity = Literal["conservative", "balanced", "frequent"]
 AdvisorClassifier = Literal["ranked"]
 VIRTUAL_ALIASES = frozenset({"default", "auto"})
+DEFAULT_TARGET_MODEL = "codex-luna"
 RETIRED_MODEL_ALIASES = {
     "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
     "codex-terra": "codex-subscription", "codex-reserve": "codex-luna",
@@ -145,7 +146,12 @@ class RoutingControlPlane:
 
     def _load_or_create_state(self) -> RoutingState:
         if not self.state_path.exists():
-            initial_model = os.getenv("ACTIVE_MODEL", "openrouter" if "openrouter" in self.allowed_models else self.choices[0].model_id)
+            fallback_model = (
+                DEFAULT_TARGET_MODEL
+                if DEFAULT_TARGET_MODEL in self.allowed_models
+                else "openrouter" if "openrouter" in self.allowed_models else self.choices[0].model_id
+            )
+            initial_model = os.getenv("ACTIVE_MODEL", fallback_model)
             initial_model = RETIRED_MODEL_ALIASES.get(initial_model, initial_model)
             advisor_model = self.locked_advisor_model or os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
             state = RoutingState(
@@ -296,6 +302,9 @@ class RoutingControlPlane:
 
     def resolve(self, requested_model: str | None) -> tuple[str | None, RoutingState]:
         state = self.snapshot()
+        # `default` is an explicit request for the saved target, regardless of alias policy.
+        if requested_model == "default":
+            return state.active_model, state
         # `auto` is a LiteLLM model group with an explicit provider fallback
         # chain, not another spelling of the saved control-desk selection.
         if requested_model == "auto":
@@ -465,6 +474,7 @@ class DynamicRoutingPlugin(CustomLogger):
         if not isinstance(requested_model, str) or (
             requested_model not in self.control_plane.allowed_models
             and requested_model not in VIRTUAL_ALIASES
+            and requested_model != "default"
         ):
             raise HTTPException(status_code=404, detail="unknown model")
 
@@ -474,10 +484,10 @@ class DynamicRoutingPlugin(CustomLogger):
         metadata["gateway_policy"] = asdict(state)
         # Capture the override once. Deployment hooks also run for nested
         # LiteLLM translations, so they must never read mutable policy again.
-        routed = requested_model != "auto" and (
+        routed = requested_model == "default" or (requested_model != "auto" and (
             state.mode == "force"
             or (state.mode == "alias" and requested_model in VIRTUAL_ALIASES)
-        )
+        ))
         metadata["gateway_reasoning_effort"] = state.reasoning_effort if routed else None
         metadata["gateway_target_fast_mode"] = bool(routed and state.fast_mode)
         if resolved_model == "qwen3.8-27b":

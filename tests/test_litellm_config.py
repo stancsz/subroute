@@ -46,6 +46,15 @@ def test_local_qwen_responses_uses_litellm_chat_bridge():
     )
 
 
+def test_default_target_client_alias_is_catalogued_and_uses_luna_when_unresolved():
+    models = config()["model_list"]
+    default = next(item for item in models if item["model_name"] == "default")
+    luna = next(item for item in models if item["model_name"] == "codex-luna")
+    assert default["model_info"]["selectable"] is False
+    assert default["litellm_params"]["model"] == luna["litellm_params"]["model"]
+    assert default["litellm_params"]["api_base"] == luna["litellm_params"]["api_base"]
+
+
 def test_compose_isolates_mutable_state_and_pins_gateway_image():
     services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
     prod, staging = services["gateway"], services["gateway-staging"]
@@ -155,7 +164,8 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     by_name = {deployment["model_name"]: deployment for deployment in deployments}
 
     assert "openai" not in by_name
-    assert "current" not in by_name
+    assert by_name["default"]["model_info"]["selectable"] is False
+    assert by_name["default"]["litellm_params"]["model"] == by_name["codex-luna"]["litellm_params"]["model"]
     assert by_name["auto"]["model_info"]["selectable"] is False
     assert by_name["auto"]["model_info"]["disable_background_health_check"] is True
     assert "gemini-api" not in by_name
