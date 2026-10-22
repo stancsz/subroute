@@ -16,10 +16,10 @@ class PolicySnapshotTests(unittest.TestCase):
 
     def test_routing_and_advisor_from_one_revision(self):
         store = PolicyStore(self.root / "staging.json", self.default)
-        self.assertEqual(store.resolve("current").model, "qwen3.8-27b")
+        self.assertEqual(store.resolve("default").model, "qwen3.8-27b")
         changed = store.update(active_model="minimax", mode="force", advisor_model="advisor")
         self.assertEqual(changed.revision, 1)
-        for requested, expected in (("current", "minimax"), ("other", "minimax"), ("auto", "auto")):
+        for requested, expected in (("default", "minimax"), ("other", "minimax"), ("auto", "auto")):
             decision = store.resolve(requested)
             self.assertEqual((decision.model, decision.advisor_model, decision.revision),
                              (expected, "advisor", 1))
@@ -82,7 +82,7 @@ class PolicySnapshotTests(unittest.TestCase):
             try:
                 start.wait()
                 for _ in range(500):
-                    observed.append(store.resolve("current"))
+                    observed.append(store.resolve("default"))
             except BaseException as error:
                 errors.append(error)
         readers = [threading.Thread(target=read_many) for _ in range(3)]

@@ -30,7 +30,7 @@ class PolicyStore:
     revision, even if an update overlaps it. Updates must be validated before
     publication and written atomically. Production and staging paths must be
     independent. Existing valid state survives a failed update or corrupt
-    replacement file. The virtual aliases are `current` and `default`; `auto`
+    replacement file. The virtual aliases are `default`; `auto`
     is always passed through. Off preserves requests, alias mode only maps
     virtual aliases, and force mode maps every explicit model.
     """

@@ -275,7 +275,7 @@ def test_proxy_dispatch_reloads_codex_auth_file_before_each_request(tmp_path):
     verify_codex_auth_file_reload_through_proxy(tmp_path / "auth.json")
 
 
-def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path):
+def verify_default_model_uses_control_plane_policy_through_proxy(temp_dir: Path):
     import subroute.plugins.dynamic_router as dynamic_routing
     from subroute.plugins.dynamic_router import DynamicRoutingPlugin, RoutingControlPlane
 
@@ -341,8 +341,8 @@ def verify_current_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
     assert routed_metadata[0]["gateway_policy"]["policy_version"] == saved_state["policy_version"]
 
 
-def test_current_model_dispatch_uses_saved_control_plane_policy(tmp_path):
-    verify_current_model_uses_control_plane_policy_through_proxy(tmp_path)
+def test_default_model_dispatch_uses_saved_control_plane_policy(tmp_path):
+    verify_default_model_uses_control_plane_policy_through_proxy(tmp_path)
 
 
 def verify_incomplete_stream_through_proxy():
@@ -400,7 +400,7 @@ if __name__ == "__main__":
     verify_litellm_proxy_http_routes()
     with tempfile.TemporaryDirectory() as temp_dir:
         verify_codex_auth_file_reload_through_proxy(Path(temp_dir) / "auth.json")
-        verify_current_model_uses_control_plane_policy_through_proxy(Path(temp_dir))
+        verify_default_model_uses_control_plane_policy_through_proxy(Path(temp_dir))
     verify_incomplete_stream_through_proxy()
     print(json.dumps({
         "litellm": version("litellm"),
