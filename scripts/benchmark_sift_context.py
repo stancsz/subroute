@@ -2,6 +2,7 @@
 
 import json
 import time
+from copy import deepcopy
 
 import litellm
 import tiktoken
@@ -30,18 +31,38 @@ def main():
         "evidence=stable diagnostic context retained for review\n"
         for i in range(147500)
     )
+    cycles = [{"role": "user", "content": "Find the latest diagnostic CTX875."}]
+    for index in range(26):
+        call_id = f"old_{index}"
+        cycles.extend([
+            {"role": "assistant", "tool_calls": [{"id": call_id, "type": "function",
+                "function": {"name": "lookup", "arguments": json.dumps({"query": " old evidence" * 20000})}}]},
+            {"role": "tool", "tool_call_id": call_id, "content": "Previous result."},
+        ])
+    latest = {"id": "latest_call", "type": "function",
+              "function": {"name": "lookup", "arguments": '{"query":"latest"}'}}
+    cycles.extend([
+        {"role": "assistant", "tool_calls": [latest]},
+        {"role": "tool", "tool_call_id": "latest_call",
+         "content": "current diagnostic record\n" * 80000 + "diagnostic CTX875 is resolved\n"},
+    ])
     for label, messages, target in (
         ("4m_exact_fixture", exact, 32768),
         ("dense_checkpoint", [{"role": "user", "content": dense}], 1000000),
+        ("large_active_tool_cycles", cycles, 32768),
     ):
         raw = count(messages)
         assert raw <= RAW_INTAKE_LIMIT, raw
-        original_text = messages[0]["content"]
+        original = deepcopy(messages)
         started = time.perf_counter()
         result = compact_messages(messages, count, target=target, raw_limit=RAW_INTAKE_LIMIT)
         elapsed = time.perf_counter() - started
-        assert messages[0]["content"] == original_text, "Caller input was mutated"
+        assert messages == original, "Caller input was mutated"
         assert result.audit["forwarded_tokens"] <= target
+        if label == "large_active_tool_cycles":
+            assert result.messages[-2]["tool_calls"] == [latest]
+            assert result.messages[-1]["tool_call_id"] == "latest_call"
+            assert "diagnostic CTX875 is resolved" in result.messages[-1]["content"]
         print(json.dumps({"case": label, "target": target,
                           "elapsed_seconds": round(elapsed, 3), **result.audit}), flush=True)
 

@@ -10,6 +10,7 @@ import tempfile
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import httpx
 import litellm
 from litellm import Router
 from litellm.proxy import proxy_server
@@ -235,6 +236,49 @@ def verify_litellm_proxy_http_routes():
 
 def test_litellm_proxy_http_routes_serve_codex_protocols():
     verify_litellm_proxy_http_routes()
+
+
+def test_native_codex_responses_keeps_lite_input_and_reasoning_defaults():
+    import yaml
+
+    config = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/litellm.yaml").read_text())
+    deployment = next(item for item in config["model_list"] if item["model_name"] == "codex-luna")
+    captured = []
+
+    async def fake_send(self, request, **kwargs):
+        captured.append((json.loads(request.content), dict(request.headers)))
+        terminal = {
+            "id": "resp-native-fixture", "object": "response", "created_at": 1,
+            "model": "gpt-6-luna", "output": [], "status": "completed",
+            "usage": {"input_tokens": 1, "output_tokens": 0, "total_tokens": 1},
+        }
+        events = "data: " + json.dumps({"type": "response.completed", "response": terminal}) + "\n\n"
+        return httpx.Response(200, request=request, content=events.encode(),
+                              headers={"content-type": "text/event-stream"})
+
+    items = [{"type": "additional_tools", "role": "developer", "tools": []},
+             {"role": "user", "content": "Keep the native input intact."}]
+    with patch("subroute.plugins.codex_credentials.read_codex_credentials", return_value=("fixture-token", "fixture-account")):
+        with patch.object(httpx.AsyncClient, "send", fake_send):
+            with _configured_proxy(credential_callback=True, provider_model_list=[deployment]) as (client, upstream_models, *rest):
+                response = client.post("/v1/responses", json={
+                    "model": "codex-luna", "input": items, "reasoning": {"effort": "high"},
+                    "store": False, "stream": True, "service_tier": "fast",
+                })
+                buffered = client.post("/v1/responses", json={
+                    "model": "codex-luna", "input": "plain request", "stream": False, "store": False,
+                })
+    assert response.status_code == 200, response.text
+    assert "response.completed" in response.text
+    assert buffered.status_code == 200 and "fixture answer" in buffered.text
+    assert len(upstream_models) == 1
+    assert len(captured) == 1
+    body, headers = captured[0]
+    assert body["input"] == items
+    assert body["reasoning"] == {"effort": "high", "context": "all_turns"}
+    assert body["parallel_tool_calls"] is False
+    assert body["service_tier"] == "priority"
+    assert headers["x-openai-internal-codex-responses-lite"] == "true"
 
 
 def verify_codex_auth_file_reload_through_proxy(auth_file: Path):

@@ -657,15 +657,16 @@ def compact_messages(
         essential = messages[:instruction_end] + [messages[latest_user]] + messages[tail_start:]
         essential_count = _count(count_tokens, essential)
         if essential_count >= target - 256:
-            active_messages = messages[:instruction_end] + messages[latest_user:]
             recovered = _compact_active_tool_results(
-                active_messages, instruction_end + 1,
-                _render(active_messages[instruction_end]),
+                essential, instruction_end + 1,
+                _render(essential[instruction_end]),
                 target, count_tokens, protocol,
             )
             if recovered is None:
                 raise CompactionError("active task or latest tool cycle exceeds target", code="active_too_large")
-            messages = messages[:latest_user] + recovered[0][instruction_end:]
+            # Replace only the latest original tail. Older cycles remain at
+            # their original indexes for the historical-selection pass below.
+            messages[tail_start:] = recovered[0][instruction_end + 1:]
             active_tool_excerpts_selected = recovered[2]
             active_tool_results_compacted = recovered[3]
             active = messages[:instruction_end] + messages[latest_user:]

@@ -5,6 +5,7 @@ import pytest
 
 from subroute.plugins.codex_credentials import (
     CODEX_API_BASE,
+    CODEX_RESPONSES_LITE_HEADER,
     codex_credential_refresher,
     read_codex_credentials,
 )
@@ -141,3 +142,81 @@ def test_codex_responses_input_items_keep_content_and_tool_fields(monkeypatch):
     assert updated["input"] == items
     assert updated["store"] is False
     assert request["input"] is items
+
+
+def test_codex_additional_tools_enables_responses_lite_without_forwarding_client_headers(monkeypatch):
+    monkeypatch.setattr(
+        "subroute.plugins.codex_credentials.read_codex_credentials",
+        lambda: ("fixture-token", "fixture-account"),
+    )
+    items = [
+        {"type": "additional_tools", "role": "developer", "tools": [{"type": "web_search"}]},
+        {"type": "message", "role": "user", "content": "Search"},
+    ]
+    client_headers = {"User-Agent": "test", "x-openai-internal-unrelated": "do-not-forward"}
+    request = {
+        "api_base": CODEX_API_BASE,
+        "model": "codex-subscription/gpt-6-sol",
+        "service_tier": "fast",
+        "input": items,
+        "extra_headers": client_headers,
+    }
+
+    updated = asyncio.run(
+        codex_credential_refresher.async_pre_call_deployment_hook(request, "aresponses")
+    )
+
+    assert updated["extra_headers"] == {
+        **client_headers,
+        "ChatGPT-Account-ID": "fixture-account",
+        CODEX_RESPONSES_LITE_HEADER: "true",
+    }
+    assert updated["input"] == items
+    assert request["input"] is items
+    assert request["extra_headers"] == client_headers
+    assert updated["reasoning"] == {"context": "all_turns"}
+    assert updated["custom_llm_provider"] == "openai"
+    assert updated["model"] == "gpt-6-sol"
+    assert request["model"] == "codex-subscription/gpt-6-sol"
+    assert updated["service_tier"] == "priority"
+    assert request["service_tier"] == "fast"
+    assert updated["parallel_tool_calls"] is False
+    assert "reasoning" not in request
+    assert "parallel_tool_calls" not in request
+
+
+def test_codex_lite_defaults_preserve_explicit_reasoning_and_tool_policy(monkeypatch):
+    monkeypatch.setattr(
+        "subroute.plugins.codex_credentials.read_codex_credentials",
+        lambda: ("fixture-token", "fixture-account"),
+    )
+    reasoning = {"effort": "low", "context": "caller-choice"}
+    request = {"api_base": CODEX_API_BASE,
+               "input": [{"type": "additional_tools", "role": "developer", "tools": []}],
+               "reasoning": reasoning, "parallel_tool_calls": True}
+    updated = asyncio.run(codex_credential_refresher.async_pre_call_deployment_hook(request, "aresponses"))
+    assert updated["reasoning"] == reasoning
+    assert updated["parallel_tool_calls"] is True
+    assert request["reasoning"] is reasoning
+
+
+@pytest.mark.parametrize(
+    "call_type,input_value",
+    [
+        ("aresponses", [{"type": "message", "role": "user", "content": "x"}]),
+        ("acompletion", [{"type": "additional_tools", "tools": []}]),
+        ("aresponses", "plain prompt"),
+    ],
+)
+def test_codex_responses_lite_header_is_limited_to_additional_tools(monkeypatch, call_type, input_value):
+    monkeypatch.setattr(
+        "subroute.plugins.codex_credentials.read_codex_credentials",
+        lambda: ("fixture-token", "fixture-account"),
+    )
+    updated = asyncio.run(
+        codex_credential_refresher.async_pre_call_deployment_hook(
+            {"api_base": CODEX_API_BASE, "input": input_value}, call_type
+        )
+    )
+
+    assert CODEX_RESPONSES_LITE_HEADER not in updated["extra_headers"]

@@ -12,6 +12,7 @@ from subroute.handlers.codex_messages import normalize_messages
 
 
 CODEX_API_BASE = "https://chatgpt.com/backend-api/codex"
+CODEX_RESPONSES_LITE_HEADER = "x-openai-internal-codex-responses-lite"
 
 
 def read_codex_credentials() -> tuple[str, str]:
@@ -44,6 +45,27 @@ class CodexCredentialRefresher(CustomLogger):
         updated["api_key"] = access_token
         headers = dict(updated.get("extra_headers") or {})
         headers["ChatGPT-Account-ID"] = account_id
+        if (
+            getattr(call_type, "value", call_type) in {"responses", "aresponses"}
+            and isinstance(updated.get("input"), list)
+            and any(isinstance(item, dict) and item.get("type") == "additional_tools"
+                    for item in updated["input"])
+        ):
+            # Use LiteLLM's native adapter. Its custom-provider Chat bridge
+            # loses Responses-only items and reasoning.context; native custom
+            # provider dispatch currently fails the LlmProviders enum check.
+            # Retire this remap when LiteLLM supports native custom providers.
+            updated["custom_llm_provider"] = "openai"
+            if isinstance(updated.get("model"), str):
+                updated["model"] = updated["model"].rsplit("/", 1)[-1]
+            headers[CODEX_RESPONSES_LITE_HEADER] = "true"
+            # Required defaults for this protocol mode. Preserve explicit
+            # caller choices so conflicting inputs remain provider errors.
+            updated["reasoning"] = {"context": "all_turns", **(updated.get("reasoning") or {})}
+            if updated.get("parallel_tool_calls") is None:
+                updated["parallel_tool_calls"] = False
+            if updated.get("service_tier") == "fast":
+                updated["service_tier"] = "priority"
         updated["extra_headers"] = headers
         # The public Responses contract accepts either a prompt string or an
         # input-item array. The Codex subscription backend accepts the latter;
