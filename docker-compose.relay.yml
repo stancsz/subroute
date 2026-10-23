@@ -1,0 +1,40 @@
+name: subroute-relay
+services:
+  relay:
+    build:
+      context: .
+      dockerfile: sidecars/relay/Dockerfile
+    image: subroute-relay:0.1.0
+    restart: unless-stopped
+    ports:
+      - "${RELAY_PUBLISH_IP:-127.0.0.1}:${RELAY_PORT:-8765}:8765"
+    environment:
+      RELAY_BIND: 0.0.0.0
+      RELAY_OPERATOR_KEY: ${RELAY_OPERATOR_KEY:?Set a unique operator credential}
+      RELAY_NODE_KEYS: ${RELAY_NODE_KEYS:?Set JSON mapping machine names to distinct credentials}
+      RELAY_ALLOWED_HOSTS: ${RELAY_ALLOWED_HOSTS:-127.0.0.1:*,localhost:*,[::1]:*}
+      RELAY_ADVISOR_URL: ${RELAY_ADVISOR_URL:-http://host.docker.internal:4040/v1}
+      RELAY_ADVISOR_KEY: ${RELAY_ADVISOR_KEY:-}
+      RELAY_ADVISOR_DAILY_LIMIT: ${RELAY_ADVISOR_DAILY_LIMIT:-0}
+    volumes:
+      - relay-state:/data
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+volumes:
+  relay-state:

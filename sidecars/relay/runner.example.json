@@ -1,0 +1,14 @@
+{
+  "node": "workstation",
+  "url": "http://192.168.1.10:8765",
+  "gateway_url": "http://192.168.1.10:4000",
+  "gateway_key_env": "ANTHROPIC_API_KEY",
+  "model": "default",
+  "workspaces": {"project": "D:/github/your-project"},
+  "slots": 1,
+  "max_turns": 24,
+  "timeout_seconds": 900,
+  "max_cost_usd": 1,
+  "tools": ["Read", "Glob", "Grep", "Edit", "Write", "Bash(pytest*)"],
+  "review_tools": ["Read", "Glob", "Grep", "Bash(pytest*)"]
+}

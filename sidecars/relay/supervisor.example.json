@@ -1,0 +1,11 @@
+{
+  "url": "http://192.168.1.10:8765",
+  "gateway_url": "http://192.168.1.10:4000",
+  "gateway_key_env": "ANTHROPIC_API_KEY",
+  "model": "default",
+  "poll_seconds": 30,
+  "daily_cycles": 48,
+  "max_turns": 24,
+  "timeout_seconds": 300,
+  "max_cost_usd": 1
+}

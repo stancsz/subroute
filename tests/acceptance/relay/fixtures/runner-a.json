@@ -1,0 +1,15 @@
+{
+  "node": "fixture-a",
+  "url": "http://relay:8765",
+  "gateway_url": "http://127.0.0.1:4000",
+  "gateway_key_env": "GATEWAY_MASTER_KEY",
+  "model": "default",
+  "workspaces": {"private": "/workspace"},
+  "state_dir": "/home/relay/.subroute-relay/node",
+  "slots": 1,
+  "max_turns": 2,
+  "timeout_seconds": 30,
+  "max_cost_usd": 0.01,
+  "tools": ["Read", "Write", "Bash(python*)"],
+  "review_tools": ["Read", "Bash(python*)"]
+}

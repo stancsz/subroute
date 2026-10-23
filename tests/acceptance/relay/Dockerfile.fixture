@@ -1,0 +1,8 @@
+# Acceptance-only runner image. It inherits the already-built production runner
+# and shadows Claude with a deterministic local executable, never a provider.
+FROM subroute-relay-runner:0.1.0
+USER root
+COPY tests/acceptance/relay/fixture_cli.py /usr/local/bin/claude
+RUN chmod 0555 /usr/local/bin/claude
+ENV PATH="/usr/local/bin:/opt/claude/bin:${PATH}"
+USER 10001:10001

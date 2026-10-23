@@ -1,0 +1,84 @@
+name: subroute-relay-acceptance
+
+x-fixture-worker: &fixture-worker
+  image: subroute-relay-runner-fixture:0.1.0
+  build:
+    context: .
+    dockerfile: tests/acceptance/relay/Dockerfile.fixture
+  depends_on:
+    relay:
+      condition: service_healthy
+  environment:
+    GATEWAY_MASTER_KEY: ${GATEWAY_MASTER_KEY:?fixture-only dummy key required}
+    FIXTURE_COUNTER_PATH: /home/relay/fixture-cli-count
+  extra_hosts: !reset []
+  volumes: !override
+    - relay-workspace-a:/workspace
+    - relay-worker-home-a:/home/relay
+  configs:
+    - source: runner-a
+      target: /config/runner.json
+  labels:
+    relay.acceptance.owner: subroute-relay-provider-free
+
+services:
+  relay:
+    build: null
+    extra_hosts: !reset []
+    # Docker Desktop does not publish an internal-only bridge to the host.
+    # Only the hub joins this loopback management bridge; clients stay internal.
+    networks: [default, control]
+    labels:
+      relay.acceptance.owner: subroute-relay-provider-free
+  worker:
+    <<: *fixture-worker
+    volumes: !override
+      - relay-workspace-a:/workspace
+      - relay-worker-home-a:/home/relay
+    configs:
+      - source: runner-a
+        target: /config/runner.json
+    labels:
+      relay.acceptance.owner: subroute-relay-provider-free
+  worker-b:
+    extends:
+      file: docker-compose.relay-worker.yml
+      service: worker
+    <<: *fixture-worker
+    environment:
+      GATEWAY_MASTER_KEY: ${GATEWAY_MASTER_KEY:?fixture-only dummy key required}
+      FIXTURE_COUNTER_PATH: /home/relay/fixture-cli-count
+      RELAY_NODE_KEY: ${RELAY_NODE_KEY_B:?fixture-only node key required}
+    volumes: !override
+      - relay-workspace-b:/workspace
+      - relay-worker-home-b:/home/relay
+    configs:
+      - source: runner-b
+        target: /config/runner.json
+      - source: northstar-fixture
+        target: /opt/relay-fixture/contract.md
+    labels:
+      relay.acceptance.owner: subroute-relay-provider-free
+
+networks:
+  default:
+    internal: true
+  control: {}
+
+configs:
+  runner-a:
+    file: tests/acceptance/relay/fixtures/runner-a.json
+  runner-b:
+    file: tests/acceptance/relay/fixtures/runner-b.json
+  northstar-fixture:
+    file: tests/acceptance/relay/fixtures/northstar-contract.md
+
+volumes:
+  relay-workspace-a:
+    labels: {relay.acceptance.owner: subroute-relay-provider-free}
+  relay-workspace-b:
+    labels: {relay.acceptance.owner: subroute-relay-provider-free}
+  relay-worker-home-a:
+    labels: {relay.acceptance.owner: subroute-relay-provider-free}
+  relay-worker-home-b:
+    labels: {relay.acceptance.owner: subroute-relay-provider-free}

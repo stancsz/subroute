@@ -1,0 +1,5 @@
+**
+!tests/
+!tests/acceptance/
+!tests/acceptance/relay/
+!tests/acceptance/relay/fixture_cli.py

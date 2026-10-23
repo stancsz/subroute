@@ -14,7 +14,7 @@
 
 ## Optional LAN agent coordination
 
-[Subroute Relay](docs/operations/relay.md) adds a separate Docker-hosted MCP workboard and outbound runners for Claude Code sessions across machines. It tracks bounded goals, assignments, leases, cancellation and separate review evidence. An optional event-driven headless supervisor advances active goals using the Northstar contract, with explicit cycle and Advisor call budgets. See the [setup guide](docs/operations/relay.md) and [pilot verification limits](docs/evals/relay-2026-10-23.md). It is separate from the gateway's routing/runtime state.
+[Subroute Relay](docs/operations/relay.md) adds a separate Docker-hosted MCP workboard and outbound runners for Claude Code sessions across machines. It tracks bounded goals, assignments, leases, cancellation and separate review evidence. An optional event-driven headless supervisor advances active goals using the Northstar contract, with explicit cycle and Advisor call budgets. See the [device A server and device B Docker client setup](docs/operations/relay-devices.md) and [pilot verification limits](docs/evals/relay-2026-10-23.md). It is separate from the gateway's routing/runtime state. Device B needs Docker, a private workspace, runner config and credentials; the default leaf client does not require a Northstar skill bundle. Reproduce the provider-free fault checks with `python scripts/verify_relay_docker.py`.
 
 
 ## Codex Advisor skill

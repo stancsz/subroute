@@ -1,0 +1,8 @@
+*
+!sidecars/
+!sidecars/relay/
+!sidecars/relay/requirements.lock
+!src/
+!src/subroute/
+!src/subroute/relay/
+!src/subroute/relay/*.py

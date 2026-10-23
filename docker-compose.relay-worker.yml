@@ -1,0 +1,38 @@
+name: subroute-relay-worker
+services:
+  worker:
+    image: subroute-relay-runner:0.1.0
+    build:
+      context: .
+      dockerfile: sidecars/relay/Dockerfile.runner
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    environment:
+      RELAY_NODE_KEY: ${RELAY_NODE_KEY:?Set the worker node credential}
+      GATEWAY_MASTER_KEY: ${GATEWAY_MASTER_KEY:?Set a key accepted by LiteLLM on port 4000}
+    volumes:
+      - type: bind
+        source: ${RELAY_WORKSPACE:?Set the worker workspace directory}
+        target: /workspace
+      - type: bind
+        source: ${RELAY_RUNNER_CONFIG:-./runner.relay.json}
+        target: /config/runner.json
+        read_only: true
+      - worker-home:/home/relay
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+volumes:
+  worker-home:

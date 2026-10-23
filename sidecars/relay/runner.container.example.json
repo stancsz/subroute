@@ -1,0 +1,15 @@
+{
+  "node": "container-worker",
+  "url": "http://192.168.1.10:8765",
+  "gateway_url": "http://192.168.1.10:4000",
+  "gateway_key_env": "GATEWAY_MASTER_KEY",
+  "model": "default",
+  "workspaces": {"project": "/workspace"},
+  "state_dir": "/home/relay/.subroute-relay/node",
+  "slots": 1,
+  "max_turns": 12,
+  "timeout_seconds": 180,
+  "max_cost_usd": 1,
+  "tools": ["Read", "Glob", "Grep", "Edit", "Write", "Bash(python*)"],
+  "review_tools": ["Read", "Glob", "Grep", "Bash(python*)"]
+}
