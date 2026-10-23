@@ -782,7 +782,7 @@ def test_advisor_compaction_falls_back_to_mimo_when_minimax_summary_is_over_targ
         if "concise MiMo summary" in str(messages):
             return 10000
         if "SIFT COMPACTED" in str(messages):
-            return 20000
+            return 15000
         if not any(
             message.get("role") == "assistant"
             and "Relevant prior context" in str(message.get("content", ""))
@@ -803,7 +803,7 @@ def test_advisor_compaction_falls_back_to_mimo_when_minimax_summary_is_over_targ
     monkeypatch.setattr(AdvisorPlugin, "_count_context_tokens", staticmethod(count_context))
     async def sift_noop(_router, _data, messages, _target):
         return [*messages[:-2], {"role": "assistant", "content": "SIFT COMPACTED"}, *messages[-1:]], {
-            "compacted": True, "input_tokens": 40000, "forwarded_tokens": 20000,
+            "compacted": True, "input_tokens": 40000, "forwarded_tokens": 15000,
         }
 
     monkeypatch.setattr(AdvisorPlugin, "_sift_compaction", staticmethod(sift_noop))
@@ -1034,7 +1034,7 @@ def test_advisor_compaction_does_not_call_providers_when_context_is_under_limit(
     from litellm.proxy import proxy_server
 
     async def count_context(_router, _data, _messages):
-        return 32000
+        return 16384
 
     async def unexpected(*_args, **_kwargs):
         pytest.fail("Compaction providers must not run under the Advisor limit")

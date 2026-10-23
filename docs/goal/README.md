@@ -1,5 +1,7 @@
 # Goal records
 
+- **Current context delivery:** [4M input, Sift targets, 1M client trigger and gateway error observation](../evals/subroute-4m-context-2026-10-23.md).
+
 - **Completed:** [Subroute dashboard and shared Badlands identity](badlands-redesign.md).
 
 - **目标记录：** [Subroute 维护性与可靠性](../../GOAL.md)（已完成，状态见目标文件）

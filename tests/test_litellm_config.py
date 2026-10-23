@@ -27,11 +27,12 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
             context = 32000 if is_advisor else 8000 if speech else 40960 if local_qwen else 256000
             assert info["max_input_tokens"] == (32768 if local_qwen else context), deployment["model_name"]
             assert info["context_window"] == context
-            assert info["auto_compact_token_limit"] == (32768 if local_qwen else context * 0.8)
+            trigger = 32768 if local_qwen else 1_000_000 if context == 256000 else context * 0.8
+            assert info["auto_compact_token_limit"] == trigger
             if info.get("advisor_selectable"):
                 if info["max_input_tokens"] == 256000:
                     assert info["advisor_max_input_tokens"] == 32000
-            if not local_qwen:
+            if not local_qwen and context != 256000:
                 assert info["auto_compact_token_limit"] == info["context_window"] * 0.8
             assert info["compaction_scope"] == "total"
 
@@ -52,12 +53,17 @@ def test_advisor_compaction_summarizers_are_configured_for_text_and_images():
 
 
 def test_local_qwen_responses_uses_litellm_chat_bridge():
+    import inspect
     from litellm.responses.main import _will_bridge_to_chat_completions
 
     deployment = next(item for item in config()["model_list"] if item["model_name"] == "qwen3.8-27b")
     params = deployment["litellm_params"]
+    # Dev and pinned-image builds both label themselves 1.103.0 but expose
+    # different private-helper signatures. Exercise the native bridge in each.
+    extra = {"api_base": params.get("api_base")} if "api_base" in inspect.signature(_will_bridge_to_chat_completions).parameters else {}
     assert _will_bridge_to_chat_completions(
         "qwen3.8-27b", "openai", params.get("use_chat_completions_api", False), deployment["model_info"],
+        **extra,
     )
 
 
@@ -234,6 +240,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         "subroute.sift_plugin.sift_auto_hook",
         "subroute.sift_plugin.sift_qwen_hook",
         "subroute.plugins.advisor_plugin.advisor_plugin_instance",
+        "subroute.sift_plugin.sift_target_hook",
         "subroute.plugins.codex_credentials.codex_credential_refresher",
         "websearch_interception",
     ]

@@ -209,7 +209,7 @@ def _term_frequencies(old: list[dict[str, Any]], terms: set[str]) -> tuple[Count
 
 def _candidates(old: list[dict[str, Any]], terms: set[str],
                 frequencies: Counter[str], total: int,
-                bridge_ids: tuple[str, ...] = ()) -> list[_Candidate]:
+                bridge_ids: tuple[str, ...] = (), *, limit: int = _MAX_CANDIDATES) -> list[_Candidate]:
     bridge_match = (re.compile(r"\b(?:" + "|".join(map(re.escape, bridge_ids)) + r")\b", re.IGNORECASE)
                     if bridge_ids else None)
     heap: list[tuple[float, int, _Candidate]] = []
@@ -257,7 +257,7 @@ def _candidates(old: list[dict[str, Any]], terms: set[str],
             )
             candidate = _Candidate(message_index, part_index, role, span, score, piece)
             item = (score, serial, candidate)
-            if len(heap) < _MAX_CANDIDATES:
+            if len(heap) < limit:
                 heapq.heappush(heap, item)
             elif item[:2] > heap[0][:2]:
                 heapq.heapreplace(heap, item)
@@ -270,11 +270,12 @@ def _candidates(old: list[dict[str, Any]], terms: set[str],
     return selected
 
 
-def _linked_candidates(old: list[dict[str, Any]], query: str) -> list[_Candidate]:
+def _linked_candidates(old: list[dict[str, Any]], query: str,
+                       *, limit: int = _MAX_CANDIDATES) -> list[_Candidate]:
     """Reserve a few excerpts joined by IDs in high-ranked source evidence."""
     terms = _query_terms(query)
     frequencies, total = _term_frequencies(old, terms)
-    primary = _candidates(old, terms, frequencies, total)
+    primary = _candidates(old, terms, frequencies, total, limit=limit)
     if not primary:
         return primary
     bridge_ids: list[str] = []
@@ -292,7 +293,7 @@ def _linked_candidates(old: list[dict[str, Any]], query: str) -> list[_Candidate
             break
     if not bridge_ids:
         return primary
-    second_pass = _candidates(old, terms, frequencies, total, tuple(bridge_ids))
+    second_pass = _candidates(old, terms, frequencies, total, tuple(bridge_ids), limit=limit)
     matched = re.compile(r"\b(?:" + "|".join(map(re.escape, bridge_ids)) + r")\b", re.IGNORECASE)
     output: list[_Candidate] = []
     seen: set[tuple[int, int]] = set()
@@ -312,9 +313,27 @@ def _linked_candidates(old: list[dict[str, Any]], query: str) -> list[_Candidate
                 break
     for candidate in primary:
         add(candidate)
-        if len(output) == _MAX_CANDIDATES:
+        if len(output) == limit:
             break
     return output
+
+
+def _active_user_query(text: str) -> str:
+    """Build a bounded relevance query from a very large active message."""
+    first_chars = 4_096
+    last_chars = 2_048
+    sample_chars = 256
+    sample_count = 12
+    if len(text) <= first_chars + last_chars + sample_chars * sample_count:
+        return text
+    stop = len(text) - last_chars
+    span = max(0, stop - first_chars - sample_chars)
+    samples = [text[:first_chars]]
+    for index in range(sample_count):
+        start = first_chars + (span * index // max(1, sample_count - 1))
+        samples.append(text[start:start + sample_chars])
+    samples.append(text[-last_chars:])
+    return "\n".join(samples)
 
 
 def _diagnostic_candidates(old: list[dict[str, Any]], offset: int,
@@ -497,16 +516,20 @@ def _compact_active_user_message(
         return None
 
     source = [{"role": "user", "content": text}]
-    options = _linked_candidates(source, text)
+    # A 1M intermediate checkpoint needs a denser index than a 32K/64K model
+    # prompt. Bound both query size and candidate memory as intake grows.
+    candidate_limit = max(_MAX_CANDIDATES, min(16_384, target // 128))
+    options = _linked_candidates(source, _active_user_query(text), limit=candidate_limit)
     if not options:
         return None
-    first = next(_pieces(text), None)
-    if first is None:
+    first = last = None
+    last_index = -1
+    for last_index, piece in enumerate(_pieces(text)):
+        if first is None:
+            first = piece
+        last = piece
+    if first is None or last is None:
         return None
-    last = first
-    last_index = 0
-    for last_index, last in enumerate(_pieces(text)):
-        pass
     required = {
         0: _Candidate(0, 0, "user", first, 0, first),
         last_index: _Candidate(
@@ -577,6 +600,9 @@ def compact_messages(
             "active_user_message_compacted": False,
             "selected_excerpts": 0,
         })
+    # Active-message extraction replaces list entries. Keep the caller's
+    # original request available for a soft pass-through or a wider budget.
+    messages = list(messages)
     if protocol not in {"openai", "anthropic"}:
         raise CompactionError("unsupported protocol", code="unsupported_protocol")
     for msg in messages:
@@ -594,7 +620,10 @@ def compact_messages(
                     if _starts_tool_cycle(messages[index], protocol)]
     active_user_message_compacted = False
     active_user_excerpts_selected = 0
-    user_floor = _count(count_tokens, messages[:instruction_end] + [messages[latest_user]])
+    if instruction_end == 0 and latest_user == 0 and len(messages) == 1:
+        user_floor = raw
+    else:
+        user_floor = _count(count_tokens, messages[:instruction_end] + [messages[latest_user]])
     if user_floor >= target - 256:
         reserve = target // 3 if cycle_starts else 256
         compacted_user = _compact_active_user_message(

@@ -34,9 +34,9 @@ def run(monkeypatch, data, call_type="acompletion", router=None):
 @pytest.mark.parametrize("protocol", ["openai", "anthropic"])
 def test_oversized_tool_history_recovers_without_changing_instructions_or_latest_cycle(monkeypatch, protocol):
     messages = [{"role": "user", "content": "Fix test_original_failure and report the newest failing test."}]
-    for index in range(8):
+    for index in range(20):
         tool_id = f"read_{index}"
-        text = "routine output " * 18_000 + f"\nFAILED: test_original_failure_{index}"
+        text = "routine output " * 8_000 + f"\nFAILED: test_original_failure_{index}"
         if protocol == "openai":
             messages.extend([
                 {"role": "assistant", "content": None, "tool_calls": [{
@@ -153,8 +153,8 @@ def test_invalid_or_impossible_output_limits_fail_before_compaction(monkeypatch,
 
 
 def test_missing_output_cap_reserves_provider_headroom():
-    assert AutoContextRecovery.input_target(Router(), {}) == 65_536
-    assert AutoContextRecovery.input_target(Router(), {"max_completion_tokens": 100_000}) == 65_536
+    assert AutoContextRecovery.input_target(Router(), {}) == 32_768
+    assert AutoContextRecovery.input_target(Router(), {"max_completion_tokens": 100_000}) == 32_768
 
 
 def test_budget_uses_real_litellm_deployment_metadata_instead_of_model_id_lookup():
@@ -164,7 +164,7 @@ def test_budget_uses_real_litellm_deployment_metadata_instead_of_model_id_lookup
         "model_name": "auto", "model_info": Router.info,
         "litellm_params": {"model": "openai/fixture", "api_key": "test"},
     }])
-    assert AutoContextRecovery.input_target(router, {"max_tokens": 512}) == 65_536
+    assert AutoContextRecovery.input_target(router, {"max_tokens": 512}) == 32_768
 
 
 @pytest.mark.parametrize("content,code", [
@@ -180,24 +180,24 @@ def test_unsafe_content_fails_with_actionable_contract(monkeypatch, caplog, cont
         result = run(monkeypatch, data)
         audit = result["metadata"]["sift"]
         assert audit["active_user_message_compacted"] is True
-        assert audit["forwarded_tokens"] <= 65_536
+        assert audit["forwarded_tokens"] <= 32_768
         assert "Sift compacted this active user message" in result["messages"][0]["content"]
         assert data == before
         return
-    with pytest.raises(HTTPException) as error:
-        run(monkeypatch, data)
-    assert error.value.status_code == 400
-    assert error.value.detail["error"]["code"] == code
+    result = run(monkeypatch, data)
+    assert result["messages"] == before["messages"]
+    assert result["metadata"]["sift"]["soft_failed"] is True
+    assert result["metadata"]["sift"]["reason"] == "unsupported_content"
     expected_reason = "active_too_large" if code == "outbound_context_limit_exceeded" else "unsupported_content"
     assert f"reason={expected_reason}" in caplog.text
     assert "input_tokens=" in caplog.text and "target=" in caplog.text
     assert data == before
 
 
-def test_intake_above_four_million_is_rejected_before_history_scanning(monkeypatch):
+def test_intake_above_estimator_headroom_is_rejected_before_history_scanning(monkeypatch):
     class HugeRouter(Router):
         def _count_pre_call_check_tokens(self, **kwargs):
-            return 4_000_001
+            return 4_194_305
 
     with pytest.raises(HTTPException) as error:
         run(monkeypatch, {"model": "auto", "max_tokens": 512, "messages": []}, router=HugeRouter())
@@ -215,10 +215,9 @@ def test_required_instructions_and_tools_count_against_the_same_budget(monkeypat
     text = "required instruction " * 110_000
     data[protected] = text if protected == "system" else [{"name": "Read", "description": text}]
     before = deepcopy(data)
-    with pytest.raises(HTTPException) as error:
-        run(monkeypatch, data)
-    assert error.value.status_code == 400
-    assert error.value.detail["error"]["code"] == "outbound_context_limit_exceeded"
+    result = run(monkeypatch, data)
+    assert result["metadata"]["sift"]["soft_failed"] is True
+    assert result[protected] == before[protected]
     assert data == before
 
 
@@ -230,11 +229,10 @@ def test_recovery_exposes_audit_and_rejects_concurrent_overload(monkeypatch):
     assert hook._slots.acquire(blocking=False)
     assert hook._slots.acquire(blocking=False)
     try:
-        with pytest.raises(HTTPException) as error:
-            asyncio.run(hook.async_pre_call_hook(None, None,
-                        {"model": "auto", "max_tokens": 512, "messages": []}, "acompletion"))
-        assert error.value.status_code == 429
-        assert error.value.headers["Retry-After"] == "1"
+        result = asyncio.run(hook.async_pre_call_hook(None, None,
+                             {"model": "auto", "max_tokens": 512, "messages": []}, "acompletion"))
+        assert result["metadata"]["sift"]["soft_failed"] is True
+        assert result["metadata"]["sift"]["reason"] == "sift_http_429"
     finally:
         hook._slots.release()
         hook._slots.release()

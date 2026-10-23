@@ -54,7 +54,7 @@ def test_native_counter_includes_instruction_and_tool_overhead(protocol):
     assert full_count > count + 1000
 
 
-def test_oversized_messages_fail_before_an_advisor_consultation(monkeypatch):
+def test_oversized_advisor_copy_is_skipped_without_blocking_target_route(monkeypatch):
     from litellm.proxy import proxy_server
     from subroute.plugins import advisor_plugin
 
@@ -65,7 +65,7 @@ def test_oversized_messages_fail_before_an_advisor_consultation(monkeypatch):
     monkeypatch.setattr(r, "get_configured_token_limits", lambda model: (1000, None))
 
     async def unexpected_consultation(*args, **kwargs):
-        pytest.fail("The oversized request reached the provider")
+        pytest.fail("An oversized advisor copy reached the provider")
 
     from subroute.advisor_ranker import AdvisorRequestRanker
     from subroute.advisor_frequency import AdvisorFrequencyGate
@@ -82,5 +82,10 @@ def test_oversized_messages_fail_before_an_advisor_consultation(monkeypatch):
         "system": " policy" * 2000,
         "metadata": {"gateway_policy": {"advisor_model": "codex-luna-advisor"}},
     }
-    with pytest.raises(litellm.ContextWindowExceededError, match="advisor was not called"):
-        asyncio.run(advisor_plugin.AdvisorPlugin().async_pre_call_hook(None, None, data, "aanthropic_messages"))
+    result = asyncio.run(advisor_plugin.AdvisorPlugin().async_pre_call_hook(
+        None, None, data, "aanthropic_messages",
+    ))
+    assert result is data
+    assert data["metadata"]["gateway_advisor"]["status"] == "skipped"
+    assert data["metadata"]["gateway_advisor"]["reason"] == "advisor_context_compaction_failed"
+    assert data["metadata"]["gateway_advisor_compaction"]["status"] == "failed"

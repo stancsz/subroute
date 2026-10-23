@@ -7,7 +7,8 @@ model_list:
       <<: &context_policy
         max_input_tokens: 256000
         context_window: 256000
-        auto_compact_token_limit: 204800
+        # Virtual client-history trigger; provider checks see the Sift output.
+        auto_compact_token_limit: 1000000
         compaction_scope: total
       display_name: Auto
       selectable: false
@@ -594,7 +595,7 @@ litellm_settings:
     # Local Qwen Sift is enabled by default; requests need no opt-in.
     - subroute.sift_plugin.sift_qwen_hook
     - subroute.plugins.advisor_plugin.advisor_plugin_instance
-    # Apply the shared text-target forwarding budget after routing and advisor guidance.
+    # Optimize text targets after routing/advisor guidance; Sift misses pass through.
     - subroute.sift_plugin.sift_target_hook
     - subroute.plugins.codex_credentials.codex_credential_refresher
     - websearch_interception

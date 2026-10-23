@@ -234,15 +234,6 @@ class AdvisorPlugin(CustomLogger):
         return messages
 
     @staticmethod
-    def _compaction_error_status(exc: AdvisorContextCompactionError) -> int:
-        statuses = [attempt.get("status") for attempt in exc.attempts]
-        if statuses and statuses[-1] == "over_budget":
-            return 413
-        if any("timed out" in str(attempt.get("reason", "")).lower() for attempt in exc.attempts):
-            return 504
-        return 502
-
-    @staticmethod
     async def _count_context_tokens(router: Any, data: dict, messages: list[dict[str, Any]]) -> int:
         request_kwargs = {key: value for key, value in data.items() if key not in {"input", "instructions"}}
         request_kwargs["messages"] = messages
@@ -563,7 +554,9 @@ class AdvisorPlugin(CustomLogger):
             restored = deepcopy(candidate)
             candidate_latest = AdvisorPlugin._latest_user_index(restored)
             if candidate_latest < 0:
-                raise ValueError("Sift compaction lost the current user turn")
+                # Core budget probes include instruction-only prefixes. They
+                # are counting candidates rather than dispatchable requests.
+                return restored
             if latest_original is not None:
                 restored[candidate_latest] = deepcopy(latest_original)
             # The exact latest user message already contains its images. Restore
@@ -585,7 +578,10 @@ class AdvisorPlugin(CustomLogger):
         result = await asyncio.to_thread(
             compact_messages, sift_messages, count, target=target, protocol="openai",
         )
-        return restore(result.messages), result.audit
+        restored = restore(result.messages)
+        if AdvisorPlugin._latest_user_index(restored) < 0:
+            raise ValueError("Sift compaction lost the current user turn")
+        return restored, result.audit
 
     @staticmethod
     async def _invoke_advisor(
@@ -865,10 +861,9 @@ class AdvisorPlugin(CustomLogger):
 
         await self._record_analytics(metadata, selected=True)
 
-        # LiteLLM's router checks run after proxy callbacks. This earlier
-        # consultation must use that same counter and configured cap before
-        # spending provider tokens. Retire when LiteLLM checks before hooks.
-        from litellm import ContextWindowExceededError
+        # Advisors receive an independent, bounded copy. Do not gate this copy
+        # on the un-compacted target request's limit; target Sift and LiteLLM's
+        # provider/fallback path own target admission after this callback.
         from litellm.proxy import proxy_server
 
         router = proxy_server.llm_router
@@ -879,13 +874,6 @@ class AdvisorPlugin(CustomLogger):
         try:
             if router is None:
                 raise RuntimeError("Advisor context limit is unavailable")
-            target_limit, _ = router.get_configured_token_limits(data["model"])
-            original_tokens = await self._count_context_tokens(router, data, messages)
-            if target_limit is not None and original_tokens > target_limit:
-                raise ContextWindowExceededError(
-                    message=f"Max Input Tokens={target_limit}, Got={original_tokens}; advisor was not called",
-                    model=data["model"], llm_provider="subroute",
-                )
             advisor_messages, compaction = await self._prepare_advisor_messages(
                 router, advisor_model, data, self._brief_advisor_messages(messages),
             )
@@ -922,9 +910,6 @@ class AdvisorPlugin(CustomLogger):
                     fallback_model, advisor_messages, advisor_effort,
                 )
                 resolved_advisor_model = fallback_model
-        except ContextWindowExceededError:
-            await self._record_analytics(metadata, failed=True)
-            raise
         except Exception as exc:
             await self._record_analytics(metadata, failed=True)
             reason = _safe_error_reason(exc)
@@ -948,14 +933,21 @@ class AdvisorPlugin(CustomLogger):
                     gateway_request_id, advisor_model, exc.input_tokens, exc.limit,
                     exc.target, exc.attempts,
                 )
+                metadata["gateway_advisor"] = {
+                    "status": "skipped", "model": advisor_model,
+                    "call_type": call_type, "reason": "advisor_context_compaction_failed",
+                    "gateway_request_id": gateway_request_id,
+                }
+                # Never send an oversized advisor copy. Advice is supplemental,
+                # so a failed compact skips it and leaves target admission to
+                # Sift plus LiteLLM's provider/fallback chain.
+                return data
             logger.error(
                 "advisor consultation failed gateway_request_id=%s consultation_id=%s call_type=%s model=%s base_model=%s error_type=%s error=%s",
                 gateway_request_id, consultation_id, call_type, advisor_model,
                 data.get("model"), type(exc).__name__, reason,
             )
-            if isinstance(exc, AdvisorContextCompactionError):
-                status_code = self._compaction_error_status(exc)
-            elif isinstance(exc, AntigravityRequestTooLargeError):
+            if isinstance(exc, AntigravityRequestTooLargeError):
                 status_code = 413
             elif isinstance(exc, ValueError):
                 status_code = 400
@@ -968,26 +960,14 @@ class AdvisorPlugin(CustomLogger):
                 )
             else:
                 status_code = 502
-            error_type = (
-                "advisor_context_compaction_failed"
-                if isinstance(exc, AdvisorContextCompactionError)
-                else "advisor_consultation_failed"
-            )
-            error_message = (
-                "Advisor context exceeded its limit; bounded compaction failed; base request was not sent"
-                if isinstance(exc, AdvisorContextCompactionError)
-                else "Selected advisor failed; base request was not sent"
-            )
             raise HTTPException(
                 status_code=status_code,
                 detail={
                     "error": {
-                        "type": error_type,
-                        "message": error_message,
+                        "type": "advisor_consultation_failed",
+                        "message": "Selected advisor failed; base request was not sent",
                         "request_id": gateway_request_id,
                         "consultation_id": consultation_id,
-                        **({"compaction": metadata["gateway_advisor_compaction"]}
-                           if isinstance(exc, AdvisorContextCompactionError) else {}),
                     }
                 },
             ) from exc

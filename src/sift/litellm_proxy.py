@@ -58,7 +58,7 @@ def _countable_tools(tools: Any) -> list[dict[str, Any]] | None:
 
 def compact_proxy_request(
     router: Any, data: dict[str, Any], *, call_type: str,
-    target: int, raw_limit: int = 4_000_000,
+    target: int, raw_limit: int = 4_000_000, max_target: int | None = None,
 ) -> dict[str, Any]:
     """Return request messages plus a server-owned Sift audit.
 
@@ -70,6 +70,8 @@ def compact_proxy_request(
     if protocol is None:
         raise HTTPException(422, detail="Sift supports Chat Completions, Anthropic Messages and stateless text Responses only")
     restore = None
+    responses_tools_translated = False
+    opaque_responses_tools: Any = None
     if response_input:
         from .litellm_responses import response_selection_view
 
@@ -88,30 +90,45 @@ def compact_proxy_request(
         # custom-tool descriptions. Count LiteLLM's actual Chat tool shape in
         # a private copy; preserve the caller's definitions in the request.
         tools = data["tools"]
-        if not isinstance(tools, list) or any(
+        supported_tools = isinstance(tools, list) and not any(
             not isinstance(tool, dict) or tool.get("type") not in {"function", "custom", "namespace"}
             for tool in tools
-        ):
-            raise HTTPException(422, detail="Sift Responses supports function, custom and namespace tools only")
-        for tool in tools:
-            if tool["type"] == "namespace" and (
-                not isinstance(tool.get("tools"), list) or any(
-                    not isinstance(child, dict) or child.get("type") != "function"
-                    for child in tool["tools"]
-                )
-            ):
-                raise HTTPException(422, detail="Sift requires function definitions inside Responses namespaces")
-        try:
-            chat_tools, _ = LiteLLMCompletionResponsesConfig.transform_responses_api_tools_to_chat_completion_tools(tools)
-        except (TypeError, ValueError, KeyError) as error:
-            raise HTTPException(422, detail="Sift cannot count these Responses tools") from error
-        counting_data = {**data, "tools": chat_tools}
+        )
+        if supported_tools:
+            for tool in tools:
+                if tool["type"] == "namespace" and (
+                    not isinstance(tool.get("tools"), list) or any(
+                        not isinstance(child, dict) or child.get("type") != "function"
+                        for child in tool["tools"]
+                    )
+                ):
+                    supported_tools = False
+                    break
+        if supported_tools:
+            try:
+                chat_tools, _ = LiteLLMCompletionResponsesConfig.transform_responses_api_tools_to_chat_completion_tools(tools)
+            except (TypeError, ValueError, KeyError):
+                supported_tools = False
+            else:
+                counting_data = {**data, "tools": chat_tools}
+                responses_tools_translated = True
+        if not supported_tools:
+            # Built-in Responses tools are provider-owned protocol objects. Keep
+            # them unchanged and count their serialized declaration as a
+            # conservative floor instead of rejecting the entire request.
+            opaque_responses_tools = {
+                "tools": tools,
+                "tool_choice": data.get("tool_choice"),
+            }
+            counting_data = {**data, "tools": None, "tool_choice": None}
     repaired_tool_count = False
     tool_floor_adjustment: int | None = None
     raw_input_tokens: int | None = None
 
     def count(candidate: list[dict[str, Any]]) -> int:
         nonlocal counting_data, repaired_tool_count, tool_floor_adjustment, raw_input_tokens
+        if candidate is messages and raw_input_tokens is not None:
+            return raw_input_tokens
         counted_input = restore(candidate) if restore else data.get("input")
         request_kwargs = {**counting_data, "input": counted_input} if restore else {**counting_data, "messages": candidate}
         try:
@@ -133,10 +150,14 @@ def compact_proxy_request(
                 request_kwargs=request_kwargs,
             )
         if tool_floor_adjustment is None:
-            tool_floor_adjustment = 0
-            if counting_data.get("tools"):
-                from litellm import token_counter
+            from litellm import token_counter
 
+            tool_floor_adjustment = 0
+            if opaque_responses_tools is not None:
+                tool_floor_adjustment = token_counter(
+                    text=json.dumps(opaque_responses_tools, ensure_ascii=False),
+                )
+            elif counting_data.get("tools"):
                 # LiteLLM 1.103.0's formatter skips JSON Schema branches such
                 # as $defs/anyOf. A conservative serialized-schema floor keeps
                 # their text from consuming uncounted provider context. Charge
@@ -154,10 +175,21 @@ def compact_proxy_request(
             raw_input_tokens = total
         return total
 
+    effective_target = target
     try:
-        result = compact_messages(
-            messages, count, target=target, raw_limit=raw_limit, protocol=protocol,
-        )
+        try:
+            result = compact_messages(
+                messages, count, target=target, raw_limit=raw_limit, protocol=protocol,
+            )
+        except CompactionError as error:
+            if error.code != "active_too_large" or max_target is None or max_target <= target:
+                raise
+            # One bounded CPU-only relaxation preserves required content when
+            # the optimum is too small. Never add provider work or exceed 2x.
+            effective_target = min(max_target, target * 2, raw_limit)
+            result = compact_messages(
+                messages, count, target=effective_target, raw_limit=raw_limit, protocol=protocol,
+            )
     except CompactionError as error:
         status = {
             "raw_limit": 413, "active_too_large": 413,
@@ -165,11 +197,19 @@ def compact_proxy_request(
             "late_instruction": 422,
         }.get(error.code, 400)
         logging.getLogger("LiteLLM Proxy").warning(
-            "sift_compaction_rejected protocol=%s reason=%s input_tokens=%d target=%d raw_limit=%d",
+            "sift_compaction_failed protocol=%s reason=%s input_tokens=%d target=%d raw_limit=%d",
             protocol, error.code, raw_input_tokens if raw_input_tokens is not None else -1,
             target, raw_limit,
         )
-        raise HTTPException(status, detail=f"Sift: {error}") from error
+        raise HTTPException(status, detail={"error": {
+            "type": "invalid_request_error",
+            "code": "sift_compaction_failed",
+            "reason": error.code,
+            "message": str(error),
+            "input_tokens": raw_input_tokens,
+            "target_tokens": target,
+            "raw_limit": raw_limit,
+        }}) from error
     if restore:
         output = {**data, "input": restore(result.messages) if result.audit["compacted"] else data["input"]}
     else:
@@ -177,7 +217,9 @@ def compact_proxy_request(
     key, metadata = get_or_create_metadata_bucket(output)
     output[key] = {**metadata, "sift": {
         **result.audit, "counting_tool_schema_items_filled": repaired_tool_count,
-        "counting_responses_tools_translated": response_input and bool(data.get("tools")),
+        "target_tokens": target, "effective_target_tokens": effective_target,
+        "counting_responses_tools_translated": responses_tools_translated,
+        "counting_responses_tools_opaque": opaque_responses_tools is not None,
         "counting_tool_floor_adjustment": tool_floor_adjustment or 0,
     }}
     output_limit = data.get("max_output_tokens", data.get("max_completion_tokens", data.get("max_tokens")))
@@ -206,10 +248,10 @@ class SiftLiteLLMHook(CustomLogger):
         self._slots = threading.BoundedSemaphore(2)
 
     @staticmethod
-    def request_target(data: dict[str, Any], maximum: int) -> int:
+    def request_target(data: dict[str, Any], maximum: int, *, default: int | None = None) -> int:
         metadata = data.get("metadata")
         if not isinstance(metadata, dict) or "sift_target_tokens" not in metadata:
-            return maximum
+            return maximum if default is None else default
         requested = metadata.pop("sift_target_tokens")
         if type(requested) is not int or not 256 <= requested <= maximum:
             raise HTTPException(
@@ -219,7 +261,7 @@ class SiftLiteLLMHook(CustomLogger):
         return requested
 
     async def _compact(self, router: Any, data: dict, *, call_type: str,
-                       target: int) -> dict | None:
+                       target: int, max_target: int | None = None) -> dict | None:
         """Bound admission before executor submission, including cancelled work.
 
         A Python thread already running cannot be stopped safely. It keeps its
@@ -235,7 +277,7 @@ class SiftLiteLLMHook(CustomLogger):
                     return None
                 return compact_proxy_request(
                     router, data, call_type=call_type,
-                    target=target, raw_limit=self.raw_limit,
+                    target=target, raw_limit=self.raw_limit, max_target=max_target,
                 )
             finally:
                 self._slots.release()

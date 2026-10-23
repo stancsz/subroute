@@ -8,8 +8,8 @@ const execFileAsync = promisify(execFile);
 const MODEL = "auto";
 const PROFILE = "subroute";
 // Session budgets apply to the gateway's automatic route.
-const CONTEXT_WINDOW = 256000;
-const COMPACT_THRESHOLD = 204800;
+const CONTEXT_WINDOW = 4_000_000;
+const COMPACT_THRESHOLD = 1_000_000;
 const AGENTS = {
   claude: { name: "Claude Code", command: "claude", protocol: "Anthropic" },
   codex: { name: "Codex", command: "codex", protocol: "Responses" },
@@ -69,7 +69,7 @@ function sessionEnv(gatewayUrl) {
     CLAUDE_CODE_SUBAGENT_MODEL: MODEL,
     CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(CONTEXT_WINDOW),
     CLAUDE_CODE_AUTO_COMPACT_WINDOW: String(CONTEXT_WINDOW),
-    CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80",
+    CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "25",
     DISABLE_AUTO_COMPACT: "",
     DISABLE_COMPACT: "",
     DEEPSEEK_BASE_URL: openai,
@@ -154,7 +154,7 @@ async function prepareLaunch(id, gatewayUrl, launchHome = desktopLaunchHome()) {
     await writeLaunchFile(path.join(hermesHome, "config.yaml"), [
       "model:", `  default: ${MODEL}`, "  provider: custom", `  base_url: ${JSON.stringify(openai)}`,
       "  api_key: subroute-local", `  context_length: ${CONTEXT_WINDOW}`, "",
-      "compression:", "  enabled: true", "  threshold: 0.8",
+      "compression:", "  enabled: true", "  threshold: 0.25",
       `  threshold_tokens: ${COMPACT_THRESHOLD}`, "  codex_gpt55_autoraise: false", "",
     ].join("\n"));
     env.HERMES_HOME = hermesHome;
@@ -168,7 +168,11 @@ async function prepareLaunch(id, gatewayUrl, launchHome = desktopLaunchHome()) {
       "      name: Subroute automatic route", "      inputModalities: [text, image]", `      contextWindow: ${CONTEXT_WINDOW}`, "      maxTokens: 32768",
       "agent-default-model:", "  provider: deepseek-official", `  model: ${MODEL}`, "",
     ].join("\n"));
-    await writeLaunchFile(patchPath, ["- id: settings", "  config:", `    path: ${JSON.stringify(settingsPath)}`, ""].join("\n"));
+    await writeLaunchFile(patchPath, [
+      "- id: settings", "  config:", `    path: ${JSON.stringify(settingsPath)}`,
+      "- id: compaction-basic", "  disabled: false", "  config:",
+      "    thresholdRatio: 0.25", "",
+    ].join("\n"));
     env.DSH_HOME = dshHome;
     args = ["--profile", "web", "--patch", patchPath];
   } else if (id === "openclaw") {

@@ -8,6 +8,7 @@ tool types. No converted chat message is sent to the provider by this adapter.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any, Callable
 
 from fastapi import HTTPException
@@ -59,10 +60,10 @@ def response_selection_view(
             supported = isinstance(item.get("call_id"), str) and bool(item["call_id"]) and _textual(item.get("output"))
         elif kind == "reasoning":
             summary = item.get("summary", [])
-            supported = not item.get("encrypted_content") and isinstance(summary, list) and all(
+            supported = isinstance(summary, list) and all(
                 isinstance(block, dict) and block.get("type") == "summary_text"
                 and isinstance(block.get("text"), str) for block in summary
-            ) and not item.get("content")
+            ) and not item.get("content") and isinstance(item.get("encrypted_content", ""), (str, type(None)))
         else:
             supported = False
         if not supported:
@@ -113,12 +114,21 @@ def response_selection_view(
     if pending_calls:
         raise HTTPException(422, detail="Sift requires complete tool results in stateless Responses history")
 
+    original_views = {entry["name"]: deepcopy(entry) for entry in views}
+
     def restore(selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
         output = []
         for message in selected:
             marker = message.get("name")
-            if marker in originals:
+            if marker in originals and message == original_views[marker]:
                 output.extend(originals[marker])
+            elif marker in originals and len(originals[marker]) == 1 and message.get("role") == "tool":
+                # Core tool-result extraction changes only the payload. Keep
+                # the original Responses type, IDs and call linkage.
+                original = originals[marker][0]
+                if original.get("type") not in {"function_call_output", "custom_tool_call_output"}:
+                    raise ValueError("unexpected Sift tool selection view")
+                output.append({**original, "output": message["content"]})
             else:
                 # The core only creates historical user-role excerpt messages.
                 if message.get("role") != "user" or not isinstance(message.get("content"), str):

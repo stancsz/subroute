@@ -140,7 +140,7 @@ def test_qwen_output_budget_is_rejected_before_compaction_and_not_clamped(monkey
 
     async def compact(router, data, **kwargs):
         compacted.append(data.copy())
-        return data
+        return {**data, "metadata": {"sift": {"forwarded_tokens": 1}}}
 
     monkeypatch.setattr(hook, "_compact", compact)
     for protocol, field in (("acompletion", "max_tokens"),
@@ -148,7 +148,9 @@ def test_qwen_output_budget_is_rejected_before_compaction_and_not_clamped(monkey
                             ("aanthropic_messages", "max_tokens"),
                             ("aresponses", "max_output_tokens")):
         boundary = {"model": "qwen3.8-27b", field: 4096, "tool_choice": "required"}
-        assert asyncio.run(hook.async_pre_call_hook(None, None, boundary, protocol)) == boundary
+        result = asyncio.run(hook.async_pre_call_hook(None, None, boundary, protocol))
+        assert result[field] == boundary[field]
+        assert result["tool_choice"] == "required"
         assert boundary[field] == 4096
         before = len(compacted)
         for value in (4097, 8192, 0, -1, True, 4096.0):
@@ -159,7 +161,8 @@ def test_qwen_output_budget_is_rejected_before_compaction_and_not_clamped(monkey
             assert request[field] == value
         assert len(compacted) == before
     omitted = {"model": "qwen3.8-27b"}
-    assert asyncio.run(hook.async_pre_call_hook(None, None, omitted, "acompletion")) == omitted
+    result = asyncio.run(hook.async_pre_call_hook(None, None, omitted, "acompletion"))
+    assert result["model"] == omitted["model"]
     assert omitted == {"model": "qwen3.8-27b"}
 
 
