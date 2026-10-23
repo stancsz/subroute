@@ -9,3 +9,9 @@ Nonblocking follow-up: when these helpers next change, extract the shared edge u
 ## Existing Advisor policy fixture drift
 
 Observed 2026-10-23 during MiniMax reliability validation: four tests in tests/test_reasoning_policy.py and two test_gemini_subscription_messages_preserve_formatting variants in tests/test_thinking_format.py fail against the current mandatory-Advisor and default-alias policy. A read-only baseline restoring HEAD's deployment hook reproduces all six failures. Current MiniMax regressions pass separately. Reconcile those fixtures with the intended policy in a separate change; do not weaken runtime behavior or assertions to accept this feature. Evidence: .runs/minimax-reliability/baseline-policy.txt and baseline-gemini.txt.
+
+## Relay leaf terminal discipline
+
+Observed in the owner-authorized native Docker stress follow-up, 2026-10-23: one whole work/review goal passed, but the second round's worker exhausted its CLI turn bound after passing tests, pursuing extra environment/receipt reconnaissance and receiving permission denials. Successful reviews also repeated checks. Keep this model-behavior risk separate from reliable lease/cancellation/acceptance enforcement. The current assignment includes fleet-wide goal acceptance in leaf context, which may encourage role drift; causality is unverified.
+
+Follow-up only with a concrete task-contract/runtime change and a distinguishing bounded live check, preserving goal alignment, separate review, failed history and current caps. Do not add orchestration services or keep rerunning the unchanged task until it passes. Evidence: docs/evals/relay-2026-10-23.md and relay-live-stress-2026-10-23.json.

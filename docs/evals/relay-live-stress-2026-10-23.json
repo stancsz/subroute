@@ -1,0 +1,234 @@
+{
+  "date": "2026-10-23",
+  "mode": "native Claude Code 2.1.251 in isolated Docker, primary alias default on existing LiteLLM port 4000",
+  "rounds_requested": 2,
+  "rounds_run": 2,
+  "all_rounds_passed": false,
+  "physical_devices": 1,
+  "sustained_24h": false,
+  "configured_limits": {
+    "max_sessions_per_round": 4,
+    "max_turns_cli_rounds": 12,
+    "task_timeout_seconds": 180,
+    "parent_deadline_seconds": 420,
+    "client_estimated_usd_per_session": 1
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "project": "relay-live-docker-5948028a6b20",
+      "passed": true,
+      "cleanup_verified": true,
+      "sessions": [
+        {
+          "kind": "work",
+          "node": "docker-a",
+          "session_id": "d6c8967e-f26b-446b-bfa3-ac3540449474",
+          "terminal_outcome": "success",
+          "error_type": null,
+          "reported_num_turns": 11,
+          "distinct_assistant_response_ids": 8,
+          "tool_use_count": 10,
+          "successful_unittest_commands": 1,
+          "permission_denial_count": 2,
+          "usage": {
+            "input_tokens": 2062,
+            "cache_read_input_tokens": 47232,
+            "output_tokens": 3073
+          },
+          "client_cost_usd_estimate": 0.11075099999999999,
+          "first_tool_timestamp": "2026-10-23T20:06:03.069Z",
+          "last_tool_timestamp": "2026-10-23T20:06:38.158Z",
+          "artifact_matches_last_worker_write": {
+            "labels.py": true,
+            "test_labels.py": true
+          },
+          "artifact_sha256": {
+            "labels.py": "4e8072c47526aa2cd36132413ec1cc2e382867f3e5d0ece94e9970f9813b8b9a",
+            "test_labels.py": "a16a802a4b22c184df43930411a201877e4e8d6fceb7a5ea96cb4215503e0925"
+          }
+        },
+        {
+          "kind": "work",
+          "node": "docker-b",
+          "session_id": "78c29942-0832-4bd9-b50f-4b0d55a18006",
+          "terminal_outcome": "success",
+          "error_type": null,
+          "reported_num_turns": 11,
+          "distinct_assistant_response_ids": 8,
+          "tool_use_count": 10,
+          "successful_unittest_commands": 1,
+          "permission_denial_count": 0,
+          "usage": {
+            "input_tokens": 5601,
+            "cache_read_input_tokens": 40576,
+            "output_tokens": 2888
+          },
+          "client_cost_usd_estimate": 0.120493,
+          "first_tool_timestamp": "2026-10-23T20:06:01.056Z",
+          "last_tool_timestamp": "2026-10-23T20:06:30.045Z",
+          "artifact_matches_last_worker_write": {
+            "labels.py": true,
+            "test_labels.py": true
+          },
+          "artifact_sha256": {
+            "labels.py": "1d8697fb282207270fa0d9c108030cd1f364a45fb5693942ef9ec20a8e89bb4f",
+            "test_labels.py": "f4f90c54e3b169a0e99625e704777f1edca46afdbc9601b3e80512013d7f729f"
+          }
+        },
+        {
+          "kind": "review",
+          "node": "docker-a",
+          "session_id": "155a4593-d135-49dd-b3c7-92faabba9658",
+          "terminal_outcome": "success",
+          "error_type": null,
+          "reported_num_turns": 22,
+          "distinct_assistant_response_ids": 12,
+          "tool_use_count": 21,
+          "successful_unittest_commands": 2,
+          "permission_denial_count": 4,
+          "usage": {
+            "input_tokens": 11708,
+            "cache_read_input_tokens": 79868,
+            "output_tokens": 6200
+          },
+          "client_cost_usd_estimate": 0.253474,
+          "first_tool_timestamp": "2026-10-23T20:06:47.807Z",
+          "last_tool_timestamp": "2026-10-23T20:07:21.158Z"
+        },
+        {
+          "kind": "review",
+          "node": "docker-b",
+          "session_id": "0c1049c5-1810-4280-ac63-cab7a2d954fb",
+          "terminal_outcome": "success",
+          "error_type": null,
+          "reported_num_turns": 14,
+          "distinct_assistant_response_ids": 7,
+          "tool_use_count": 13,
+          "successful_unittest_commands": 2,
+          "permission_denial_count": 1,
+          "usage": {
+            "input_tokens": 17396,
+            "cache_read_input_tokens": 28204,
+            "output_tokens": 3499
+          },
+          "client_cost_usd_estimate": 0.18855699999999997,
+          "first_tool_timestamp": "2026-10-23T20:07:31.661Z",
+          "last_tool_timestamp": "2026-10-23T20:08:02.967Z"
+        }
+      ],
+      "accepted_tasks": 4,
+      "live_phase_seconds": 139.71,
+      "persistence_and_idle": {
+        "restart_snapshot_completed": true,
+        "accepted_tasks": 4,
+        "idle_poll_seconds": 5,
+        "idle_trace_sizes_stable": true
+      },
+      "parent_test_counts": [
+        6,
+        13
+      ],
+      "parent_holdouts_passed": true,
+      "native_work_and_review_test_traces_verified": true,
+      "observed_work_tool_intervals_overlap": true,
+      "client_cost_usd_estimate_sum": 0.673275
+    },
+    {
+      "round": 2,
+      "project": "relay-live-docker-c9d7a953756f",
+      "passed": false,
+      "cleanup_verified": true,
+      "sessions": [
+        {
+          "kind": "work",
+          "node": "docker-a",
+          "session_id": "1a472764-521d-4e37-90fa-58c5bceab0dd",
+          "terminal_outcome": "success",
+          "error_type": null,
+          "reported_num_turns": 9,
+          "distinct_assistant_response_ids": 6,
+          "tool_use_count": 8,
+          "successful_unittest_commands": 1,
+          "permission_denial_count": 0,
+          "usage": {
+            "input_tokens": 1371,
+            "cache_read_input_tokens": 30848,
+            "output_tokens": 1922
+          },
+          "client_cost_usd_estimate": 0.070329,
+          "first_tool_timestamp": "2026-10-23T20:09:05.972Z",
+          "last_tool_timestamp": "2026-10-23T20:09:23.225Z",
+          "artifact_matches_last_worker_write": {
+            "labels.py": true,
+            "test_labels.py": true
+          },
+          "artifact_sha256": {
+            "labels.py": "7d20e3e1b9d0562b160404b092b27a2d16e3649741a3029604a62f21d4714304",
+            "test_labels.py": "6a61cb336b42f0fec05db4f58c043c62f92c8a96c3dd1b931a9d3da4737afe89"
+          }
+        },
+        {
+          "kind": "review",
+          "node": "docker-a",
+          "session_id": "f417dc81-a5c6-47e5-bcca-e82b0b109dae",
+          "terminal_outcome": "success",
+          "error_type": null,
+          "reported_num_turns": 16,
+          "distinct_assistant_response_ids": 9,
+          "tool_use_count": 15,
+          "successful_unittest_commands": 3,
+          "permission_denial_count": 2,
+          "usage": {
+            "input_tokens": 9420,
+            "cache_read_input_tokens": 50979,
+            "output_tokens": 3445
+          },
+          "client_cost_usd_estimate": 0.1587145,
+          "first_tool_timestamp": "2026-10-23T20:09:33.509Z",
+          "last_tool_timestamp": "2026-10-23T20:09:56.026Z"
+        },
+        {
+          "kind": "work",
+          "node": "docker-b",
+          "session_id": "d56252e2-ebe0-486d-a898-53a18f5545ea",
+          "terminal_outcome": "failed",
+          "error_type": "error_max_turns",
+          "reported_num_turns": 13,
+          "distinct_assistant_response_ids": 12,
+          "tool_use_count": 20,
+          "successful_unittest_commands": 1,
+          "permission_denial_count": 5,
+          "usage": {
+            "input_tokens": 3072,
+            "cache_read_input_tokens": 77312,
+            "output_tokens": 3634
+          },
+          "client_cost_usd_estimate": 0.14486600000000002,
+          "first_tool_timestamp": "2026-10-23T20:09:07.420Z",
+          "last_tool_timestamp": "2026-10-23T20:09:59.307Z",
+          "artifact_matches_last_worker_write": {
+            "labels.py": true,
+            "test_labels.py": true
+          },
+          "artifact_sha256": {
+            "labels.py": "fc1bf6f7e2cdc60478e01d74c8c3985eb00f105fa4fcc505b33813a3e0246c8e",
+            "test_labels.py": "e8ad73ea9475139ac97dbc92c50faa61a42672b706bf7b4df877a6d36d70ce90"
+          }
+        }
+      ],
+      "accepted_tasks": 2,
+      "failure_kind": "error_max_turns",
+      "failure_role": "work",
+      "failure_node": "docker-b",
+      "failed_worker_artifacts_passed_parent_audit": {
+        "test_count": 7,
+        "semantic_holdout": true,
+        "terminal_handoff": "failed; remains unaccepted"
+      },
+      "observed_work_tool_intervals_overlap": true,
+      "client_cost_usd_estimate_sum": 0.37391
+    }
+  ],
+  "scope_note": "Task transport and real tests verified; task authority is model policy, not an egress sandbox. Permission denials and repeated checks remain an efficiency/behavior limitation. Raw result num_turns differs from agentic API rounds. Cost estimates cover seven trial sessions only, excluding setup, smoke and independent review; not a billing total or savings claim."
+}

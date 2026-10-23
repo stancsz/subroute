@@ -149,11 +149,19 @@ async def _stop_runners(processes, jobs):
             await asyncio.to_thread(process.wait, 3)
 
 
-async def verify_live(url, operator_key, machine_keys, scratch, compose):
+def failure_causes(exc):
+    """Keep actionable causes when SDK task groups wrap a live-check failure."""
+    if isinstance(exc, BaseExceptionGroup):
+        return [cause for child in exc.exceptions for cause in failure_causes(child)]
+    return [type(exc).__name__ + ": " + str(exc)]
+
+
+async def verify_live(url, operator_key, machine_keys, scratch, compose, start_runner=None):
     processes, jobs, observed = [], [], {}
     try:
         async with asyncio.timeout(LIVE_DEADLINE_SECONDS):
-            return await _verify_live(url, operator_key, machine_keys, scratch, compose, processes, jobs, observed)
+            return await _verify_live(url, operator_key, machine_keys, scratch, compose, processes, jobs, observed,
+                                      start_runner)
     except BaseException as exc:
         tool_history = {}
         for path in scratch.rglob("*.jsonl"):
@@ -172,6 +180,7 @@ async def verify_live(url, operator_key, machine_keys, scratch, compose):
                     continue
             tool_history[path.stem] = events[-80:]
         data = json.dumps({"mode": "live", "error": type(exc).__name__ + ": " + str(exc),
+                           "errors": failure_causes(exc),
                            "observed_tasks": list(observed.values()), "tool_history": tool_history, "accepted": False}, ensure_ascii=False)
         for key in [operator_key, *machine_keys.values(), os.environ.get("GATEWAY_MASTER_KEY", "")]:
             if key:
@@ -191,7 +200,8 @@ async def _capture_live_tasks(call, task_ids, observed):
             pass  # Keep any earlier full observation if the hub became unreachable.
 
 
-async def _verify_live(url, operator_key, machine_keys, scratch, compose, processes, jobs, observed):
+async def _verify_live(url, operator_key, machine_keys, scratch, compose, processes, jobs, observed,
+                       start_runner=None):
     inference_key = os.environ.get("GATEWAY_MASTER_KEY")
     if not inference_key:
         raise RuntimeError("GATEWAY_MASTER_KEY is required in the process environment")
@@ -212,13 +222,13 @@ async def _verify_live(url, operator_key, machine_keys, scratch, compose, proces
 
                 goal = await call("goal_create", objective="Same-host live Subroute Relay acceptance with real Claude Code sessions",
                     acceptance="Two isolated Python modules pass unittest; separate real review sessions inspect and run tests; parent independently reruns tests; all four task receipts are successful",
-                    authority="Only isolated scratch workspaces; create one tiny Python module and unittest file per workspace. No network, publishing, global settings, or writes outside assigned workspace.", max_tasks=4)
+                    authority="Only isolated scratch workspaces; create one tiny Python module and unittest file per workspace. Relay and configured LiteLLM inference transport are permitted. Agent tools must not make network requests. No publishing, global settings, or writes outside assigned workspace.", max_tasks=4)
                 nodes, work_tasks, review_tasks, workspaces = list(machine_keys), [], [], []
                 for node in nodes:
                     workspace = scratch / ("workspace-" + node)
                     workspace.mkdir()
                     (workspace / "GOAL.md").write_text("# Live Relay task\nImplement labels.py and test_labels.py. normalize_labels strips whitespace, casefolds for deduplication, preserves first spelling and order, and ignores empty labels. Run python -m unittest -v. Authority: these two files and local tests only. No publishing or other project work. The orchestrator owns separate review.\n", encoding="utf-8")
-                    (workspace / "AGENTS.md").write_text("The active outcome is in the GOAL.md in this directory and in the assignment. This is an isolated validation workspace. Do not adopt the gateway repository's unrelated parent goals. Northstar's entrypoint is already in the prompt; do not reread it or load unrelated skills. After reading the local goal, implement the two requested files and run their tests. Review sessions inspect and test without repairing.\n", encoding="utf-8")
+                    (workspace / "AGENTS.md").write_text("The active outcome is in the GOAL.md in this directory and in the assignment. This is an isolated validation workspace. Do not adopt the gateway repository's unrelated parent goals. The coordinator owns Northstar policy and separate review. Read the local goal, implement the two requested files, and run their tests. Review sessions inspect and test without repairing. At terminal handoff, leave a concise evidence checkpoint.\n", encoding="utf-8")
                     workspaces.append(workspace)
                     work = await call("task_create", goal_id=goal["id"], node=node, workspace="live", timeout_seconds=LIVE_TASK_TIMEOUT_SECONDS, max_turns=LIVE_MAX_TURNS, max_attempts=1,
                         instruction="Implement labels.py with normalize_labels(values): strip surrounding whitespace, casefold for deduplication, preserve first spelling and order, and ignore empty labels. Add test_labels.py with unittest cases for whitespace, case-insensitive duplicates, preserved spelling/order, and empty values. Run python -m unittest -v. Report files and actual test output. No other files.")
@@ -234,11 +244,14 @@ async def _verify_live(url, operator_key, machine_keys, scratch, compose, proces
                     runner_env = dict(os.environ, RELAY_NODE_KEY=key, GATEWAY_MASTER_KEY=inference_key)
                     runner_env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + runner_env.get("PATH", "")
                     runner_env.pop("CLAUDECODE", None)
-                    process = subprocess.Popen([sys.executable, "-m", "subroute.relay.runner", "--config", str(scratch / (node + ".json"))],
-                        cwd=Path(__file__).resolve().parents[1], env=runner_env, stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-                        start_new_session=os.name != "nt")
+                    command = [sys.executable, "-m", "subroute.relay.runner", "--config",
+                               str(scratch / (node + ".json"))]
+                    kwargs = {"cwd": Path(__file__).resolve().parents[1], "env": runner_env,
+                              "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+                              "stderr": subprocess.DEVNULL,
+                              "creationflags": subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                              "start_new_session": os.name != "nt"}
+                    process = (start_runner or subprocess.Popen)(command, **kwargs)
                     processes.append(process)
                     if os.name == "nt":
                         jobs.append(WindowsJob(process.pid))

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -574,3 +575,88 @@ def test_live_failure_capture_preserves_full_receipts_from_both_nodes():
     assert {observed[k]["node"] for k in ("a", "b")} == {"node-a", "node-b"}
     assert all(json.loads(observed[k]["result"])["usage"] == {"input_tokens": 123} for k in ("a", "b"))
     assert observed["offline"]["result"] == "earlier full observation"
+
+
+def docker_live_verifier():
+    spec = importlib.util.spec_from_file_location("relay_docker_live", Path(__file__).resolve().parents[1] / "scripts/verify_relay_live_docker.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("fail_work", [False, True])
+def test_docker_live_round_launch_contract_restart_and_failure_cleanup(tmp_path, monkeypatch, fail_work):
+    live = docker_live_verifier()
+    monkeypatch.setattr(live, "ROOT", tmp_path)
+    monkeypatch.setattr(live.os, "environ", {"GATEWAY_MASTER_KEY": "inference-fixture"})
+    commands, launches = [], []
+
+    def docker(args, **_kwargs):
+        commands.append(args)
+        status, output = 0, b""
+        if args[:2] == ["volume", "create"]:
+            output = args[-1].encode()
+        elif args[:2] == ["volume", "inspect"]:
+            status = 1
+        return subprocess.CompletedProcess(args, status, stdout=output, stderr=b"")
+
+    monkeypatch.setattr(live, "_docker", docker)
+    monkeypatch.setattr(live.subprocess, "Popen", lambda command, **kwargs: launches.append((command, kwargs)) or object())
+
+    async def work(_url, _operator, keys, scratch, _compose, start_runner):
+        for node, key in keys.items():
+            workspace = scratch / node
+            workspace.mkdir()
+            config_path = scratch / (node + ".json")
+            config_path.write_text(json.dumps({"node": node, "workspaces": {"live": str(workspace)}}))
+            start_runner(["python", "--config", str(config_path)], env={"RELAY_NODE_KEY": key, "GATEWAY_MASTER_KEY": "inference-fixture"})
+            config = json.loads(config_path.read_text())
+            assert config["gateway_url"] == "http://host.docker.internal:4000"
+            assert config["state_dir"] == "/state" and "northstar_path" not in config
+        if fail_work:
+            raise RuntimeError("Deliberate failed live criterion")
+        return {"accepted_tasks": 4, "tasks": [{"usage": {"input_tokens": 1}}] * 4}
+
+    monkeypatch.setattr(live.verify, "verify_live", work)
+    def persisted(_url, _operator, project, _states):
+        assert any(c[-2:] == ["restart", "relay"] for c in commands)
+        assert project.startswith("relay-live-docker-")
+        return {"restart_snapshot_completed": True, "idle_trace_sizes_stable": True}
+    monkeypatch.setattr(live, "_validate_persisted", persisted)
+    result = live._round(1)
+    assert len(launches) == 2
+    assert all("inference-fixture" not in command for command, _kwargs in launches)
+    assert all("--read-only" in command and "/config/runner.json,readonly" in " ".join(command) for command, _kwargs in launches)
+    assert result["cleanup"]["complete"] is True
+    assert any("label=com.docker.compose.project=" in " ".join(c) and c[:2] == ["network", "ls"] for c in commands)
+    assert ("error" in result) is fail_work
+    if not fail_work:
+        assert result["accepted_tasks"] == 4 and result["persistence_and_idle"]["restart_snapshot_completed"]
+    else:
+        assert "Deliberate failed live criterion" in result["error"]
+
+
+def test_docker_live_stops_second_paid_round_after_failed_criterion(monkeypatch):
+    live = docker_live_verifier()
+    monkeypatch.setenv("GATEWAY_MASTER_KEY", "inference-fixture")
+    monkeypatch.setattr(sys, "argv", ["verify_relay_live_docker.py", "--rounds", "2"])
+    rounds = []
+    monkeypatch.setattr(live, "_round", lambda index: rounds.append(index) or {"error": "failed", "cleanup": {"complete": True}})
+    assert live.main() == 1
+    assert rounds == [1]
+
+
+def test_docker_live_cleanup_does_not_pass_with_remaining_network(monkeypatch):
+    live = docker_live_verifier()
+    def docker(args, **_kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout=b"leftover-network" if args[:2] == ["network", "ls"] else b"", stderr=b"")
+    monkeypatch.setattr(live, "_docker", docker)
+    result = live._owned_cleanup("relay-live-docker-fixture", "owner=fixture", {}, [])
+    assert result["complete"] is False
+    assert any("network" in error for error in result["errors"])
+
+
+def test_live_failure_exposes_terminal_cause_through_nested_sdk_groups():
+    verifier = live_verifier()
+    error = ExceptionGroup("outer", [ExceptionGroup("MCP task group", [RuntimeError("Live task terminated: failed")])])
+    assert verifier.failure_causes(error) == ["RuntimeError: Live task terminated: failed"]
