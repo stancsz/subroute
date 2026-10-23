@@ -153,8 +153,8 @@ def test_invalid_or_impossible_output_limits_fail_before_compaction(monkeypatch,
 
 
 def test_missing_output_cap_reserves_provider_headroom():
-    assert AutoContextRecovery.input_target(Router(), {}) == 256_000 - 65_536 - 8192
-    assert AutoContextRecovery.input_target(Router(), {"max_completion_tokens": 100_000}) == 147_808
+    assert AutoContextRecovery.input_target(Router(), {}) == 65_536
+    assert AutoContextRecovery.input_target(Router(), {"max_completion_tokens": 100_000}) == 65_536
 
 
 def test_budget_uses_real_litellm_deployment_metadata_instead_of_model_id_lookup():
@@ -164,7 +164,7 @@ def test_budget_uses_real_litellm_deployment_metadata_instead_of_model_id_lookup
         "model_name": "auto", "model_info": Router.info,
         "litellm_params": {"model": "openai/fixture", "api_key": "test"},
     }])
-    assert AutoContextRecovery.input_target(router, {"max_tokens": 512}) == 196_608
+    assert AutoContextRecovery.input_target(router, {"max_tokens": 512}) == 65_536
 
 
 @pytest.mark.parametrize("content,code", [
@@ -176,6 +176,14 @@ def test_unsafe_content_fails_with_actionable_contract(monkeypatch, caplog, cont
     data = {"model": "auto", "max_tokens": 512,
             "messages": [{"role": "user", "content": content}]}
     before = deepcopy(data)
+    if code == "outbound_context_limit_exceeded":
+        result = run(monkeypatch, data)
+        audit = result["metadata"]["sift"]
+        assert audit["active_user_message_compacted"] is True
+        assert audit["forwarded_tokens"] <= 65_536
+        assert "Sift compacted this active user message" in result["messages"][0]["content"]
+        assert data == before
+        return
     with pytest.raises(HTTPException) as error:
         run(monkeypatch, data)
     assert error.value.status_code == 400
@@ -186,10 +194,10 @@ def test_unsafe_content_fails_with_actionable_contract(monkeypatch, caplog, cont
     assert data == before
 
 
-def test_intake_above_one_million_is_rejected_before_history_scanning(monkeypatch):
+def test_intake_above_four_million_is_rejected_before_history_scanning(monkeypatch):
     class HugeRouter(Router):
         def _count_pre_call_check_tokens(self, **kwargs):
-            return 1_000_001
+            return 4_000_001
 
     with pytest.raises(HTTPException) as error:
         run(monkeypatch, {"model": "auto", "max_tokens": 512, "messages": []}, router=HugeRouter())

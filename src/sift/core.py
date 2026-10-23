@@ -1,7 +1,8 @@
 """Deterministic extractive compaction with an exact caller-owned token budget.
 
-Sift selects quoted evidence from older text. It never summarizes by inventing
-new facts, changes instruction roles, or removes the active user/tool turn.
+Sift selects evidence from older text and can excerpt an oversized active user
+message with an explicit lossy-compaction marker. It never invents facts or
+changes instruction roles.
 """
 
 from __future__ import annotations
@@ -472,16 +473,94 @@ def _summary(candidates: list[_Candidate]) -> dict[str, str]:
     return {"role": "user", "content": "\n".join(lines)}
 
 
+def _compact_active_user_message(
+    message: dict[str, Any], prefix: list[dict[str, Any]], target: int,
+    reserve: int, count_tokens: TokenCounter,
+) -> tuple[dict[str, Any], int] | None:
+    """Excerpt an oversized text-only active user message, disclosing loss."""
+    content = message.get("content")
+    if isinstance(content, str):
+        text, list_content = content, False
+    elif isinstance(content, list) and content and all(
+        isinstance(block, dict) and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+        and block.keys() <= {"type", "text", "cache_control"}
+        for block in content
+    ):
+        text, list_content = "\n".join(block["text"] for block in content), True
+    else:
+        return None
+    if not text.strip():
+        return None
+    available = target - _count(count_tokens, prefix) - reserve
+    if available <= 256:
+        return None
+
+    source = [{"role": "user", "content": text}]
+    options = _linked_candidates(source, text)
+    if not options:
+        return None
+    first = next(_pieces(text), None)
+    if first is None:
+        return None
+    last = first
+    last_index = 0
+    for last_index, last in enumerate(_pieces(text)):
+        pass
+    required = {
+        0: _Candidate(0, 0, "user", first, 0, first),
+        last_index: _Candidate(
+            0, last_index, "user", last, 0, last,
+        ),
+    }
+    marker = (
+        "[Sift compacted this active user message to fit the gateway context budget. "
+        "This is a lossy, incomplete extractive copy; omitted text may contain "
+        "important details. Ask the user if a required detail is missing.]"
+    )
+
+    def build(number: int) -> tuple[dict[str, Any], int, int]:
+        selected = dict(required)
+        selected.update({item.part_index: item for item in options[:number]})
+        excerpts = sorted(selected.values(), key=lambda item: item.part_index)
+        excerpt_text = marker + "\n" + "\n".join(
+            f"[excerpt {item.part_index}] {item.text}" for item in excerpts
+        )
+        output = deepcopy(message)
+        if list_content:
+            block: dict[str, Any] = {"type": "text", "text": excerpt_text}
+            cache_control = next((item.get("cache_control") for item in content
+                                  if "cache_control" in item), None)
+            if cache_control is not None:
+                block["cache_control"] = cache_control
+            output["content"] = [block]
+        else:
+            output["content"] = excerpt_text
+        return output, _count(count_tokens, prefix + [output]), len(excerpts)
+
+    low, high = 0, len(options)
+    best: tuple[dict[str, Any], int] | None = None
+    while low <= high:
+        middle = (low + high) // 2
+        trial, count, excerpt_count = build(middle)
+        if count <= target - reserve:
+            best = (trial, excerpt_count)
+            low = middle + 1
+        else:
+            high = middle - 1
+    return best
+
+
 def compact_messages(
     messages: list[dict[str, Any]], count_tokens: TokenCounter, *,
-    target: int = 24_576, raw_limit: int = 1_000_000,
+    target: int = 24_576, raw_limit: int = 4_000_000,
     protocol: Protocol = "openai",
 ) -> CompactionResult:
     """Compact older text to `target` using the caller's exact token counter.
 
-    The current instructions and active turn are immutable. Up to four recent
-    complete prior turns survive verbatim. Remaining history is selected as
-    quoted, query-aware excerpts; selection is deterministic and CPU-only.
+    Instructions remain exact. An active user message that exceeds the budget
+    can be represented by explicitly marked extractive excerpts. Up to four
+    recent complete prior turns otherwise survive verbatim.
     """
     if type(target) is not int or type(raw_limit) is not int or target <= 0 or raw_limit < target:
         raise CompactionError("invalid target or raw_limit")
@@ -495,6 +574,7 @@ def compact_messages(
             "compacted": False, "input_tokens": raw, "forwarded_tokens": raw,
             "omitted_estimated_tokens": 0, "preserved_recent_turns": 0,
             "preserved_recent_tool_cycles": 0,
+            "active_user_message_compacted": False,
             "selected_excerpts": 0,
         })
     if protocol not in {"openai", "anthropic"}:
@@ -510,15 +590,38 @@ def compact_messages(
                         if _real_user(messages[i], protocol)), -1)
     if latest_user < instruction_end:
         raise CompactionError("no active user turn", code="active_too_large")
+    cycle_starts = [index for index in range(latest_user + 1, len(messages))
+                    if _starts_tool_cycle(messages[index], protocol)]
+    active_user_message_compacted = False
+    active_user_excerpts_selected = 0
+    user_floor = _count(count_tokens, messages[:instruction_end] + [messages[latest_user]])
+    if user_floor >= target - 256:
+        reserve = target // 3 if cycle_starts else 256
+        compacted_user = _compact_active_user_message(
+            messages[latest_user], messages[:instruction_end], target, reserve, count_tokens,
+        )
+        if compacted_user is not None:
+            messages[latest_user], active_user_excerpts_selected = compacted_user
+            active_user_message_compacted = True
     active = messages[:instruction_end] + messages[latest_user:]
     active_count = _count(count_tokens, active)
     active_tool_results_compacted = 0
     active_tool_excerpts_selected = 0
+    if active_user_message_compacted and latest_user == instruction_end:
+        forwarded = _count(count_tokens, messages)
+        if forwarded <= target:
+            return CompactionResult(deepcopy(messages), {
+                "compacted": True, "input_tokens": raw, "forwarded_tokens": forwarded,
+                "omitted_estimated_tokens": max(0, raw - forwarded),
+                "preserved_recent_turns": 0, "preserved_recent_tool_cycles": 0,
+                "active_tool_results_compacted": 0,
+                "active_user_message_compacted": True,
+                "active_user_excerpts_selected": active_user_excerpts_selected,
+                "selected_excerpts": 0, "method": "active_user_extractive",
+            })
     if active_count >= target - 256:
         # Agent clients can issue many tool cycles under one human request. Keep
         # that request and the latest whole tool cycle; older cycles are history.
-        cycle_starts = [index for index in range(latest_user + 1, len(messages))
-                        if _starts_tool_cycle(messages[index], protocol)]
         if not cycle_starts:
             raise CompactionError("active turn and instructions exceed target", code="active_too_large")
         tail_start = cycle_starts[-1]
@@ -703,6 +806,8 @@ def compact_messages(
             "preserved_recent_turns": 0,
             "preserved_recent_tool_cycles": retained_cycles,
             "active_tool_results_compacted": active_tool_results_compacted,
+            "active_user_message_compacted": active_user_message_compacted,
+            "active_user_excerpts_selected": active_user_excerpts_selected,
             "stable_epoch_excerpts": stable_count,
             "selected_excerpts": selected_count,
             "method": "epoch_extract",
@@ -753,6 +858,8 @@ def compact_messages(
         "omitted_estimated_tokens": max(0, raw - forwarded),
         "preserved_recent_turns": retained,
         "preserved_recent_tool_cycles": 0,
+        "active_user_message_compacted": active_user_message_compacted,
+        "active_user_excerpts_selected": active_user_excerpts_selected,
         "selected_excerpts": high,
         "method": "query_aware_extract",
     })

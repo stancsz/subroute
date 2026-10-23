@@ -34,7 +34,7 @@ class AutoContextRecovery(SiftLiteLLMHook):
 
     def __init__(self) -> None:
         # The inherited response hook uses this map to expose Sift's audit.
-        super().__init__({"auto": 204_800}, raw_limit=1_000_000)
+        super().__init__({"auto": 204_800}, raw_limit=4_000_000)
 
     # LiteLLM detects header hooks on the leaf class's __dict__.
     async_post_call_response_headers_hook = SiftLiteLLMHook.async_post_call_response_headers_hook
@@ -61,7 +61,7 @@ class AutoContextRecovery(SiftLiteLLMHook):
             raise HTTPException(400, detail="Requested output leaves no safe context budget")
         # Auto retains its declared model capacity, but target calls have a
         # smaller per-request forwarding budget. Do not alter output limits.
-        return min(target, 32_768)
+        return min(target, 65_536)
 
     async def async_pre_call_hook(self, user_api_key_dict: Any, cache: Any,
                                   data: dict, call_type: str) -> dict | None:
@@ -98,7 +98,7 @@ class QwenContextRecovery(SiftLiteLLMHook):
     def __init__(self) -> None:
         # Native Sift requires an explicit alias map. Configuration tests check
         # it against the authoritative deployment budget in litellm.yaml.
-        super().__init__({"qwen3.8-27b": 32_768}, raw_limit=1_000_000)
+        super().__init__({"qwen3.8-27b": 32_768}, raw_limit=4_000_000)
         # Vendored Sift 0.10.0 hardcodes two permits and exposes no constructor setting.
         # A real four-request probe received two premature Sift-busy responses.
         # Keep native worker/cancellation cleanup; retire this private override
@@ -139,10 +139,10 @@ class QwenContextRecovery(SiftLiteLLMHook):
 
 
 class TargetContextRecovery(SiftLiteLLMHook):
-    """Keep Sift-supported target requests within a per-request 32K budget."""
+    """Keep Sift-supported target requests within a per-request 64K budget."""
 
     def __init__(self) -> None:
-        super().__init__({"target": 32_768}, raw_limit=1_000_000)
+        super().__init__({"target": 65_536}, raw_limit=4_000_000)
 
     async def async_pre_call_hook(self, user_api_key_dict: Any, cache: Any,
                                   data: dict, call_type: str) -> dict | None:
@@ -243,8 +243,8 @@ class TargetContextRecovery(SiftLiteLLMHook):
                 if not already_present:
                     messages.append({"role": "developer", "content": reminder})
 
-        result = await self._compact(router, prepared, call_type=call_type, target=32_768)
-        return _require_sift_budget(result, 32_768)
+        result = await self._compact(router, prepared, call_type=call_type, target=65_536)
+        return _require_sift_budget(result, 65_536)
 
     async def async_post_call_response_headers_hook(
         self, data: dict, user_api_key_dict: Any, response: object,

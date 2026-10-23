@@ -58,7 +58,7 @@ def _countable_tools(tools: Any) -> list[dict[str, Any]] | None:
 
 def compact_proxy_request(
     router: Any, data: dict[str, Any], *, call_type: str,
-    target: int, raw_limit: int = 1_000_000,
+    target: int, raw_limit: int = 4_000_000,
 ) -> dict[str, Any]:
     """Return request messages plus a server-owned Sift audit.
 
@@ -194,7 +194,7 @@ def compact_proxy_request(
 class SiftLiteLLMHook(CustomLogger):
     """LiteLLM Proxy callback for explicitly configured chat model names."""
 
-    def __init__(self, model_targets: Mapping[str, int], *, raw_limit: int = 1_000_000) -> None:
+    def __init__(self, model_targets: Mapping[str, int], *, raw_limit: int = 4_000_000) -> None:
         super().__init__()
         if not model_targets or any(
             not isinstance(name, str) or not name or type(target) is not int or target <= 0
