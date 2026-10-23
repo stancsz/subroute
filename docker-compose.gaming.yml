@@ -1,0 +1,6 @@
+# Gaming coexistence remains unvalidated. See docs/operations/qwen-gpu-only-budget.md.
+# The base file owns model placement, two-slot capacity and RAM limits.
+services:
+  qwen-local:
+    # A manual gaming stop must survive a Docker daemon restart.
+    restart: unless-stopped

@@ -393,6 +393,13 @@ class UsageAccounting(CustomLogger):
         return None
 
     async def async_pre_call_deployment_hook(self, kwargs, call_type):
+        # LiteLLM's web-search interception invokes asearch internally using a
+        # search provider and query, not an LLM model. Search-tool execution is
+        # accounted by LiteLLM's search path and has no provider token receipt
+        # for this model-usage ledger to create.
+        call = getattr(call_type, "value", call_type)
+        if call in {"search", "asearch"}:
+            return kwargs
         trace = trace_context.get() or local_trace()
         metadata = kwargs.get("litellm_metadata") or kwargs.get("metadata") or {}
         role = role_context.get() or trace.role

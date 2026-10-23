@@ -15,12 +15,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.llms.custom_llm import CustomLLMError
 from litellm.litellm_core_utils.core_helpers import get_or_create_metadata_bucket, get_metadata_variable_name_from_kwargs
 from litellm.proxy.proxy_server import app
-from pydantic import BaseModel, ValidationError
+from litellm.proxy.auth.user_api_key_auth import UserAPIKeyAuth, user_api_key_auth
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from subroute.ui_control import register_ui_routes, source_configuration
 
 
@@ -28,16 +29,84 @@ RoutingMode = Literal["alias", "force", "off"]
 AdvisorTrigger = Literal["adaptive"]
 AdvisorSensitivity = Literal["conservative", "balanced", "frequent"]
 AdvisorClassifier = Literal["ranked"]
+CodexSearchResponseLength = Literal["short", "medium", "long"]
+# Small monotonic per-query bounds: concise results for short, default-like
+# coverage for medium, and a still-bounded larger set for long.
+CODEX_SEARCH_MAX_RESULTS = {"short": 5, "medium": 10, "long": 20}
 VIRTUAL_ALIASES = frozenset({"default", "auto"})
 DEFAULT_TARGET_MODEL = "codex-luna"
+FALLBACK_CALL_TYPES = frozenset({
+    "completion", "acompletion", "responses", "aresponses",
+    "anthropic_messages", "aanthropic_messages",
+})
+MEDIA_CONTENT_TYPES = frozenset({
+    "image", "image_url", "input_image", "audio", "audio_url", "input_audio",
+    "video", "video_url", "input_video", "file", "input_file",
+})
+MEDIA_CONTENT_KEYS = frozenset({
+    "image_url", "input_image", "audio_url", "input_audio", "video_url",
+    "input_video", "file_id", "file_data",
+})
 RETIRED_MODEL_ALIASES = {
     "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
     "codex-terra": "codex-subscription", "codex-reserve": "codex-luna",
 }
 FAILOVER_ADVISOR_MODELS = frozenset({"gemini-subscription", "codex-gpt-6.1-sol-advisor"})
-LOCKED_ADVISOR_MODEL_ENV = "SUBROUTE_LOCKED_ADVISOR_MODEL"
 ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)
+
+
+def _fallback_eligible(data: dict[str, Any], call_type: str) -> bool:
+    """Restrict the generic text-model chain to text-only chat protocols."""
+    if call_type not in FALLBACK_CALL_TYPES:
+        return False
+    if data.get("model") in {
+        "minimax-tts", "mimo-v2.5-asr", "mimo-v2.5-tts",
+        "mimo-v2.5-tts-voiceclone", "mimo-v2.5-tts-voicedesign",
+    }:
+        return False
+
+    def contains_media(value: Any) -> bool:
+        if isinstance(value, dict):
+            if value.get("type") in MEDIA_CONTENT_TYPES or MEDIA_CONTENT_KEYS.intersection(value):
+                return True
+            return any(contains_media(item) for item in value.values())
+        if isinstance(value, list):
+            return any(contains_media(item) for item in value)
+        return False
+
+    return not contains_media(data.get("messages")) and not contains_media(data.get("input"))
+
+
+def _requested_model_name(request_data: dict[str, Any]) -> str | None:
+    metadata = request_data.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = request_data.get("litellm_metadata")
+    if isinstance(metadata, dict):
+        routing = metadata.get("routing")
+        if isinstance(routing, dict) and isinstance(routing.get("requested_model"), str):
+            return routing["requested_model"]
+    requested = request_data.get("model")
+    return requested if isinstance(requested, str) else None
+
+
+def _stamp_requested_model(response: Any, requested_model: str | None) -> None:
+    """Keep fallback provider resolution out of the client-visible model field."""
+    if not requested_model:
+        return
+    if isinstance(response, dict):
+        if "model" in response:
+            response["model"] = requested_model
+        nested = response.get("response")
+    else:
+        if hasattr(response, "model"):
+            response.model = requested_model
+        nested = getattr(response, "response", None)
+    if isinstance(nested, dict):
+        if "model" in nested:
+            nested["model"] = requested_model
+    elif nested is not None and hasattr(nested, "model"):
+        nested.model = requested_model
 
 
 @dataclass(frozen=True)
@@ -77,9 +146,154 @@ class RoutingUpdate(BaseModel):
 
 class AdvisorUpdate(BaseModel):
     model_config = {"extra": "forbid"}
-    advisor_model: str | None
+    advisor_model: str
     reasoning_effort: str | None = None
     advisor_sensitivity: AdvisorSensitivity | None = None
+
+
+class CodexSearchQuery(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    q: str = Field(min_length=1, max_length=2048)
+    recency: int | None = Field(default=None, ge=0)
+    domains: list[str] | None = None
+
+    @field_validator("q")
+    @classmethod
+    def query_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("search query must not be blank")
+        return value
+
+
+class CodexSearchCommands(BaseModel):
+    model_config = {"extra": "allow"}
+
+    search_query: list[CodexSearchQuery] | None = None
+    response_length: CodexSearchResponseLength | None = None
+
+
+class CodexSearchRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    id: str
+    model: str
+    reasoning: dict[str, Any] | None = None
+    commands: CodexSearchCommands | None = None
+    input: str | list[dict[str, Any]] | None = None
+    settings: dict[str, Any] | None = None
+    max_output_tokens: int | None = None
+
+
+def _codex_search_error(status_code: int, message: str, code: str) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={
+            "error": {
+                "message": message,
+                "type": "invalid_request_error" if status_code < 500 else "server_error",
+                "param": "commands",
+                "code": code,
+            }
+        },
+    )
+
+
+async def codex_search(
+    payload: CodexSearchRequest,
+    _user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+) -> dict[str, Any]:
+    """Implement Codex CLI web search through LiteLLM's configured SearXNG tool."""
+    commands = payload.commands
+    if commands is None or not commands.model_fields_set:
+        raise _codex_search_error(400, "At least one search command is required.", "missing_commands")
+
+    unsupported = [name for name, value in commands.model_extra.items() if value is not None]
+    if unsupported:
+        raise _codex_search_error(
+            400, f"Unsupported Codex search command: {unsupported[0]}", "unsupported_operation"
+        )
+    queries = commands.search_query
+    if not queries:
+        raise _codex_search_error(400, "Only commands.search_query is supported.", "unsupported_operation")
+
+    if any(query.recency is not None for query in queries):
+        raise _codex_search_error(400, "Search recency filters are not supported.", "unsupported_operation")
+
+    if len(queries) > 8:
+        raise _codex_search_error(400, "At most 8 search queries are supported.", "invalid_request")
+
+    try:
+        import litellm
+        from litellm.proxy.proxy_server import llm_router
+
+        configured_tool = next(
+            (
+                tool for tool in getattr(llm_router, "search_tools", [])
+                if tool.get("search_tool_name") == "subroute-searxng"
+            ),
+            None,
+        )
+        if configured_tool is None:
+            raise LookupError("configured search tool is unavailable")
+        search_params = dict(configured_tool.get("litellm_params") or {})
+        provider = search_params.pop("search_provider", None)
+        if provider != "searxng":
+            raise LookupError("configured search provider is unavailable")
+
+        results = []
+        for query in queries:
+            # Keep the existing provider default when the CLI omits this
+            # field; explicit lengths bound results monotonically per query.
+            max_results = (
+                CODEX_SEARCH_MAX_RESULTS[commands.response_length]
+                if commands.response_length is not None
+                else None
+            )
+            search_options = dict(search_params)
+            if max_results is not None:
+                search_options["max_results"] = max_results
+            response = await litellm.asearch(
+                query=query.q,
+                search_provider=provider,
+                **search_options,
+            )
+            query_result_count = 0
+            for result in response.results:
+                item = result.model_dump(exclude_none=True)
+                # Codex domains are an allow-list. Apply it locally because
+                # LiteLLM's SearXNG adapter does not implement domain filters.
+                if query.domains:
+                    from urllib.parse import urlsplit
+
+                    host = urlsplit(item.get("url", "")).hostname or ""
+                    if not any(
+                        host == domain or host.endswith(f".{domain}")
+                        for domain in query.domains
+                    ):
+                        continue
+                results.append(item)
+                query_result_count += 1
+                if max_results is not None and query_result_count >= max_results:
+                    break
+    except Exception as exc:
+        logger.warning("Codex search failed (%s)", type(exc).__name__)
+        raise _codex_search_error(502, "Configured web search failed.", "search_failed") from exc
+
+    if not results:
+        # An empty aggregate is a failed search, not a successful one: Codex
+        # clients would otherwise treat "no evidence" as a verified answer.
+        logger.warning("Codex search returned no usable results")
+        raise _codex_search_error(
+            502, "Configured web search returned no usable results.", "empty_results"
+        )
+
+    output = "\n".join(
+        f"{index}. {item.get('title', '')}\n{item.get('url', '')}\n{item.get('snippet', '')}"
+        for index, item in enumerate(results, start=1)
+    )
+    return {"output": output, "results": results}
 
 
 def _load_choices(config_path: Path) -> tuple[ModelChoice, ...]:
@@ -136,12 +350,6 @@ class RoutingControlPlane:
         self.choices = _load_choices(config_path)
         self.allowed_models = frozenset(choice.model_id for choice in self.choices if choice.selectable)
         self.advisor_models = frozenset(choice.model_id for choice in self.choices if choice.advisor_selectable)
-        self.locked_advisor_model = os.getenv(LOCKED_ADVISOR_MODEL_ENV) or None
-        if self.locked_advisor_model and self.locked_advisor_model not in self.advisor_models:
-            raise ValueError(
-                f"{LOCKED_ADVISOR_MODEL_ENV} is not a configured advisor model: "
-                f"{self.locked_advisor_model!r}"
-            )
         self._state = self._load_or_create_state()
 
     def _load_or_create_state(self) -> RoutingState:
@@ -153,7 +361,7 @@ class RoutingControlPlane:
             )
             initial_model = os.getenv("ACTIVE_MODEL", fallback_model)
             initial_model = RETIRED_MODEL_ALIASES.get(initial_model, initial_model)
-            advisor_model = self.locked_advisor_model or os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
+            advisor_model = os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
             state = RoutingState(
                 active_model=initial_model,
                 advisor_model=advisor_model,
@@ -165,8 +373,10 @@ class RoutingControlPlane:
             self._write_atomic(state)
             return state
         raw = json.loads(self.state_path.read_text(encoding="utf-8"))
-        saved_advisor_model = raw.get("advisor_model", os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor"))
-        advisor_model = self.locked_advisor_model or saved_advisor_model
+        saved_advisor_model = raw.get("advisor_model")
+        advisor_model = saved_advisor_model or os.getenv(
+            "ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor"
+        )
         state = RoutingState(
             active_model=raw["active_model"],
             mode=raw.get("mode", "alias"),
@@ -220,10 +430,10 @@ class RoutingControlPlane:
         active_choice = next(choice for choice in self.choices if choice.model_id == state.active_model)
         if state.fast_mode and active_choice.source_id != "openai-subscription":
             raise ValueError("Fast mode requires an OpenAI subscription target")
-        if state.advisor_model is not None and state.advisor_model not in self.advisor_models:
+        if state.advisor_model is None:
+            raise ValueError("an advisor model must remain selected")
+        if state.advisor_model not in self.advisor_models:
             raise ValueError(f"advisor model is not selectable: {state.advisor_model!r}")
-        if self.locked_advisor_model and state.advisor_model != self.locked_advisor_model:
-            raise ValueError(f"advisor model is locked to {self.locked_advisor_model!r}")
         if state.advisor_trigger != "adaptive":
             raise ValueError(f"invalid advisor trigger: {state.advisor_trigger!r}")
         if state.advisor_sensitivity not in {"conservative", "balanced", "frequent"}:
@@ -276,11 +486,9 @@ class RoutingControlPlane:
             self._state = candidate
             return candidate
 
-    def update_advisor(self, advisor_model: str | None, **settings: Any) -> RoutingState:
+    def update_advisor(self, advisor_model: str, **settings: Any) -> RoutingState:
         if settings.keys() - {"reasoning_effort", "advisor_sensitivity"}:
             raise ValueError("Advisor selection uses learned ranking; only frequency and reasoning effort can be changed")
-        if self.locked_advisor_model and advisor_model != self.locked_advisor_model:
-            raise ValueError(f"advisor model is locked to {self.locked_advisor_model!r}")
         with self._lock:
             default_effort = "low" if advisor_model in FAILOVER_ADVISOR_MODELS else None
             candidate = replace(
@@ -302,7 +510,9 @@ class RoutingControlPlane:
 
     def resolve(self, requested_model: str | None) -> tuple[str | None, RoutingState]:
         state = self.snapshot()
-        # `default` is an explicit request for the saved target, regardless of alias policy.
+        # `default` is an explicit client request for the saved target, even
+        # when the ordinary alias policy is off. It lets clients follow the
+        # control desk without synchronizing model IDs themselves.
         if requested_model == "default":
             return state.active_model, state
         # `auto` is a LiteLLM model group with an explicit provider fallback
@@ -346,8 +556,11 @@ class DynamicRoutingPlugin(CustomLogger):
         # Preserve already-emitted items only on our hosted-image path.
         context = request_data.get("gateway_image_request") or {}
         repair = context.get("protocol") in {"responses", "aresponses"}
+        requested_model = _requested_model_name(request_data)
         completed_items = {}
+        _stamp_requested_model(response, requested_model)
         async for event in repair_thinking_starts(response):
+            _stamp_requested_model(event, requested_model)
             if repair:
                 kind = getattr(event, "type", None)
                 if kind == "response.output_item.done":
@@ -359,6 +572,12 @@ class DynamicRoutingPlugin(CustomLogger):
                     ids = {item.get("id") if isinstance(item, dict) else item.id for item in output}
                     event.response.output = [item for key, item in completed_items.items() if key not in ids] + list(output)
             yield event
+
+    async def async_post_call_success_hook(self, data, user_api_key_dict, response):
+        # LiteLLM normally reports the resolved fallback model. Keep the
+        # client-visible model stable; fallback attempt metadata remains intact.
+        _stamp_requested_model(response, _requested_model_name(data))
+        return response
 
     async def async_pre_call_hook(
         self,
@@ -375,6 +594,11 @@ class DynamicRoutingPlugin(CustomLogger):
         if call_type in {"aresponses", "responses"}:
             data.setdefault("litellm_metadata", {})
         _, metadata = get_or_create_metadata_bucket(data)
+        if not _fallback_eligible(data, call_type):
+            # The global chain is for text-only chat. Preserve media and
+            # specialized endpoint semantics by keeping those requests local
+            # to their explicitly selected provider route.
+            data["disable_fallbacks"] = True
         # The accounting callback owns the root ID. Never accept caller markers.
         from subroute.plugins.advisor_plugin import advisor_plugin_instance, ADVISOR_CALL_TYPES
         from subroute.usage_accounting import trace_context
@@ -385,8 +609,6 @@ class DynamicRoutingPlugin(CustomLogger):
             request_id = trace.request_id if trace is not None else str(uuid.uuid4())
             metadata["_gateway_analytics_id"] = request_id
             metadata["_gateway_analytics_ok"] = await advisor_plugin_instance.analytics.record(request_id)
-        if requested_model == "current":
-            raise HTTPException(status_code=404, detail="unknown model")
         from subroute.plugins.image_intent import image_request_context
         from subroute.audio import audio_route
 
@@ -395,6 +617,7 @@ class DynamicRoutingPlugin(CustomLogger):
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
         if has_audio:
+            data["disable_fallbacks"] = True
             if requested_model not in self.control_plane.allowed_models | VIRTUAL_ALIASES:
                 raise HTTPException(404, detail="unknown model")
             _, metadata = get_or_create_metadata_bucket(data)
@@ -422,6 +645,7 @@ class DynamicRoutingPlugin(CustomLogger):
             or (call_type in {"completion", "acompletion"} and requested_model in mimo_tts_models)
         )
         if is_speech_output:
+            data["disable_fallbacks"] = True
             _, metadata = get_or_create_metadata_bucket(data)
             state = self.control_plane.snapshot()
             metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
@@ -438,6 +662,7 @@ class DynamicRoutingPlugin(CustomLogger):
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
         if image_context is not None:
+            data["disable_fallbacks"] = True
             _, metadata = get_or_create_metadata_bucket(data)
             state = self.control_plane.snapshot()
             metadata["gateway_policy"] = asdict(state)
@@ -451,6 +676,7 @@ class DynamicRoutingPlugin(CustomLogger):
             data["gateway_image_request"] = image_context
             return data
         if call_type in {"image_generation", "aimage_generation"}:
+            data["disable_fallbacks"] = True
             from subroute.handlers.codex_images import IMAGE_MODEL, image_options
 
             try:
@@ -632,12 +858,7 @@ async def routing_options(request: Request) -> dict[str, Any]:
     return {
         "state": asdict(control_plane.snapshot()),
         "models": [choice for choice in choices if choice["selectable"]],
-        "advisor_models": [
-            choice for choice in choices
-            if choice["advisor_selectable"]
-            and (not control_plane.locked_advisor_model or choice["model_id"] == control_plane.locked_advisor_model)
-        ],
-        "advisor_model_locked": control_plane.locked_advisor_model is not None,
+        "advisor_models": [choice for choice in choices if choice["advisor_selectable"]],
         "client_api_key_required": bool(os.getenv("GATEWAY_MASTER_KEY")),
     }
 
@@ -734,6 +955,31 @@ def _register_routes() -> None:
 
 
 _register_routes()
+# LiteLLM 1.103.0 registers its generic public routes before custom callbacks
+# load. Starlette matches in order, so register this exact Codex-only route
+# before LiteLLM's catch-all routes while keeping normal auth dependencies.
+if not any(
+    getattr(route, "path", None) == "/v1/alpha/search"
+    and "POST" in (getattr(route, "methods", None) or set())
+    for route in app.router.routes
+):
+    app.add_api_route(
+        "/v1/alpha/search",
+        codex_search,
+        methods=["POST"],
+        dependencies=[Depends(user_api_key_auth)],
+        include_in_schema=False,
+    )
+    search_route = app.router.routes.pop()
+    catch_all_index = next(
+        (
+            index
+            for index, route in enumerate(app.router.routes)
+            if getattr(route, "path", "").endswith("{path:path}")
+        ),
+        len(app.router.routes),
+    )
+    app.router.routes.insert(catch_all_index, search_route)
 register_ui_routes(app)
 from subroute.usage_accounting import install_receipt_routes
 install_receipt_routes(app)

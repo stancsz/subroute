@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "subroute-search": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--no-cache",
+        "--no-sync",
+        "--project",
+        "${CLAUDE_PROJECT_DIR:-.}",
+        "--extra",
+        "search",
+        "python",
+        "-m",
+        "subroute.search_mcp"
+      ],
+      "env": {
+        "GATEWAY_MASTER_KEY": "${GATEWAY_MASTER_KEY}"
+      }
+    }
+  }
+}

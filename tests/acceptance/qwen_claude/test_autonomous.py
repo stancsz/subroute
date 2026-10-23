@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import subprocess
@@ -17,7 +18,40 @@ from unittest import mock
 import autonomous
 import run as dispatch
 import tool_scope_guard
+import tool_result_guard
 import template_checkpoint
+
+ROUTE_LOGS = (
+    "completion() model= qwen3.8-27b\n"
+    "sift_request protocol=anthropic_messages compacted=false active_tool_results_compacted=0 "
+    "input_tokens=100 forwarded_tokens=100 target=32768 output_limit=4096\n"
+)
+
+
+def write_test_result_cap_receipts(transcript_path: Path, events: list[dict]) -> None:
+    """Emulate the PostToolUse hook for CLI event fixtures with small outputs."""
+    settings = json.loads(transcript_path.with_suffix(".settings.json").read_text(encoding="utf-8"))
+    hooks = settings.get("hooks", {}).get("PostToolUse", [])
+    if not hooks:
+        return
+    scope_path = Path(hooks[0]["hooks"][0]["args"][1])
+    scope = json.loads(scope_path.read_text(encoding="utf-8"))
+    audit_path = Path(scope["result_audit_path"])
+    tool_ids = {block.get("id"): block.get("name") for event in events if event.get("type") == "assistant"
+                for block in autonomous.message_blocks(event)
+                if block.get("type") == "tool_use" and block.get("name") in {"Read", "Grep"}}
+    with audit_path.open("a", encoding="utf-8") as audit_file:
+        for event in events:
+            if event.get("type") != "user":
+                continue
+            for block in autonomous.message_blocks(event):
+                if block.get("type") != "tool_result" or block.get("tool_use_id") not in tool_ids:
+                    continue
+                size = len(json.dumps(block.get("content", ""), ensure_ascii=False,
+                                      separators=(",", ":")))
+                audit_file.write(json.dumps({"tool_use_id": block["tool_use_id"],
+                                             "tool": tool_ids[block["tool_use_id"]], "changed": False,
+                                             "original_chars": size, "delivered_chars": size}) + "\n")
 
 
 class AutonomousPlanTests(unittest.TestCase):
@@ -121,6 +155,37 @@ class AutonomousPlanTests(unittest.TestCase):
                            "files": ["test/new-feature.test.cjs"], "depends_on": [], "checks": []}]}
         with self.assertRaisesRegex(ValueError, "test-only"):
             autonomous.validate_plan(plan, self.workspace)
+
+    def test_allows_test_only_step_only_when_caller_explicitly_authorizes_it(self):
+        plan = {"steps": [{"id": "step-test-only", "title": "Add regression test",
+                           "task": "Add the requested regression coverage",
+                           "files": ["test/new-feature.test.cjs"], "depends_on": [], "checks": []}]}
+        validated = autonomous.validate_plan(
+            plan, self.workspace, test_only_paths=["test/new-feature.test.cjs"])
+        self.assertEqual(validated["steps"][0]["files"], ["test/new-feature.test.cjs"])
+        with self.assertRaisesRegex(ValueError, "test-only path allowlist"):
+            autonomous.validate_plan(
+                plan, self.workspace, test_only_paths=["test/another-test.test.cjs"])
+
+    def test_test_only_change_requires_non_test_progress_or_exact_caller_allowlist(self):
+        self.assertFalse(autonomous.step_changes_match_mode(["test/test_app.py"], []))
+        self.assertTrue(autonomous.step_changes_match_mode(
+            ["test/test_app.py"], ["test/test_app.py"]))
+        self.assertFalse(autonomous.step_changes_match_mode(
+            ["test/test_app.py"], ["test/other_test.py"]))
+        self.assertTrue(autonomous.step_changes_match_mode(
+            ["src/app.py", "test/test_app.py"], []))
+
+    def test_recognizes_common_test_filename_conventions(self):
+        for path in ("test_appointment.py", "testbooking.py", "appointment_test.py",
+                     "booking_spec.rb",
+                     "booking_test.go", "AppointmentTest.java", "appointment.spec.ts",
+                     "testAppointment.js", "spec/ordinary-name.rb"):
+            with self.subTest(path=path):
+                self.assertTrue(autonomous.is_test_path(path))
+        for path in ("src/latest-report.js", "src/test-data.js"):
+            with self.subTest(path=path):
+                self.assertFalse(autonomous.is_test_path(path))
 
     def test_requires_every_user_requirement_to_be_covered_by_plan(self):
         requirements = [{"id": "req-domain", "acceptance": "Replay is idempotent", "validator_indices": [0], "step_validator_indices": [0]},
@@ -229,18 +294,182 @@ class AutonomousPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unique and read-only"):
             autonomous.validate_plan(plan, self.workspace)
         plan["steps"][0]["files"] = ["src/app.py"]
+        plan["steps"][0]["reference_paths"] = ["test/test_app.py", "test/test_app.py"]
+        with self.assertRaisesRegex(ValueError, "unique and read-only"):
+            autonomous.validate_plan(plan, self.workspace)
         plan["steps"][0]["reference_paths"] = ["src/missing.js"]
         with self.assertRaisesRegex(ValueError, "references missing files"):
             autonomous.validate_plan(plan, self.workspace)
 
+    def test_plan_allows_negative_change_verb_near_read_only_reference(self):
+        plan = {"steps": [{"id": "step-ref", "title": "Update app", "task":
+                           "Edit only src/app.py. Read test/test_app.py to understand the assertion, "
+                           "but do not modify it.",
+                           "files": ["src/app.py"], "reference_paths": ["test/test_app.py"],
+                           "depends_on": [], "checks": [
+                               "Update src/app.py; keep test/test_app.py unchanged."], "covers": []}]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["test/test_app.py"])
+
+    def test_plan_allows_explicit_do_not_edit_reference_in_positive_task_clause(self):
+        (self.workspace / "src" / "domain.js").write_text("module.exports = {};\n", encoding="utf-8")
+        (self.workspace / "src" / "other.js").write_text("module.exports = {};\n", encoding="utf-8")
+        plan = {"steps": [{"id": "step-ref", "title": "Add owner controls",
+                           "task": ("Add the owner-facing route using src/domain.js as a read-only reference "
+                                    "(do not edit src/other.js or src/domain.js)."),
+                           "files": ["src/app.py"], "reference_paths": ["src/domain.js", "src/other.js"],
+                           "depends_on": [], "checks": [], "covers": []}]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["src/domain.js", "src/other.js"])
+
+    def test_plan_allows_read_only_acceptance_test_named_as_validation_target(self):
+        (self.workspace / "test" / "test_app.py").write_text("assert True\n", encoding="utf-8")
+        plan = {"steps": [{"id": "step-implementation", "title": "Update app",
+                           "task": "Update src/app.py and make test/test_app.py pass without editing it.",
+                           "files": ["src/app.py"], "reference_paths": ["test/test_app.py"],
+                           "depends_on": [], "checks": [], "covers": []}]}
+        normalized = autonomous.validate_plan(
+            plan, self.workspace, read_only_paths=["test/test_app.py"])
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["test/test_app.py"])
+
+    def test_plan_rejects_indirect_edit_target_of_read_only_reference(self):
+        (self.workspace / "src" / "domain.js").write_text("module.exports = {};\n", encoding="utf-8")
+        for task in (
+            "Read src/domain.js. Update it to expose the new option.",
+            "Update the helper. Its file is src/domain.js.",
+            "Update the eligibility helper. Its file is src/domain.js.",
+            "Update the helper logic. Its file is src/domain.js.",
+            "Update the eligibility API. Its source file is src/domain.js.",
+        ):
+            with self.subTest(task=task):
+                plan = {"steps": [{"id": "step-ref", "title": "Update route", "task": task,
+                                   "files": ["src/app.py"], "reference_paths": ["src/domain.js"],
+                                   "depends_on": [], "checks": [], "covers": []}]}
+                with self.assertRaisesRegex(ValueError, "change target"):
+                    autonomous.validate_plan(plan, self.workspace)
+
+    def test_plan_allows_read_only_reference_explicitly_reused_by_writable_page(self):
+        (self.workspace / "views").mkdir(exist_ok=True)
+        (self.workspace / "views" / "page.ejs").write_text("<main></main>\n", encoding="utf-8")
+        (self.workspace / "views" / "partial.ejs").write_text("<div></div>\n", encoding="utf-8")
+        plan = {"steps": [{
+            "id": "step-page", "title": "Update the booking page",
+            "task": "Update views/page.ejs (reusing views/partial.ejs and existing markup conventions).",
+            "files": ["views/page.ejs"], "reference_paths": ["views/partial.ejs"],
+            "depends_on": [], "checks": [], "covers": [],
+        }]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["views/partial.ejs"])
+
+    def test_plan_allows_read_only_reference_named_as_inspection_excerpt(self):
+        (self.workspace / "test" / "test_app.py").write_text("assert True\\n", encoding="utf-8")
+        (self.workspace / "src" / "domain.js").write_text("module.exports = {};\\n", encoding="utf-8")
+        plan = {"steps": [{
+            "id": "step-test", "title": "Add exact duration acceptance",
+            "task": ("Add a focused assertion to test/test_app.py after inspecting the relevant excerpts of "
+                     "src/domain.js (availability API and returned slot fields)."),
+            "files": ["test/test_app.py"], "reference_paths": ["src/domain.js"],
+            "depends_on": [], "checks": [], "covers": [],
+        }]}
+        normalized = autonomous.validate_plan(plan, self.workspace, test_only_paths=["test/test_app.py"])
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["src/domain.js"])
+
+    def test_plan_allows_implementation_per_read_only_acceptance_contract(self):
+        (self.workspace / "src" / "app.py").write_text("def app(): pass\n", encoding="utf-8")
+        (self.workspace / "test" / "booking-addons.acceptance.md").parent.mkdir(exist_ok=True)
+        (self.workspace / "test" / "booking-addons.acceptance.md").write_text(
+            "# Read-only contract\n", encoding="utf-8")
+        plan = {"steps": [{
+            "id": "step-domain", "title": "Implement domain rules",
+            "task": "Implement domain behavior per the immutable test/booking-addons.acceptance.md contract.",
+            "files": ["src/app.py"],
+            "reference_paths": ["test/booking-addons.acceptance.md"],
+            "depends_on": [], "checks": [], "covers": [],
+        }]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"],
+                         ["test/booking-addons.acceptance.md"])
+
+    def test_plan_still_rejects_read_only_reference_explicitly_named_as_edit_target(self):
+        (self.workspace / "views").mkdir(exist_ok=True)
+        (self.workspace / "views" / "page.ejs").write_text("<main></main>\n", encoding="utf-8")
+        (self.workspace / "views" / "partial.ejs").write_text("<div></div>\n", encoding="utf-8")
+        plan = {"steps": [{
+            "id": "step-page", "title": "Update the booking page",
+            "task": "Update views/page.ejs using views/partial.ejs, then modify views/partial.ejs.",
+            "files": ["views/page.ejs"], "reference_paths": ["views/partial.ejs"],
+            "depends_on": [], "checks": [], "covers": [],
+        }]}
+        with self.assertRaisesRegex(ValueError, "change target"):
+            autonomous.validate_plan(plan, self.workspace)
+
+    def test_plan_allows_unrelated_adjacent_edit_and_read_only_reference(self):
+        (self.workspace / "src" / "domain.js").write_text("module.exports = {};\n", encoding="utf-8")
+        plan = {"steps": [{"id": "step-ref", "title": "Update route", "task":
+                           "Update the route handler. Read src/domain.js for its interface, "
+                           "but do not modify it.",
+                           "files": ["src/app.py"], "reference_paths": ["src/domain.js"],
+                           "depends_on": [], "checks": [], "covers": []}]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["src/domain.js"])
+
+    def test_plan_allows_read_only_reference_far_from_an_unrelated_change_verb(self):
+        (self.workspace / "src" / "domain.js").write_text("module.exports = {};\n", encoding="utf-8")
+        (self.workspace / "src" / "schema.js").write_text("module.exports = {};\n", encoding="utf-8")
+        plan = {"steps": [{"id": "step-domain", "title": "Implement domain behavior", "task":
+                           ("Inspect src/schema.js and the existing tests, then implement the booking "
+                            "domain rules in src/domain.js while preserving the accepted schema."),
+                           "files": ["src/domain.js"], "reference_paths": ["src/schema.js"],
+                           "depends_on": [], "checks": [], "covers": []}]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["src/schema.js"])
+
+    def test_plan_allows_schema_inspection_before_domain_implementation(self):
+        (self.workspace / "src" / "booking-domain.js").write_text("module.exports = {};\n", encoding="utf-8")
+        (self.workspace / "src" / "service-extra-eligibility.js").write_text("module.exports = {};\n", encoding="utf-8")
+        (self.workspace / "src" / "appointment-schema.js").write_text("module.exports = {};\n", encoding="utf-8")
+        plan = {"steps": [{"id": "step-1", "title": "Domain validation", "task":
+                           ("Inspect src/booking-domain.js, src/service-extra-eligibility.js, "
+                            "src/appointment-schema.js, and the read-only domain/integrity tests, "
+                            "then implement server-authoritative service_extras handling in the booking domain."),
+                           "files": ["src/booking-domain.js", "src/service-extra-eligibility.js"],
+                           "reference_paths": ["src/appointment-schema.js"], "depends_on": [],
+                           "checks": [], "covers": []}]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"], ["src/appointment-schema.js"])
+
+    def test_inferred_import_already_assigned_is_not_added_as_read_only_reference(self):
+        (self.workspace / "src" / "domain.js").write_text("module.exports = {};\n", encoding="utf-8")
+        (self.workspace / "src" / "routes.js").write_text(
+            "const domain = require('./domain');\nmodule.exports = domain;\n", encoding="utf-8")
+        plan = {"steps": [{"id": "step-route", "title": "Update route", "task": "Update route",
+                           "files": ["src/routes.js", "src/domain.js"], "depends_on": [], "checks": []}]}
+        normalized = autonomous.validate_plan(plan, self.workspace)
+        self.assertEqual(normalized["steps"][0]["reference_paths"], [])
+
+    def test_test_only_plan_does_not_infer_production_imports(self):
+        test_file = self.workspace / "test" / "booking.test.cjs"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text("const domain = require('../src/domain');\n", encoding="utf-8")
+        (self.workspace / "src" / "domain.js").write_text("module.exports = {};\n", encoding="utf-8")
+        plan = {"steps": [{"id": "step-test", "title": "Add holdout", "task": "Add holdout",
+                           "files": ["test/booking.test.cjs"], "depends_on": [], "checks": []}]}
+        normalized = autonomous.validate_plan(
+            plan, self.workspace, test_only_paths=["test/booking.test.cjs"])
+        self.assertEqual(normalized["steps"][0]["reference_paths"], [])
+
     def test_plan_validates_and_preserves_bounded_source_landmarks(self):
+        (self.workspace / "src" / "app.py").write_text("line one\nline two\nline three\n", encoding="utf-8")
         plan = {"steps": [{"id": "step-source-map", "title": "Feature", "task": "Implement",
                            "files": ["src/app.py"], "reference_paths": ["test/test_app.py"],
-                           "source_ranges": [{"path": "src/app.py", "offset": 1, "limit": 1,
+                           "source_ranges": [{"path": "src/app.py", "offset": 2, "limit": 4,
                                               "purpose": "Existing handler"}],
                            "depends_on": [], "checks": [], "covers": []}]}
         normalized = autonomous.validate_plan(plan, self.workspace)
-        self.assertEqual(normalized["steps"][0]["source_ranges"], plan["steps"][0]["source_ranges"])
+        self.assertEqual(normalized["steps"][0]["source_ranges"], [
+            {"path": "src/app.py", "offset": 2, "limit": 2, "purpose": "Existing handler"}])
+        self.assertEqual(plan["steps"][0]["source_ranges"][0]["limit"], 4,
+                         "normalization must not mutate the model's source plan")
         plan["steps"][0]["source_ranges"][0]["path"] = "src/missing.py"
         with self.assertRaisesRegex(ValueError, "not an existing workspace file"):
             autonomous.validate_plan(plan, self.workspace)
@@ -275,10 +504,20 @@ class AutonomousPlanTests(unittest.TestCase):
             step, "Request", [], self.workspace, "MARKER", [], phase="scout",
             inspection_limits=autonomous.SOURCE_SCOUT_LIMITS))[autonomous.AUTONOMOUS_CHILD]
         self.assertEqual(spec["tools"], ["Read", "Grep"])
-        self.assertEqual(spec["maxTurns"], 10)
+        self.assertEqual(spec["maxTurns"], 24)
+        self.assertIn("summary\": string (<=4000 chars)", spec["prompt"])
         self.assertIn("head_limit to 100 or less", spec["prompt"])
-        self.assertIn("180 seconds", spec["prompt"])
+        self.assertIn("420 seconds", spec["prompt"])
+        self.assertIn("at most 13 permitted Read/Grep operations", spec["prompt"])
+        self.assertIn("no more than 5 Reads and 7 Greps", spec["prompt"])
+        self.assertIn("A maximum of 4 guard-denied attempts is tolerated", spec["prompt"])
+        self.assertIn("denied calls do not access files", spec["prompt"])
         self.assertIn("Do not delegate", spec["prompt"])
+        inspection_spec = json.loads(autonomous.step_agent_spec(
+            step, "Request", [], self.workspace, "MARKER", [], phase="inspection",
+            inspection_limits=autonomous.SOURCE_SCOUT_LIMITS))[autonomous.AUTONOMOUS_CHILD]
+        self.assertIn("at most 12000 characters", inspection_spec["prompt"])
+        self.assertIn("summary <=4000 chars", inspection_spec["prompt"])
         self.assertTrue(autonomous.needs_source_scout(self.workspace, step))
         step["source_ranges"] = [{"path": "src/large.js", "offset": 210, "limit": 80,
                                   "purpose": "caller hint"}]
@@ -289,8 +528,9 @@ class AutonomousPlanTests(unittest.TestCase):
         scope = json.loads(transcript.with_suffix(".scope.json").read_text(encoding="utf-8"))
         self.assertEqual(scope["write_allowed"], [])
         self.assertEqual(scope["read_allowed"], ["src/large.js", "test/test_app.py"])
-        self.assertEqual(scope["scout_tool_call_limit"], 6)
-        self.assertEqual(scope["scout_tool_limits"], {"Read": 4, "Grep": 3, "Glob": 3})
+        self.assertEqual(scope["scout_tool_call_limit"], 13)
+        self.assertEqual(scope["scout_tool_limits"], {"Read": 5, "Grep": 7, "Glob": 7})
+        self.assertEqual(scope["scout_denied_attempt_limit"], 4)
         self.assertEqual(scope["range_restricted"], [])
 
     def test_source_scout_grep_requires_bounded_exact_file_search(self):
@@ -318,7 +558,7 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertIn("offset and limit", tool_scope_guard.authorize(
             "Read", {"file_path": path, "offset": 1, "limit": 300}, scope))
 
-    def test_source_scout_pretool_hook_enforces_six_call_cap(self):
+    def test_source_scout_pretool_hook_separates_permitted_and_denied_budgets(self):
         large = self.workspace / "src" / "large.js"
         large.write_text("line\n" * 450, encoding="utf-8")
         counter_dir = self.runs_root / "scout-calls"
@@ -327,7 +567,7 @@ class AutonomousPlanTests(unittest.TestCase):
         scope_path.write_text(json.dumps({
             "root": str(self.workspace), "read_allowed": ["src/large.js"], "write_allowed": [],
             "scout_mode": True, "scout_call_counter_dir": str(counter_dir),
-            "scout_tool_call_limit": 10,
+            "scout_tool_call_limit": 20,
             "scout_tool_limits": {"Read": 4, "Grep": 3, "Glob": 3},
             "range_restricted": [],
         }), encoding="utf-8")
@@ -340,8 +580,8 @@ class AutonomousPlanTests(unittest.TestCase):
         }}
         def invoke(payload):
             return subprocess.run(hook, input=json.dumps(payload), text=True, capture_output=True, check=True)
-        for payload, limit, expected_reason in ((read_payload, 4, "read calls"),
-                                                 (grep_payload, 3, "search calls")):
+        for payload, limit, expected_reason in ((read_payload, 4, "read attempts"),
+                                                 (grep_payload, 3, "search attempts")):
             with ThreadPoolExecutor(max_workers=limit + 2) as pool:
                 results = list(pool.map(lambda _: invoke(payload), range(limit + 2)))
             allowed = [result for result in results if not result.stdout.strip()]
@@ -351,8 +591,9 @@ class AutonomousPlanTests(unittest.TestCase):
             self.assertTrue(all(expected_reason in json.loads(result.stdout)["hookSpecificOutput"][
                 "permissionDecisionReason"] for result in denied))
         self.assertEqual(len(list(counter_dir.glob("total-*.ticket"))), 7)
+        self.assertEqual(len(list(counter_dir.glob("denied-*.ticket"))), 4)
 
-    def test_denied_scout_call_does_not_consume_authorized_call_budget(self):
+    def test_denied_scout_call_does_not_consume_permitted_operation_budget(self):
         large = self.workspace / "src" / "large.js"
         large.write_text("line\n" * 450, encoding="utf-8")
         counter_dir = self.runs_root / "scout-denied-call"
@@ -362,6 +603,7 @@ class AutonomousPlanTests(unittest.TestCase):
             "root": str(self.workspace), "read_allowed": ["src/large.js"], "write_allowed": [],
             "scout_mode": True, "scout_call_counter_dir": str(counter_dir),
             "scout_tool_call_limit": 1, "scout_tool_limits": {"Read": 4, "Grep": 3},
+            "scout_denied_attempt_limit": 2,
             "range_restricted": [],
         }), encoding="utf-8")
         hook = [sys.executable, str(Path(autonomous.__file__).with_name("tool_scope_guard.py")), str(scope_path)]
@@ -371,9 +613,15 @@ class AutonomousPlanTests(unittest.TestCase):
         allowed = subprocess.run(hook, input=json.dumps({
             "tool_name": "Read", "tool_input": {"file_path": str(large.resolve()), "offset": 1, "limit": 80},
         }), text=True, capture_output=True, check=True)
+        over_quota = subprocess.run(hook, input=json.dumps({
+            "tool_name": "Read", "tool_input": {"file_path": str(large.resolve()), "offset": 2, "limit": 80},
+        }), text=True, capture_output=True, check=True)
         self.assertIn("capped at 80", denied.stdout)
         self.assertEqual(allowed.stdout, "")
+        self.assertIn("combined Read/Grep attempts", over_quota.stdout)
         self.assertEqual(len(list(counter_dir.glob("total-*.ticket"))), 1)
+        self.assertEqual(len(list(counter_dir.glob("read-*.ticket"))), 1)
+        self.assertEqual(len(list(counter_dir.glob("denied-*.ticket"))), 2)
 
     def test_scout_audit_counts_only_guard_approved_source_operations(self):
         path = self.workspace / "src" / "app.py"
@@ -393,11 +641,90 @@ class AutonomousPlanTests(unittest.TestCase):
         audit = autonomous.audit_worker_reads(
             self.workspace, events, allowed_paths=["src/app.py"], require_ranged_reads=True,
             limits={"reads": 1, "searches": 0, "inspections": 1})
+        attempts = autonomous.scout_tool_attempt_counts(events)
+        self.assertEqual(attempts, {"Read": 1, "Grep": 0})
         self.assertEqual(audit["read_count"], 1)
         self.assertEqual(audit["inspection_count"], 1)
         self.assertTrue(audit["reads"][0]["denied_before_execution"])
         self.assertFalse(audit["reads"][1]["denied_before_execution"])
         self.assertTrue(audit["within_budget"])
+
+    def test_denied_read_of_not_yet_created_assigned_path_does_not_fail_audit(self):
+        missing = self.workspace / "src" / "new-route.js"
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "denied", "name": "Read", "input": {
+                    "file_path": str(missing), "offset": 1, "limit": 200}},
+            ]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "denied", "is_error": True,
+                 "content": "QWEN_SCOPE_GUARD_DENY: target is assigned for writing but does not exist yet"},
+            ]}},
+        ]
+        audit = autonomous.audit_worker_reads(
+            self.workspace, events, allowed_paths=["src/new-route.js"], require_ranged_reads=True)
+        self.assertEqual(audit["read_count"], 0)
+        self.assertTrue(audit["within_budget"])
+        self.assertEqual(audit["violations"], [])
+        self.assertEqual(len(audit["reads"]), 1)
+        self.assertTrue(audit["reads"][0]["denied_before_execution"])
+
+    def test_inspection_handoff_accepts_one_json_fence_with_preface(self):
+        source = self.workspace / "src" / "fenced.js"
+        source.write_text("router.get('/x', handler);\n", encoding="utf-8")
+        report = {"summary": "Found route", "implementation_plan": "Update handler",
+                  "files": [{"path": "src/fenced.js", "symbols": ["handler"],
+                             "ranges": [{"offset": 1, "limit": 1, "purpose": "route"}]}]}
+        audit = {"reads": [{"tool": "Read", "path": "src/fenced.js", "offset": 1, "limit": 1}]}
+        handoff = ("Here is the requested source map.\n```json\n" + json.dumps(report)
+                   + "\n```\nQWEN_AUTONOMOUS_COMPLETE_test")
+        validated = autonomous.validate_inspection_handoff(
+            handoff, self.workspace, ["src/fenced.js"], audit)
+        self.assertEqual(validated["files"][0]["path"], "src/fenced.js")
+
+    def test_inspection_handoff_rejects_multiple_json_fences(self):
+        text = "```json\n{}\n```\n```json\n{}\n```\nQWEN_AUTONOMOUS_COMPLETE_test"
+        with self.assertRaisesRegex(ValueError, "exactly one JSON object"):
+            autonomous.validate_inspection_handoff(text, self.workspace, [], {"reads": []})
+
+    def test_inspection_handoff_accepts_one_json_object_after_preface(self):
+        source = self.workspace / "src" / "prefaced.js"
+        source.write_text("module.exports = {};\n", encoding="utf-8")
+        report = {"summary": "Found route", "implementation_plan": "Update handler",
+                  "files": [{"path": "src/prefaced.js", "symbols": ["handler"],
+                             "ranges": [{"offset": 1, "limit": 1, "purpose": "route"}]}]}
+        audit = {"reads": [{"tool": "Read", "path": "src/prefaced.js", "offset": 1, "limit": 1}]}
+        handoff = "All scoped reads are complete.\n\n" + json.dumps(report) + "\nQWEN_AUTONOMOUS_COMPLETE_test"
+        validated = autonomous.validate_inspection_handoff(
+            handoff, self.workspace, ["src/prefaced.js"], audit)
+        self.assertEqual(validated["files"][0]["path"], "src/prefaced.js")
+
+    def test_inspection_handoff_clamps_ranges_to_lines_returned_at_eof(self):
+        source = self.workspace / "src" / "short.js"
+        source.write_text("one\ntwo\nthree\n", encoding="utf-8")
+        report = {"summary": "Found route", "implementation_plan": "Update handler",
+                  "files": [{"path": "src/short.js", "symbols": ["handler"],
+                             "ranges": [{"offset": 1, "limit": 80, "purpose": "short module"}]}]}
+        audit = {"reads": [{"tool": "Read", "path": "src/short.js", "offset": 1, "limit": 80}]}
+        validated = autonomous.validate_inspection_handoff(
+            json.dumps(report), self.workspace, ["src/short.js"], audit)
+        self.assertEqual(validated["files"][0]["ranges"][0]["limit"], 3)
+
+    def test_scout_budget_separates_permitted_calls_denials_and_missing_results(self):
+        within = autonomous.source_scout_budget_violations(
+            {"Read": 3, "Grep": 6}, {"Read": 4, "Grep": 8})
+        self.assertEqual(within, [], "six permitted Greps plus two denied Greps stay within limits")
+        over_success = autonomous.source_scout_budget_violations(
+            {"Read": 3, "Grep": 8}, {"Read": 3, "Grep": 9})
+        self.assertTrue(any(item["reason"] == "source_scout_per_tool_attempt_budget_exceeded"
+                            for item in over_success))
+        over_denied = autonomous.source_scout_budget_violations(
+            {"Read": 1, "Grep": 1}, {"Read": 4, "Grep": 3})
+        self.assertEqual(over_denied[0]["reason"], "source_scout_denied_attempt_budget_exceeded")
+        missing_result = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "unfinished", "name": "Read", "input": {}}]}}]
+        self.assertEqual(autonomous.scout_tool_attempt_counts(missing_result),
+                         {"Read": 1, "Grep": 0}, "missing results count as permitted to fail closed")
 
     def test_pretool_guard_denies_out_of_scope_and_unbounded_large_reads(self):
         large = self.workspace / "src" / "large.js"
@@ -410,6 +737,19 @@ class AutonomousPlanTests(unittest.TestCase):
             "Read", {"file_path": str(large)}, scope))
         self.assertIsNone(tool_scope_guard.authorize(
             "Read", {"file_path": str(large), "offset": 1, "limit": 200}, scope))
+        # Claude Read defaults an omitted offset to line1; a bounded limit is sufficient.
+        self.assertIsNone(tool_scope_guard.authorize(
+            "Read", {"file_path": str(large), "limit": 100}, scope))
+        for invalid in ({"limit": 201}, {"limit": True}, {"limit": 0},
+                        {"offset": None, "limit": 100}, {"offset": 0, "limit": 100}):
+            self.assertIsNotNone(tool_scope_guard.authorize(
+                "Read", {"file_path": str(large), **invalid}, scope))
+        restricted = {**scope, "range_restricted": [str(large.resolve())],
+                      "read_ranges": {str(large.resolve()): [{"offset": 1, "limit": 200}]}}
+        self.assertIsNotNone(tool_scope_guard.authorize(
+            "Read", {"file_path": str(large), "limit": 100}, restricted))
+        self.assertIsNone(tool_scope_guard.authorize(
+            "Read", {"file_path": str(large), "offset": 1, "limit": 100}, restricted))
         self.assertIn("exact assigned", tool_scope_guard.authorize(
             "Grep", {"path": str(self.workspace / "src")}, scope))
         self.assertIn("exact assigned", tool_scope_guard.authorize(
@@ -456,6 +796,94 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertEqual(json.loads(denied.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertEqual(json.loads(grep_denied.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
 
+    def test_implementation_can_read_new_ranges_in_assigned_files_but_not_references(self):
+        large = self.workspace / "src" / "large.js"
+        reference = self.workspace / "src" / "reference.js"
+        large.write_text("line\n" * 800, encoding="utf-8")
+        reference.write_text("ref\n" * 800, encoding="utf-8")
+        step = {"id": "step-test", "title": "Implement from verified source map",
+                "files": ["src/large.js"], "reference_paths": ["src/reference.js"]}
+        context = {"files": [
+            {"path": "src/large.js", "ranges": [{"offset": 251, "limit": 100}]},
+            {"path": "src/reference.js", "ranges": [{"offset": 40, "limit": 30}]},
+        ]}
+        transcript = self.runs_root / "step-test-implementation.jsonl"
+        autonomous.worker_tool_settings(
+            self.workspace, step, [], "implementation", transcript, inspection_context=context)
+        scope = json.loads(transcript.with_suffix(".scope.json").read_text(encoding="utf-8"))
+        assigned_path = str(large.resolve())
+        reference_path = str(reference.resolve())
+        self.assertTrue(scope["implementation_mode"])
+        self.assertEqual(scope["implementation_tool_limits"], {"Read": 10, "Grep": 3})
+        self.assertEqual(scope["range_restricted"], [reference_path])
+        self.assertIsNone(tool_scope_guard.authorize(
+            "Read", {"file_path": assigned_path, "offset": 1, "limit": 80}, scope))
+        self.assertIsNotNone(tool_scope_guard.authorize(
+            "Read", {"file_path": reference_path, "offset": 1, "limit": 80}, scope))
+        allowed = autonomous.implementation_reference_ranges(self.workspace, step, context)
+        self.assertEqual(allowed, {"src/reference.js": [{"offset": 40, "limit": 30}]})
+
+    def test_implementation_pretool_hook_hard_caps_reads_and_does_not_charge_denials(self):
+        source = self.workspace / "src" / "implement.js"
+        source.write_text("line\\n" * 450, encoding="utf-8")
+        counter_dir = self.runs_root / "implementation-calls"
+        counter_dir.mkdir()
+        scope_path = self.runs_root / "implementation.scope.json"
+        scope_path.write_text(json.dumps({
+            "root": str(self.workspace), "read_allowed": ["src/implement.js"],
+            "write_allowed": ["src/implement.js"], "implementation_mode": True,
+            "implementation_call_counter_dir": str(counter_dir),
+            "implementation_tool_limits": {"Read": 2, "Grep": 1},
+            "implementation_denied_attempt_limit": 3, "range_restricted": [],
+        }), encoding="utf-8")
+        hook = [sys.executable, str(Path(autonomous.__file__).with_name("tool_scope_guard.py")), str(scope_path)]
+
+        def invoke(tool, tool_input):
+            return subprocess.run(hook, input=json.dumps({"tool_name": tool, "tool_input": tool_input}),
+                                  text=True, capture_output=True, check=True)
+
+        denied_unauthorized = invoke("Read", {"file_path": str(self.workspace / "src" / "other.js"),
+                                                "offset": 1, "limit": 80})
+        allowed_one = invoke("Read", {"file_path": str(source.resolve()), "offset": 1, "limit": 80})
+        allowed_two = invoke("Read", {"file_path": str(source.resolve()), "offset": 81, "limit": 80})
+        over_quota = invoke("Read", {"file_path": str(source.resolve()), "offset": 161, "limit": 80})
+        self.assertIn("exact assigned", denied_unauthorized.stdout)
+        self.assertEqual(allowed_one.stdout, "")
+        self.assertEqual(allowed_two.stdout, "")
+        self.assertIn("edit the assigned files now", over_quota.stdout)
+        self.assertEqual(len(list(counter_dir.glob("read-*.ticket"))), 2)
+        self.assertEqual(len(list(counter_dir.glob("total-*.ticket"))), 2)
+        self.assertEqual(len(list(counter_dir.glob("denied-*.ticket"))), 2)
+
+    def test_implementation_pretool_hook_requires_early_edit_before_more_reads(self):
+        source = self.workspace / "src" / "implement.js"
+        source.write_text("module.exports = 1;\\n", encoding="utf-8")
+        counter_dir = self.runs_root / "implementation-early-edit"
+        counter_dir.mkdir()
+        scope_path = self.runs_root / "implementation-early-edit.scope.json"
+        scope_path.write_text(json.dumps({
+            "root": str(self.workspace), "read_allowed": ["src/implement.js"],
+            "write_allowed": ["src/implement.js"], "implementation_mode": True,
+            "implementation_call_counter_dir": str(counter_dir),
+            "implementation_tool_limits": {"Read": 5, "Grep": 2},
+            "implementation_pre_edit_read_limit": 2,
+            "implementation_denied_attempt_limit": 3, "range_restricted": [],
+        }), encoding="utf-8")
+        hook = [sys.executable, str(Path(autonomous.__file__).with_name("tool_scope_guard.py")), str(scope_path)]
+
+        def invoke(tool, tool_input):
+            return subprocess.run(hook, input=json.dumps({"tool_name": tool, "tool_input": tool_input}),
+                                  text=True, capture_output=True, check=True)
+
+        read = {"file_path": str(source.resolve())}
+        self.assertEqual(invoke("Read", read).stdout, "")
+        self.assertEqual(invoke("Read", read).stdout, "")
+        blocked = invoke("Read", read)
+        self.assertIn("2 Reads before the first edit", blocked.stdout)
+        self.assertEqual(invoke("Edit", {"file_path": str(source.resolve())}).stdout, "")
+        self.assertEqual(invoke("Read", read).stdout, "")
+        self.assertTrue((counter_dir / "first-edit.ticket").exists())
+
     def test_inspection_handoff_rejects_read_outside_caller_declared_range(self):
         large = self.workspace / "src" / "large.js"
         large.write_text("line\n" * 800, encoding="utf-8")
@@ -469,16 +897,16 @@ class AutonomousPlanTests(unittest.TestCase):
                 required_source_paths=["src/large.js"],
                 caller_source_ranges=[{"path": "src/large.js", "offset": 251, "limit": 125}])
 
-    def test_inspection_handoff_rejects_range_past_end_of_file(self):
+    def test_inspection_handoff_clamps_range_past_end_of_file(self):
         small = self.workspace / "src" / "small.js"
         small.write_text("line\n" * 12, encoding="utf-8")
         report = {"summary": "Found route", "implementation_plan": "Update handler",
                   "files": [{"path": "src/small.js", "symbols": ["route"],
                              "ranges": [{"offset": 10, "limit": 5, "purpose": "route"}]}]}
         audit = {"reads": [{"tool": "Read", "path": "src/small.js", "offset": 10, "limit": 5}]}
-        with self.assertRaisesRegex(ValueError, "extends beyond end of file"):
-            autonomous.validate_inspection_handoff(
-                json.dumps(report), self.workspace, ["src/small.js"], audit)
+        validated = autonomous.validate_inspection_handoff(
+            json.dumps(report), self.workspace, ["src/small.js"], audit)
+        self.assertEqual(validated["files"][0]["ranges"][0]["limit"], 3)
 
     def test_pretool_guard_fails_closed_for_workspace_escape(self):
         scope = {"root": str(self.workspace), "read_allowed": ["src/app.py"], "write_allowed": []}
@@ -501,6 +929,12 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertEqual(hook["hooks"][0]["timeout"], 30)
         self.assertEqual(scope["read_allowed"], ["src/app.py", "test/test_app.py"])
         self.assertEqual(scope["write_allowed"], [])
+        self.assertTrue(scope["result_cap_enabled"])
+        self.assertEqual(scope["result_char_limit"], 3500)
+        self.assertEqual(autonomous.SOURCE_READ_RESULT_CHAR_LIMIT, 4000)
+        self.assertEqual(autonomous.SOURCE_SCOUT_TIMEOUT, 420)
+        self.assertEqual(settings["hooks"]["PostToolUse"][0]["matcher"], "Read|Grep")
+        self.assertEqual(settings["hooks"]["PostToolUse"][0]["hooks"][0]["timeout"], 30)
         (self.workspace / "src" / "other.py").write_text("secret\n", encoding="utf-8")
         hook_command = [sys.executable, str(Path(autonomous.__file__).with_name("tool_scope_guard.py")),
                         str(scope_path)]
@@ -508,6 +942,283 @@ class AutonomousPlanTests(unittest.TestCase):
             "tool_name": "Read", "tool_input": {"file_path": str(self.workspace / "src/other.py")},
         }), text=True, capture_output=True, check=True)
         self.assertEqual(json.loads(denied.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_result_guard_caps_string_and_preserves_nested_native_shape(self):
+        marker_id = "smoke-42"
+        output, audit = tool_result_guard.cap_output("x" * 12000, marker_id=marker_id)
+        self.assertIsInstance(output, str)
+        self.assertLessEqual(len(json.dumps(output, ensure_ascii=False, separators=(",", ":"))), 4000)
+        self.assertIn(marker_id, output)
+        self.assertTrue(audit["truncated"])
+
+        native = {"content": [{"type": "text", "text": ("服務\r\n" * 2000)}],
+                  "metadata": {"source": "Read", "line": 1}}
+        capped, nested_audit = tool_result_guard.cap_output(native, marker_id=marker_id)
+        self.assertIsInstance(capped, dict)
+        self.assertIsInstance(capped["content"], list)
+        self.assertEqual(capped["content"][0]["type"], "text")
+        self.assertEqual(capped["metadata"], native["metadata"])
+        self.assertLessEqual(len(json.dumps(capped, ensure_ascii=False, separators=(",", ":"))), 4000)
+        self.assertIn(marker_id, capped["content"][0]["text"])
+        self.assertTrue(nested_audit["truncated"])
+
+        multi = {"content": [{"type": "text", "text": "A" * 8000},
+                              {"type": "text", "text": "tail"}],
+                 "filePath": "large.txt", "numLines": 2}
+        multi_capped, _ = tool_result_guard.cap_output(multi, marker_id=marker_id)
+        self.assertEqual([item["type"] for item in multi_capped["content"]], ["text", "text"])
+        self.assertEqual(multi_capped["filePath"], "large.txt")
+        self.assertEqual(multi_capped["numLines"], 2)
+        self.assertIn(marker_id, multi_capped["content"][0]["text"])
+        self.assertEqual(multi_capped["content"][1]["text"], "")
+        self.assertLessEqual(len(json.dumps(multi_capped, ensure_ascii=False,
+                                           separators=(",", ":"))), 4000)
+
+    def test_result_guard_leaves_small_output_unchanged_and_hook_audits_without_content(self):
+        audit_path = self.runs_root / "result-audit.jsonl"
+        scope_path = self.runs_root / "result-scope.json"
+        scope_path.write_text(json.dumps({
+            "result_cap_enabled": True, "result_char_limit": 4000,
+            "result_marker_id": "run-99", "result_audit_path": str(audit_path),
+        }), encoding="utf-8")
+        hook = [sys.executable, str(Path(tool_result_guard.__file__)), str(scope_path)]
+        small = {"content": [{"type": "text", "text": "short"}]}
+        result = subprocess.run(hook, input=json.dumps({
+            "tool_name": "Read", "tool_use_id": "read-1", "tool_response": small,
+        }), text=True, capture_output=True, check=True)
+        self.assertEqual(result.stdout, "")
+        receipt = next((audit_path.with_name(audit_path.name + ".receipts")).glob("*.json"))
+        record = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertFalse(record["changed"])
+        self.assertEqual(record["tool_use_id"], "read-1")
+        self.assertNotIn("short", json.dumps(record))
+
+    def test_result_guard_hook_rewrites_large_grep_output_with_same_root_shape(self):
+        audit_path = self.runs_root / "large-grep-audit.jsonl"
+        scope_path = self.runs_root / "large-grep-scope.json"
+        scope_path.write_text(json.dumps({
+            "result_cap_enabled": True, "result_char_limit": 4000,
+            "result_marker_id": "run-grep-4", "result_audit_path": str(audit_path),
+        }), encoding="utf-8")
+        hook = [sys.executable, str(Path(tool_result_guard.__file__)), str(scope_path)]
+        original = {"content": [{"type": "text", "text": "match " + "x" * 180} for _ in range(100)],
+                    "filePath": "large.txt", "numLines": 100}
+        result = subprocess.run(hook, input=json.dumps({
+            "tool_name": "Grep", "tool_use_id": "grep-1", "tool_response": original,
+        }), text=True, capture_output=True, check=True)
+        replacement = json.loads(result.stdout)["hookSpecificOutput"]["updatedToolOutput"]
+        self.assertIsInstance(replacement, dict)
+        self.assertEqual(replacement["filePath"], "large.txt")
+        self.assertEqual(replacement["numLines"], 100)
+        self.assertTrue(all(item["type"] == "text" for item in replacement["content"]))
+        self.assertLessEqual(len(json.dumps(replacement, ensure_ascii=False, separators=(",", ":"))), 4000)
+        receipt = next((audit_path.with_name(audit_path.name + ".receipts")).glob("*.json"))
+        record = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertTrue(record["truncated"])
+        self.assertEqual(record["tool_use_id"], "grep-1")
+        self.assertIn(f"[QWEN_RESULT_TRUNCATED tool=Grep id={record['marker_id']};",
+                      json.dumps(replacement))
+
+    def test_parallel_result_hooks_persist_every_unique_receipt(self):
+        audit_path = self.runs_root / "parallel-result-audit.jsonl"
+        scope_path = self.runs_root / "parallel-result-scope.json"
+        scope_path.write_text(json.dumps({
+            "result_cap_enabled": True, "result_char_limit": 4000,
+            "result_audit_path": str(audit_path),
+        }), encoding="utf-8")
+        hook = [sys.executable, str(Path(tool_result_guard.__file__)), str(scope_path)]
+        def invoke(index):
+            return subprocess.run(hook, input=json.dumps({
+                "tool_name": "Read", "tool_use_id": f"parallel-{index}",
+                "tool_response": {"content": [{"type": "text", "text": f"result-{index}"}]},
+            }), text=True, capture_output=True, check=True)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(invoke, range(24)))
+        self.assertTrue(all(result.stdout == "" for result in results))
+        receipts = list((audit_path.with_name(audit_path.name + ".receipts")).glob("*.json"))
+        records = [json.loads(receipt.read_text(encoding="utf-8")) for receipt in receipts]
+        self.assertEqual(len(records), 24)
+        self.assertEqual({record["tool_use_id"] for record in records},
+                         {f"parallel-{index}" for index in range(24)})
+
+    def test_result_cap_audit_requires_receipts_and_checks_cli_delivered_text(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "read-1", "name": "Read", "input": {}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "read-1", "is_error": False,
+                 "content": "bounded"}]}},
+        ]
+        audit_path = self.runs_root / "missing-cap-receipt.jsonl"
+        audit = autonomous.audit_tool_result_caps(events, audit_path, 4000)
+        self.assertFalse(audit["within_budget"])
+        self.assertEqual(audit["violations"][0]["reason"], "tool_result_cap_receipt_missing")
+
+    def test_result_cap_audit_rejects_truncation_without_marker_in_transcript(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "read-2", "name": "Read", "input": {}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "read-2", "is_error": False,
+                 "content": "text was truncated but no sentinel"}]}},
+        ]
+        audit_path = self.runs_root / "bad-marker-receipt.jsonl"
+        audit_path.write_text(json.dumps({"tool_use_id": "read-2", "changed": True,
+                                          "tool": "Read",
+                                          "truncated": True, "marker_id": "marker-x",
+                                          "delivered_chars": 40}) + "\n", encoding="utf-8")
+        audit = autonomous.audit_tool_result_caps(events, audit_path, 4000)
+        self.assertFalse(audit["within_budget"])
+        self.assertEqual(audit["violations"][0]["reason"],
+                         "truncation_marker_missing_from_delivered_result")
+
+    def test_inspection_context_uses_runner_verified_tool_marker_mapping(self):
+        report = {"summary": "Found source", "implementation_plan": "Continue",
+                  "files": [], "risks": []}
+        read_audit = {"result_cap_audit": {"results": [
+            {"tool": "Read", "receipt": {"marker_id": "read-id", "original_chars": 12000,
+                                               "delivered_chars": 4000, "truncated": True}},
+            {"tool": "Grep", "receipt": {"marker_id": "grep-id", "original_chars": 18000,
+                                               "delivered_chars": 3990, "truncated": True}},
+            {"tool_use_id": "small-read", "tool": "Read", "path": "src/app.py",
+             "offset": 1, "limit": 20,
+             "receipt": {"marker_id": "phantom-id", "original_chars": 400,
+                         "delivered_chars": 400, "truncated": False}},
+        ]}}
+        enriched = autonomous.attach_verified_result_caps(report, read_audit)
+        self.assertEqual(enriched["runner_verified_result_caps"], [
+            {"tool_use_id": None, "tool": "Read", "path": None, "offset": None, "limit": None,
+             "pattern": None, "head_limit": None, "marker_id": "read-id", "original_chars": 12000,
+             "delivered_chars": 4000, "truncated": True},
+            {"tool_use_id": None, "tool": "Grep", "path": None, "offset": None, "limit": None,
+             "pattern": None, "head_limit": None, "marker_id": "grep-id", "original_chars": 18000,
+             "delivered_chars": 3990, "truncated": True},
+            {"tool_use_id": "small-read", "tool": "Read", "path": "src/app.py", "offset": 1,
+             "limit": 20, "pattern": None, "head_limit": None, "marker_id": None,
+             "original_chars": 400, "delivered_chars": 400, "truncated": False},
+        ])
+        step = {"id": "step-test", "title": "Implement with verified source map", "task": "Implement",
+                "files": ["src/app.py"], "reference_paths": [], "source_ranges": [], "covers": [], "checks": []}
+        prompt = json.loads(autonomous.step_agent_spec(
+            step, "Request", [], self.workspace, "MARKER", [], inspection_context=enriched
+        ))[autonomous.AUTONOMOUS_CHILD]["prompt"]
+        self.assertIn("tool-to-marker mapping comes from the CLI transcript and hook audit", prompt)
+        self.assertIn('"marker_id": "read-id"', prompt)
+        self.assertIn('"marker_id": "grep-id"', prompt)
+
+    def test_result_cap_mapping_preserves_source_path_range_and_query(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "r1", "name": "Read",
+                 "input": {"file_path": str(self.workspace / "src" / "app.py"), "offset": 10, "limit": 30}},
+                {"type": "tool_use", "id": "g1", "name": "Grep",
+                 "input": {"path": str(self.workspace / "src"), "pattern": "TODO", "head_limit": 8}},
+            ]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "r1", "is_error": False,
+                 "content": "[QWEN_RESULT_TRUNCATED tool=Read id=marker-r; original_chars=9000; limit=4000. retry]"},
+                {"type": "tool_result", "tool_use_id": "g1", "is_error": False,
+                 "content": "[QWEN_RESULT_TRUNCATED tool=Grep id=marker-g; original_chars=8000; limit=4000. retry]"},
+            ]}},
+        ]
+        audit_path = self.runs_root / "source-map.jsonl"
+        audit_path.write_text("".join(json.dumps(record) + "\n" for record in [
+            {"tool_use_id": "r1", "tool": "Read", "changed": True, "truncated": True,
+             "marker_id": "marker-r", "original_chars": 9000, "delivered_chars": 100},
+            {"tool_use_id": "g1", "tool": "Grep", "changed": True, "truncated": True,
+             "marker_id": "marker-g", "original_chars": 8000, "delivered_chars": 100},
+        ]), encoding="utf-8")
+        audit = autonomous.audit_tool_result_caps(events, audit_path, 4000, self.workspace)
+        self.assertTrue(audit["within_budget"], audit["violations"])
+        by_tool = {item["tool"]: item for item in audit["results"]}
+        self.assertEqual((by_tool["Read"]["path"], by_tool["Read"]["offset"],
+                          by_tool["Read"]["limit"]), ("src/app.py", 10, 30))
+        self.assertEqual((by_tool["Grep"]["path"], by_tool["Grep"]["pattern"],
+                          by_tool["Grep"]["head_limit"]), ("src", "TODO", 8))
+
+    def test_result_cap_audit_rejects_duplicate_ids_receipts_and_tool_mismatch(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "same", "name": "Read", "input": {}},
+                {"type": "tool_use", "id": "same", "name": "Grep", "input": {}},
+            ]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "same", "is_error": False, "content": "ok"},
+                {"type": "tool_result", "tool_use_id": "same", "is_error": False, "content": "ok"},
+            ]}},
+        ]
+        audit_path = self.runs_root / "duplicate-receipts.jsonl"
+        audit_path.write_text("".join(json.dumps(record) + "\n" for record in [
+            {"tool_use_id": "same", "tool": "Read", "changed": False, "delivered_chars": 4},
+            {"tool_use_id": "same", "tool": "Grep", "changed": False, "delivered_chars": 4},
+            {"tool_use_id": "orphan", "tool": "Read", "changed": False, "delivered_chars": 4},
+        ]), encoding="utf-8")
+        audit = autonomous.audit_tool_result_caps(events, audit_path, 4000, self.workspace)
+        reasons = {item["reason"] for item in audit["violations"]}
+        self.assertIn("tool_result_tool_use_id_duplicate", reasons)
+        self.assertIn("tool_result_success_duplicate", reasons)
+        self.assertIn("tool_result_cap_receipt_duplicate", reasons)
+        self.assertIn("tool_result_cap_tool_mismatch", reasons)
+        self.assertIn("tool_result_cap_receipt_unmatched", reasons)
+
+    def test_result_cap_audit_rejects_reused_marker_ids(self):
+        events = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "r1", "name": "Read", "input": {}},
+            {"type": "tool_use", "id": "r2", "name": "Read", "input": {}},
+        ]}}, {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": tool_id, "is_error": False,
+             "content": f"[QWEN_RESULT_TRUNCATED tool=Read id=dup; original_chars=9000; limit=4000. retry]"}
+            for tool_id in ("r1", "r2")
+        ]}}]
+        audit_path = self.runs_root / "duplicate-markers.jsonl"
+        audit_path.write_text("".join(json.dumps({"tool_use_id": tool_id, "tool": "Read",
+            "changed": True, "truncated": True, "marker_id": "dup", "delivered_chars": 100}) + "\n"
+            for tool_id in ("r1", "r2")), encoding="utf-8")
+        audit = autonomous.audit_tool_result_caps(events, audit_path, 4000, self.workspace)
+        self.assertIn("tool_result_cap_marker_id_duplicate",
+                      {item["reason"] for item in audit["violations"]})
+
+    def test_result_cap_audit_checks_error_results_too(self):
+        events = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "err-read", "name": "Read", "input": {
+                "file_path": "src/app.py", "offset": 1, "limit": 200}},
+        ]}}, {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "err-read", "is_error": True,
+             "content": "x" * 4100},
+        ]}}]
+        audit_path = self.runs_root / "error-result-cap.jsonl"
+        audit_path.write_text(json.dumps({"tool_use_id": "err-read", "tool": "Read",
+            "cap_failed": True, "changed": False, "delivered_chars": 4100}) + "\n", encoding="utf-8")
+        audit = autonomous.audit_tool_result_caps(events, audit_path, 4000, self.workspace)
+        self.assertEqual(audit["error_results"], 1)
+        self.assertFalse(audit["within_budget"])
+        self.assertIn("tool_result_cap_failed", {item["reason"] for item in audit["violations"]})
+
+    def test_result_cap_audit_exempts_pretool_scope_guard_denial(self):
+        events = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "denied-read", "name": "Read", "input": {
+                "file_path": "src/app.py", "offset": 1, "limit": 200}},
+        ]}}, {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "denied-read", "is_error": True,
+             "content": "QWEN_SCOPE_GUARD_DENY: exact assigned files only"},
+        ]}}]
+        audit = autonomous.audit_tool_result_caps(
+            events, self.runs_root / "scope-deny-no-receipt.jsonl", 4000, self.workspace)
+        self.assertTrue(audit["within_budget"], audit["violations"])
+        self.assertEqual(audit["scope_guard_denials"], 1)
+        self.assertEqual(audit["tool_results"], 0)
+
+        for content in (
+            "Error echoes QWEN_SCOPE_GUARD_DENY: from unrelated output",
+            "QWEN_SCOPE_GUARD_DENY: " + "x" * autonomous.MAX_SCOPE_GUARD_DENIAL_CHARS,
+        ):
+            with self.subTest(content_length=len(content)):
+                events[1]["message"]["content"][0]["content"] = content
+                rejected = autonomous.audit_tool_result_caps(
+                    events, self.runs_root / "scope-deny-untrusted.jsonl", 4000, self.workspace)
+                self.assertFalse(rejected["within_budget"])
+                self.assertIn("tool_result_cap_receipt_missing",
+                              {item["reason"] for item in rejected["violations"]})
 
     def test_worker_prompt_receives_covered_requirement_acceptance(self):
         requirements = [{"id": "req-domain", "acceptance": "Replay is idempotent", "validator_indices": [0], "step_validator_indices": [0]}]
@@ -529,10 +1240,10 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertIn("Read these caller-supplied acceptance and supporting reference files before editing", initial)
         self.assertIn(str((self.workspace / "test/test_app.py").resolve()), initial)
         self.assertIn("Small files may be read in full", initial)
-        self.assertIn("22 Read calls", initial)
-        self.assertIn("14 combined Grep/Glob calls", initial)
-        self.assertIn("36 combined inspection calls", initial)
-        self.assertNotIn("At most 10 Read calls", initial)
+        self.assertIn("10 Read calls", initial)
+        self.assertIn("3 combined Grep/Glob calls", initial)
+        self.assertIn("13 combined inspection calls", initial)
+        self.assertIn("Begin editing after at most four targeted Read calls", initial)
 
         continuation = json.loads(autonomous.step_agent_spec(
             step, "Request", [], self.workspace, "MARKER", [],
@@ -558,7 +1269,30 @@ class AutonomousPlanTests(unittest.TestCase):
             step, "Request", [], self.workspace, "MARKER", [], phase="scout"))[
                 autonomous.AUTONOMOUS_CHILD]["prompt"]
         self.assertIn("Return exactly one JSON object followed by the completion marker", child_prompt)
+        self.assertIn("append the exact marker MARKER on its own final line", child_prompt)
+        self.assertIn("This marker completes the inspection handoff; it does not claim that implementation is complete.",
+                      child_prompt)
         self.assertIn('"files": [{"path": workspace-relative POSIX path', child_prompt)
+
+        implementation_prompt = json.loads(autonomous.step_agent_spec(
+            step, "Request", [], self.workspace, "MARKER", []))[
+                autonomous.AUTONOMOUS_CHILD]["prompt"]
+        self.assertIn("End with MARKER only after the implementation step is complete.", implementation_prompt)
+
+    def test_implementation_coordinator_must_forward_verified_source_map_to_worker(self):
+        step = {"id": "step-1", "title": "Implement route", "task": "Add endpoint",
+                "files": ["src/server.js"], "reference_paths": ["test/route.test.js"],
+                "checks": ["route works"], "covers": []}
+        context = {"summary": "Route is in the service handler.", "files": [
+            {"path": "src/server.js", "ranges": [{"offset": 30, "limit": 20,
+                                                     "purpose": "service routes"}]}]}
+        prompt = autonomous.coordinator_prompt(
+            step, self.workspace, "MARKER", False, phase="implementation",
+            inspection_context=context)
+        self.assertIn("complete verified source map below in its Agent prompt", prompt)
+        self.assertIn("per-child hard ceiling of 10 Read calls and 3 Grep calls", prompt)
+        self.assertIn(json.dumps(context, ensure_ascii=False), prompt)
+        self.assertIn("copy verbatim into the Agent prompt", prompt)
 
     def test_continuation_requires_remaining_inspection_budget(self):
         self.assertTrue(autonomous.has_continuation_inspection_budget(
@@ -606,14 +1340,23 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertEqual(autonomous.validate_inspection_handoff(
             json.dumps(report) + "\nQWEN_AUTONOMOUS_COMPLETE_abc123", self.workspace,
             ["src/app.py"], audit)["summary"], "Found route")
-        expanded = {**report, "summary": "s" * 1_000, "implementation_plan": "p" * 2_000,
+        wrapped_text = autonomous.tool_result_text({"content": [{"type": "text", "text":
+            json.dumps(report) + "\nQWEN_AUTONOMOUS_COMPLETE_abc123agentId: worker <usage>tokens</usage>"}]})
+        self.assertEqual(autonomous.validate_inspection_handoff(
+            wrapped_text, self.workspace, ["src/app.py"], audit)["summary"], "Found route")
+        cli_wrapped = ("```json\n" + json.dumps(report) + "\nQWEN_AUTONOMOUS_COMPLETE_abc123\n```")
+        cli_wrapped += "\nagentId: adbb73f41a2279bdd (use SendMessage with to: 'worker')\n"
+        cli_wrapped += "<usage>subagent_tokens: 20\ntool_uses: 1\nduration_ms: 10</usage>"
+        self.assertEqual(autonomous.validate_inspection_handoff(
+            cli_wrapped, self.workspace, ["src/app.py"], audit)["summary"], "Found route")
+        expanded = {**report, "summary": "s" * 1_674, "implementation_plan": "p" * 2_000,
                     "risks": ["Some relevant risk " * 20],
                     "files": [{**report["files"][0], "ranges": [{**report["files"][0]["ranges"][0],
                                                                        "purpose": "Relevant source details " * 12}]}]}
         expanded_result = autonomous.validate_inspection_handoff(
             json.dumps(expanded) + "\nQWEN_AUTONOMOUS_COMPLETE_abc123agentId: test <usage>tokens</usage>",
             self.workspace, ["src/app.py"], audit)
-        self.assertEqual(len(expanded_result["summary"]), 1_000)
+        self.assertEqual(len(expanded_result["summary"]), 1_674)
         self.assertLessEqual(len(expanded_result["files"][0]["ranges"][0]["purpose"]), 120)
         self.assertLessEqual(len(expanded_result["risks"][0]), 200)
         report["files"][0]["ranges"][0]["limit"] = 201
@@ -630,9 +1373,10 @@ class AutonomousPlanTests(unittest.TestCase):
                 {"reads": [{"tool": "Read", "path": "src/app.py"}]})
 
     def test_inspection_handoff_rejects_oversized_and_nonrelative_reports_clearly(self):
-        with self.assertRaisesRegex(ValueError, "maximum is 6000"):
-            autonomous.validate_inspection_handoff("x" * 6001, self.workspace, [], {})
-        with self.assertRaisesRegex(ValueError, "exactly one JSON object"):
+        self.assertEqual(autonomous.SOURCE_SCOUT_HANDOFF_CHAR_LIMIT, 12000)
+        with self.assertRaisesRegex(ValueError, "maximum is 12000"):
+            autonomous.validate_inspection_handoff("x" * 12001, self.workspace, [], {})
+        with self.assertRaisesRegex(ValueError, "concise summary"):
             autonomous.validate_inspection_handoff("Here is the report:\n{}", self.workspace, [], {})
         report = {"summary": "Found route", "implementation_plan": "Update handler",
                   "files": [{"path": str(self.workspace / "src" / "app.py"), "symbols": [],
@@ -640,6 +1384,18 @@ class AutonomousPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid relative path|clean workspace-relative path"):
             autonomous.validate_inspection_handoff(json.dumps(report), self.workspace,
                                                     ["src/app.py"], {"reads": []})
+
+    def test_inspection_handoff_trims_overlong_summary_and_plan_after_audit(self):
+        source = self.workspace / "src" / "app.js"
+        source.write_text("module.exports = {};\n", encoding="utf-8")
+        report = {"summary": "summary " * 600, "implementation_plan": "plan " * 600,
+                  "files": [{"path": "src/app.js", "symbols": ["module.exports"],
+                             "ranges": [{"offset": 1, "limit": 1, "purpose": "module entry"}]}]}
+        audit = {"reads": [{"tool": "Read", "path": "src/app.js", "offset": 1, "limit": 1}]}
+        normalized = autonomous.validate_inspection_handoff(
+            json.dumps(report), self.workspace, ["src/app.js"], audit)
+        self.assertLessEqual(len(normalized["summary"]), autonomous.SOURCE_SCOUT_SUMMARY_CHAR_LIMIT)
+        self.assertLessEqual(len(normalized["implementation_plan"]), 2_200)
 
     def test_preverified_inspection_must_match_declared_source_ranges(self):
         step = {"id": "step-feature", "files": ["src/app.py"], "reference_paths": [],
@@ -652,6 +1408,7 @@ class AutonomousPlanTests(unittest.TestCase):
                                                          "purpose": "existing handler"}]}]}
         accepted = autonomous.validate_preverified_inspection(report, step, self.workspace, [])
         self.assertEqual(accepted["summary"], report["summary"])
+        (self.workspace / "src" / "app.py").write_text("value = 1\nother = 2\n", encoding="utf-8")
         report["files"][0]["ranges"][0]["offset"] = 2
         with self.assertRaisesRegex(ValueError, "caller-declared|range was not present"):
             autonomous.validate_preverified_inspection(report, step, self.workspace, [])
@@ -666,6 +1423,81 @@ class AutonomousPlanTests(unittest.TestCase):
         result = {"content": [{"type": "text", "text": '{"summary":"ok"}'},
                              {"type": "image", "data": "ignored"}]}
         self.assertEqual(autonomous.tool_result_text(result), '{"summary":"ok"}')
+
+    def test_qwen_route_verification_requires_qwen_sift_and_available_telemetry(self):
+        self.assertTrue(autonomous.qwen_route_verification("available", 2, 2))
+        self.assertFalse(autonomous.qwen_route_verification("available", 0, 2))
+        self.assertFalse(autonomous.qwen_route_verification("available", 2, 0))
+        self.assertFalse(autonomous.qwen_route_verification("available", None, 2))
+        self.assertFalse(autonomous.qwen_route_verification("unavailable", None, None))
+        self.assertTrue(autonomous.qwen_route_verification(
+            "unavailable", None, None, transcript_qwen=True,
+            gateway_base_url=autonomous.dispatch.BASE_URL, sift_hook_configured=True))
+        self.assertFalse(autonomous.qwen_route_verification(
+            "unavailable", None, None, transcript_qwen=False,
+            gateway_base_url=autonomous.dispatch.BASE_URL, sift_hook_configured=True))
+        self.assertFalse(autonomous.qwen_route_verification(
+            "unavailable", None, None, transcript_qwen=True,
+            gateway_base_url="http://127.0.0.1:9999", sift_hook_configured=True))
+        self.assertFalse(autonomous.qwen_route_verification(
+            "unavailable", None, None, transcript_qwen=True,
+            gateway_base_url=autonomous.dispatch.BASE_URL, sift_hook_configured=False))
+
+    def test_repair_source_context_keeps_only_successful_allowed_mapped_reads(self):
+        source = self.workspace / "src" / "app.py"
+        assistant = {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "read-good", "name": "Read",
+             "input": {"file_path": str(source), "offset": 2, "limit": 2}},
+            {"type": "tool_use", "id": "read-denied", "name": "Read",
+             "input": {"file_path": str(source), "offset": 8, "limit": 2}},
+            {"type": "tool_use", "id": "read-other", "name": "Read",
+             "input": {"file_path": str(self.workspace / "test/test_app.py"), "offset": 1, "limit": 2}},
+        ]}}
+        results = {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "read-good", "content": "2\tdef render():\n3\t    return 'home'"},
+            {"type": "tool_result", "tool_use_id": "read-denied", "is_error": True,
+             "content": "QWEN_SCOPE_GUARD_DENY: out of verified range"},
+            {"type": "tool_result", "tool_use_id": "read-other", "content": "unassigned test source"},
+        ]}}
+        context = autonomous.read_context_from_events(
+            [assistant, results], self.workspace,
+            allowed_paths=["src/app.py"],
+            allowed_ranges={"src/app.py": [{"offset": 1, "limit": 4}]},
+        )
+        self.assertIn("src/app.py lines 2-3", context)
+        self.assertIn("return 'home'", context)
+        self.assertNotIn("out of verified range", context)
+        self.assertNotIn("unassigned test source", context)
+
+    def test_repair_source_context_prioritizes_step_files_over_earlier_reference_reads(self):
+        source = self.workspace / "src" / "app.py"
+        reference = self.workspace / "test" / "test_app.py"
+        assistant = {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "read-reference", "name": "Read",
+             "input": {"file_path": str(reference), "offset": 1, "limit": 2}},
+            {"type": "tool_use", "id": "read-source", "name": "Read",
+             "input": {"file_path": str(source), "offset": 2, "limit": 2}},
+        ]}}
+        results = {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "read-reference", "content": "reference assertion"},
+            {"type": "tool_result", "tool_use_id": "read-source", "content": "target implementation"},
+        ]}}
+        context = autonomous.read_context_from_events(
+            [assistant, results], self.workspace,
+            allowed_paths=["src/app.py", "test/test_app.py"], max_chars=300)
+        self.assertLess(context.index("src/app.py"), context.index("test/test_app.py"))
+        self.assertIn("target implementation", context)
+
+    def test_scoped_workspace_diff_is_limited_and_matches_current_target(self):
+        source = self.workspace / "src" / "app.py"
+        before = {"src/app.py": source.read_text(encoding="utf-8")}
+        source.write_text(before["src/app.py"] + "# targeted change\n", encoding="utf-8")
+        diff = autonomous.scoped_workspace_diff(before, self.workspace, ["src/app.py"])
+        self.assertIn("src/app.py", diff)
+        self.assertIn("+# targeted change", diff)
+        self.assertNotIn("test/test_app.py", diff)
+        self.assertLessEqual(len(autonomous.scoped_workspace_diff(
+            {"src/app.py": "old\n"}, self.workspace, ["src/app.py"], max_chars=100)), 100)
 
     def test_hash_diff_tracks_new_and_modified_files(self):
         before = autonomous.file_hashes(self.workspace)
@@ -785,7 +1617,7 @@ class AutonomousPlanTests(unittest.TestCase):
             self.workspace, [attempted, denied], allowed_paths=["src/large.js"],
             require_ranged_reads=True)
         self.assertTrue(audit["within_budget"])
-        self.assertEqual(audit["read_count"], 1)
+        self.assertEqual(audit["read_count"], 0)
         self.assertTrue(audit["reads"][0]["denied_before_execution"])
         successful_content = [
             {"type": "assistant", "message": {"content": [{
@@ -840,12 +1672,12 @@ class AutonomousPlanTests(unittest.TestCase):
                          "file_read_budget_exceeded_across_attempts")
 
     def test_discovery_and_implementation_have_separate_phase_budgets_and_one_step_ceiling(self):
-        self.assertEqual(autonomous.CHILD_STEP_TIMEOUT, 420)
+        self.assertEqual(autonomous.CHILD_STEP_TIMEOUT, 600)
         self.assertEqual(autonomous.CHILD_IDLE_TIMEOUT, 300)
         self.assertEqual(autonomous.INSPECTION_PHASE_LIMITS,
                          {"reads": 18, "searches": 18, "inspections": 36})
         self.assertEqual(autonomous.IMPLEMENTATION_INITIAL_LIMITS,
-                         {"reads": 22, "searches": 14, "inspections": 36})
+                         {"reads": 10, "searches": 3, "inspections": 13})
         def events(reads, searches):
             content = ([{"type": "tool_use", "name": "Read", "input": {
                 "file_path": str(self.workspace / "src" / "app.py"), "offset": 1, "limit": 1}}
@@ -895,7 +1727,9 @@ class AutonomousPlanTests(unittest.TestCase):
             {"type": "tool_use", "name": "Grep", "input": {"path": None}},
         ]}}]
         audit = autonomous.audit_worker_reads(self.workspace, events)
-        self.assertEqual(audit["read_count"], 2)
+        self.assertEqual(audit["read_count"], 0)
+        self.assertEqual(audit["search_count"], 2)
+        self.assertEqual(audit["counts_by_tool"], {"Read": 0, "Grep": 1, "Glob": 1})
         self.assertEqual([entry["path"] for entry in audit["reads"][:2]], [".", "."])
         self.assertFalse(audit["within_budget"])
         self.assertEqual(sum(item["reason"] == "invalid_read_tool_path" for item in audit["violations"]), 3)
@@ -1012,6 +1846,8 @@ class AutonomousPlanTests(unittest.TestCase):
             "id": "step-feature", "title": "Implement feature", "task": "Implement it",
             "files": ["src/app.py"], "depends_on": [], "checks": ["Feature works"],
             "covers": ["req-feature"], "step_validator_indices": [0],
+            "source_ranges": [{"path": "src/app.py", "offset": 1, "limit": 1,
+                               "purpose": "Existing implementation entry point"}],
         }]}
 
         class Response:
@@ -1112,10 +1948,12 @@ class AutonomousPlanTests(unittest.TestCase):
                             "limit": 25, "line_count_capped": 401}],
                  "violations": [], "within_budget": True}
         phases = []
+        child_timeouts = []
 
         def child(workspace, step, request, requirements, key, previous, **kwargs):
             phase = kwargs.get("phase")
             phases.append(phase)
+            child_timeouts.append(kwargs["timeout"])
             if phase == "scout":
                 return {"phase": "scout", "success": True, "exit": 0, "stop_reason": None,
                         "seconds": 1, "child_tool_calls": ["Grep", "Read"], "qwen_route_calls": 1,
@@ -1146,6 +1984,7 @@ class AutonomousPlanTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "complete")
         self.assertEqual(phases, ["scout", "implementation"])
+        self.assertEqual(child_timeouts, [5, 5])
         self.assertEqual(result["steps"][0]["inspection"]["source"], "qwen_bounded_source_scout")
         self.assertTrue(result["steps"][0]["inspection"]["status"] == "passed")
 
@@ -1218,18 +2057,23 @@ class AutonomousPlanTests(unittest.TestCase):
             nonlocal implementation_calls
             implementation_calls += 1
             if kwargs.get("repair_feedback"):
-                checkpoint_line = next(line for line in kwargs["repair_feedback"].splitlines()
-                                       if line.startswith("Checkpoint: "))
-                checkpoint = json.loads(Path(checkpoint_line.removeprefix("Checkpoint: ")).read_text(
-                    encoding="utf-8"))
-                self.assertEqual(checkpoint["diagnostics"][0]["exit"], 1)
-                resume = checkpoint["resume_instruction"]
-                self.assertIn("Remaining step inspection budget: 24 Reads, 17 searches, 41 combined calls.", resume)
-                self.assertIn("Remaining implementation-phase inspection budget: 19 Reads, 14 searches, 33 combined calls.", resume)
-                self.assertIn("test/test_app.py", resume)
-                self.assertNotIn("Read the listed acceptance paths first", resume)
+                self.assertNotIn("Checkpoint:", kwargs["repair_feedback"])
+                self.assertIn("Resume instructions from the saved checkpoint: Continue in the same persistent workspace.",
+                              kwargs["repair_feedback"])
+                self.assertIn("Remaining step inspection budget: 24 Reads, 17 searches, 41 combined calls.",
+                              kwargs["repair_feedback"])
+                self.assertIn("Remaining implementation-phase inspection budget: 19 Reads, 14 searches, 33 combined calls.",
+                              kwargs["repair_feedback"])
+                self.assertIn("test/test_app.py", kwargs["repair_feedback"])
+                self.assertNotIn("Read the listed acceptance paths first", kwargs["repair_feedback"])
                 self.assertNotIn("Read the acceptance files first", kwargs["repair_feedback"])
                 self.assertIn("24 Reads, 17 searches, 41 combined calls", kwargs["repair_feedback"])
+                self.assertIn("Successful source excerpts captured from the first child", kwargs["repair_feedback"])
+                self.assertIn("def render(): return 'home'", kwargs["repair_feedback"])
+                self.assertIn("Current step-owned diff relative to the pre-worker files", kwargs["repair_feedback"])
+                self.assertIn("+# attempt 1", kwargs["repair_feedback"])
+                self.assertIn("Preserve the existing scoped diff", kwargs["repair_feedback"])
+                self.assertIn("Do not read runner checkpoints", kwargs["repair_feedback"])
             target = workspace / "src" / "app.py"
             target.write_text(target.read_text(encoding="utf-8") + f"# attempt {implementation_calls}\n",
                               encoding="utf-8")
@@ -1243,6 +2087,7 @@ class AutonomousPlanTests(unittest.TestCase):
                     "seconds": 1, "child_tool_calls": ["Read", "Edit"], "qwen_route_calls": 2,
                     "child_handoff": implementation_calls != 1, "child_result": "partial edit",
                     "final": "complete" if implementation_calls != 1 else None,
+                    "read_context": "src/app.py lines 1-2\ndef render(): return 'home'",
                     "read_audit": read_audit}
 
         with mock.patch.object(autonomous, "run_validators", side_effect=validators), \
@@ -1269,13 +2114,13 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertEqual(inspection_kwargs["phase"], "inspection")
         self.assertEqual(first_kwargs["phase"], "implementation")
         self.assertIsNotNone(first_kwargs["inspection_context"])
-        self.assertEqual(first_kwargs["inspection_limits"], {"reads": 22, "searches": 14, "inspections": 36})
+        self.assertEqual(first_kwargs["inspection_limits"], {"reads": 10, "searches": 3, "inspections": 13})
         self.assertEqual(continuation_kwargs["inspection_limits"], {"reads": 19, "searches": 14, "inspections": 33})
         self.assertEqual(first_kwargs["read_only_paths"], read_only)
         self.assertEqual(continuation_kwargs["read_only_paths"], read_only)
-        self.assertIn("Checkpoint:", continuation_kwargs["repair_feedback"])
+        self.assertNotIn("Checkpoint:", continuation_kwargs["repair_feedback"])
         self.assertIn("assertion failed", continuation_kwargs["repair_feedback"])
-        checkpoint_path = Path(continuation_kwargs["repair_feedback"].split("Checkpoint: ", 1)[1].splitlines()[0])
+        checkpoint_path = next(self.runs_root.rglob("step-feature-checkpoint-1.json"))
         checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
         self.assertEqual(checkpoint["read_only_acceptance_paths"], read_only)
         self.assertEqual(checkpoint["diagnostics"][0]["exit"], 1)
@@ -1283,6 +2128,10 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertEqual(checkpoint["read_audit"]["search_count"], 19)
         self.assertEqual(checkpoint["read_audit"]["inspection_count"], 41)
         self.assertEqual(checkpoint["read_audit"]["limits"], {"reads": 46, "searches": 36, "inspections": 82})
+        self.assertTrue(checkpoint["repair_capsule"]["source_excerpts_are_pre_edit"])
+        self.assertIn("def render(): return 'home'", checkpoint["repair_capsule"]["first_attempt_source_excerpts"])
+        self.assertIn("+# attempt 1", checkpoint["repair_capsule"]["current_scoped_diff"])
+        self.assertIn("Do not read runner checkpoints", continuation_kwargs["repair_feedback"])
         self.assertEqual(final_repair_kwargs["read_only_paths"], read_only)
         self.assertIn("integration failed", final_repair_kwargs["repair_feedback"])
         self.assertEqual(validation_calls[0], [["baseline-probe"]])
@@ -1318,24 +2167,27 @@ class AutonomousPlanTests(unittest.TestCase):
         with mock.patch.object(autonomous.dispatch, "claude_command", return_value=["claude"]) as command, \
              mock.patch.object(autonomous.dispatch, "run_cli_bounded", side_effect=fake_cli), \
              mock.patch.object(autonomous.dispatch, "cli_env", return_value={}), \
-             mock.patch.object(autonomous.subprocess, "run",
-                               side_effect=subprocess.TimeoutExpired(["docker", "logs"], 20)):
+             mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                 ["docker", "logs"], 0, "", "")):
             result = autonomous.run_child(
-                self.workspace, step, "Implement the feature", requirements, "test-key", [], timeout=5,
+                self.workspace, step, "Implement the feature", requirements, "test-key", [], timeout=700,
                 transcript_path=self.runs_root / "worker.jsonl", repair_feedback=repair_feedback,
                 read_only_paths=["test/test_app.py"],
             )
 
-        self.assertTrue(result["success"])
-        self.assertEqual(result["telemetry"]["status"], "unavailable")
-        self.assertIsNone(result["qwen_route_calls"])
+        self.assertFalse(result["success"], "an available telemetry window with no Qwen call must not pass")
+        self.assertTrue(result["child_handoff"])
+        self.assertEqual(result["telemetry"]["status"], "available")
+        self.assertEqual(result["qwen_route_calls"], 0)
+        self.assertFalse(result["qwen_route_verified"])
         agent_spec = json.loads(command.call_args.kwargs["agents"])[autonomous.AUTONOMOUS_CHILD]["prompt"]
         self.assertIn(str((self.workspace / "test/test_app.py").resolve()), agent_spec)
         self.assertIn("Diagnostic: assertion failed", agent_spec)
         self.assertIn("Do not reread them automatically", agent_spec)
         self.assertNotIn("Read these caller-supplied acceptance and supporting reference files before editing", agent_spec)
-        self.assertIn("22 Read calls", agent_spec)
+        self.assertIn("10 Read calls", agent_spec)
         self.assertEqual(cli_call["cwd"], self.workspace)
+        self.assertEqual(cli_call["timeout"], 600)
 
     def test_ejs_repair_keeps_batch_hook_without_requiring_a_second_template_checkpoint(self):
         template = self.workspace / "views" / "page.ejs"
@@ -1371,8 +2223,8 @@ class AutonomousPlanTests(unittest.TestCase):
         with mock.patch.object(autonomous.dispatch, "claude_command", return_value=["claude"]) as command, \
              mock.patch.object(autonomous.dispatch, "run_cli_bounded", side_effect=fake_cli), \
              mock.patch.object(autonomous.dispatch, "cli_env", return_value={}), \
-             mock.patch.object(autonomous.subprocess, "run",
-                               side_effect=subprocess.TimeoutExpired(["docker", "logs"], 20)):
+             mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                 ["docker", "logs"], 0, ROUTE_LOGS, "")):
             result = autonomous.run_child(
                 self.workspace, step, "Repair the focused render failure", [], "test-key", [], timeout=5,
                 transcript_path=self.runs_root / "repair.jsonl",
@@ -1399,7 +2251,8 @@ class AutonomousPlanTests(unittest.TestCase):
 
         def fake_cli(command, **kwargs):
             worker = json.loads(spec_holder["agents"])[autonomous.AUTONOMOUS_CHILD]
-            marker = worker["prompt"].split("End with ", 1)[1].split(" ", 1)[0]
+            marker = re.search(r"append the exact marker (QWEN_AUTONOMOUS_COMPLETE_[A-Za-z0-9_-]+)",
+                               worker["prompt"]).group(1)
             report = {"summary": "One route entry point.",
                       "implementation_plan": "Add the handler before the catch-all.",
                       "files": [{"path": "src/scout.js", "symbols": ["route"],
@@ -1417,13 +2270,14 @@ class AutonomousPlanTests(unittest.TestCase):
                 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "child-scout",
                                                                "content": json.dumps(report) + "\n" + marker}]}},
             ]
+            write_test_result_cap_receipts(Path(kwargs["transcript_path"]), events)
             return "\n".join(json.dumps(event) for event in events), "parent timed out", 124, "deadline", True
 
         with mock.patch.object(autonomous.dispatch, "claude_command", side_effect=lambda **kwargs: (spec_holder.update(kwargs) or ["claude"])), \
              mock.patch.object(autonomous.dispatch, "run_cli_bounded", side_effect=fake_cli), \
              mock.patch.object(autonomous.dispatch, "cli_env", return_value={}), \
-             mock.patch.object(autonomous.subprocess, "run",
-                               side_effect=subprocess.TimeoutExpired(["docker", "logs"], 20)):
+             mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                 ["docker", "logs"], 0, ROUTE_LOGS, "")):
             result = autonomous.run_child(
                 self.workspace, step, "Implement a route", [], "test-key", [], timeout=5,
                 transcript_path=self.runs_root / "scout-timeout.jsonl", phase="scout",
@@ -1434,9 +2288,104 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["inspection_report"]["files"][0]["path"], "src/scout.js")
 
+    def test_run_child_accepts_valid_inspection_handoff_after_parent_timeout(self):
+        source = self.workspace / "src" / "inspect.js"
+        source.write_text("function route() { return true; }\n", encoding="utf-8")
+        step = {"id": "step-inspection", "title": "Inspect route", "task": "Add token route",
+                "files": ["src/inspect.js"], "reference_paths": [], "covers": [], "checks": []}
+        spec_holder = {}
+
+        def fake_cli(command, **kwargs):
+            marker = re.search(r"append the exact marker (QWEN_AUTONOMOUS_COMPLETE_[A-Za-z0-9_-]+)",
+                               json.loads(spec_holder["agents"])[autonomous.AUTONOMOUS_CHILD]["prompt"])
+            report = {"summary": "One route entry point.",
+                      "implementation_plan": "Add the handler before the catch-all.",
+                      "files": [{"path": "src/inspect.js", "symbols": ["route"],
+                                 "ranges": [{"offset": 1, "limit": 1, "purpose": "route definition"}]}],
+                      "risks": []}
+            events = [
+                {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Agent",
+                                                                    "id": "child-inspection"}]}},
+                {"type": "assistant", "parent_tool_use_id": "child-inspection", "message": {"content": [
+                    {"type": "tool_use", "name": "Read", "id": "read-inspection",
+                     "input": {"file_path": str(source.resolve()), "offset": 1, "limit": 1}}]}},
+                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "read-inspection",
+                                                               "content": "function route() { return true; }"}]}},
+                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "child-inspection",
+                                                               "content": json.dumps(report) + "\n" + marker.group(1)}]}},
+            ]
+            write_test_result_cap_receipts(Path(kwargs["transcript_path"]), events)
+            return "\n".join(json.dumps(event) for event in events), "parent timed out", 124, "deadline", True
+
+        with mock.patch.object(autonomous.dispatch, "claude_command",
+                               side_effect=lambda **kwargs: (spec_holder.update(kwargs) or ["claude"])), \
+             mock.patch.object(autonomous.dispatch, "run_cli_bounded", side_effect=fake_cli), \
+             mock.patch.object(autonomous.dispatch, "cli_env", return_value={}), \
+             mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                 ["docker", "logs"], 0, ROUTE_LOGS, "")):
+            result = autonomous.run_child(
+                self.workspace, step, "Implement a route", [], "test-key", [], timeout=5,
+                transcript_path=self.runs_root / "inspection-timeout.jsonl", phase="inspection",
+                inspection_limits=autonomous.IMPLEMENTATION_PHASE_LIMITS,
+            )
+
+        self.assertFalse(result["final_success"])
+        self.assertTrue(result["success"])
+        self.assertEqual(result["inspection_report"]["files"][0]["path"], "src/inspect.js")
+
+    def test_run_child_normalizes_custom_inspection_json_from_audited_reads(self):
+        source = self.workspace / "src" / "scout.js"
+        source.write_text("function route() { return true; }\n", encoding="utf-8")
+        step = {"id": "step-scout", "title": "Inspect route", "task": "Add token route",
+                "files": ["src/scout.js"], "reference_paths": [], "covers": [], "checks": []}
+        spec_holder = {}
+
+        def fake_cli(command, **kwargs):
+            worker = json.loads(spec_holder["agents"])[autonomous.AUTONOMOUS_CHILD]
+            marker = re.search(r"append the exact marker (QWEN_AUTONOMOUS_COMPLETE_[A-Za-z0-9_-]+)",
+                               worker["prompt"]).group(1)
+            events = [
+                {"type": "assistant", "message": {"content": [
+                    {"type": "tool_use", "name": "Agent", "id": "child-scout"}]}},
+                {"type": "assistant", "parent_tool_use_id": "child-scout", "message": {
+                    "model": dispatch.MODEL, "content": [
+                        {"type": "tool_use", "name": "Read", "id": "read-scout",
+                         "input": {"file_path": str(source.resolve()), "offset": 1, "limit": 1}}]}},
+                {"type": "user", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": "read-scout",
+                     "content": "function route() { return true; }"}]}},
+                {"type": "user", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": "child-scout",
+                     "content": '{"goal_summary":"The route is in src/scout.js.","source_notes":[]}\n' + marker}]}},
+                {"type": "result", "subtype": "success", "result": "inspection complete"},
+            ]
+            write_test_result_cap_receipts(Path(kwargs["transcript_path"]), events)
+            return "\n".join(json.dumps(event) for event in events), "", 0, None, True
+
+        with mock.patch.object(autonomous.dispatch, "claude_command",
+                               side_effect=lambda **kwargs: (spec_holder.update(kwargs) or ["claude"])), \
+             mock.patch.object(autonomous.dispatch, "run_cli_bounded", side_effect=fake_cli), \
+             mock.patch.object(autonomous.dispatch, "cli_env", return_value={}), \
+             mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                 ["docker", "logs"], 0, ROUTE_LOGS, "")):
+            result = autonomous.run_child(
+                self.workspace, step, "Implement a route", [], "test-key", [], timeout=5,
+                transcript_path=self.runs_root / "scout-custom-schema.jsonl", phase="scout",
+                inspection_limits=autonomous.SOURCE_SCOUT_LIMITS,
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["inspection_report_source"], "audited_read_fallback")
+        self.assertEqual(result["inspection_report"]["summary"], "Audited source context for Inspect route.")
+        self.assertEqual(result["inspection_report"]["files"][0]["path"], "src/scout.js")
+        self.assertEqual(result["inspection_report"]["files"][0]["ranges"][0]["offset"], 1)
+
     def test_run_child_inspection_phase_is_read_only_and_requires_source_ranges(self):
         step = {"id": "step-feature", "title": "Persist feature", "task": "Persist the feature",
-                "files": ["src/app.py"], "covers": ["req-feature"], "checks": ["Feature persists"]}
+                "files": ["src/app.py"],
+                "source_ranges": [{"path": "src/app.py", "offset": 1, "limit": 1,
+                                   "purpose": "existing value assignment"}],
+                "covers": ["req-feature"], "checks": ["Feature persists"]}
         requirements = [{"id": "req-feature", "acceptance": "The feature is persisted"}]
         spec_holder = {}
 
@@ -1446,11 +2395,12 @@ class AutonomousPlanTests(unittest.TestCase):
 
         def fake_cli(command, **kwargs):
             worker = json.loads(spec_holder["agents"])[autonomous.AUTONOMOUS_CHILD]
-            marker = worker["prompt"].split("End with ", 1)[1].split(" ", 1)[0]
+            marker = re.search(r"append the exact marker (QWEN_AUTONOMOUS_COMPLETE_[A-Za-z0-9_-]+)",
+                               worker["prompt"]).group(1)
             report = {"summary": "The source has a single state variable.",
                       "implementation_plan": "Update the existing state assignment.",
                       "risks": [], "files": [{"path": "src/app.py", "symbols": ["value"],
-                          "ranges": [{"offset": 1, "limit": 100,
+                          "ranges": [{"offset": 1, "limit": 1,
                                       "purpose": "locate the assignment"}]}]}
             events = [
                 {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Agent",
@@ -1458,7 +2408,7 @@ class AutonomousPlanTests(unittest.TestCase):
                 {"type": "assistant", "parent_tool_use_id": "child-inspect", "message": {"content": [
                     {"type": "tool_use", "name": "Read", "id": "read-1",
                      "input": {"file_path": str((self.workspace / "src/app.py").resolve()),
-                               "offset": 1, "limit": 100}},
+                               "offset": 1, "limit": 1}},
                 ]}},
                 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "read-1",
                                                                "content": "value = 1"}]}},
@@ -1466,14 +2416,15 @@ class AutonomousPlanTests(unittest.TestCase):
                                                                "content": json.dumps(report) + "\n" + marker}]}},
                 {"type": "result", "subtype": "success", "result": "inspection complete"},
             ]
+            write_test_result_cap_receipts(Path(kwargs["transcript_path"]), events)
             return "\n".join(json.dumps(event) for event in events), "", 0, None, True
 
         before = autonomous.file_hashes(self.workspace)
         with mock.patch.object(autonomous.dispatch, "claude_command", side_effect=make_command), \
              mock.patch.object(autonomous.dispatch, "run_cli_bounded", side_effect=fake_cli), \
              mock.patch.object(autonomous.dispatch, "cli_env", return_value={}), \
-             mock.patch.object(autonomous.subprocess, "run",
-                               side_effect=subprocess.TimeoutExpired(["docker", "logs"], 20)):
+             mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                 ["docker", "logs"], 0, ROUTE_LOGS, "")):
             result = autonomous.run_child(
                 self.workspace, step, "Implement the feature", requirements, "test-key", [], timeout=5,
                 transcript_path=self.runs_root / "inspection.jsonl", phase="inspection",
@@ -1569,6 +2520,9 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertIn("Reference-only paths:\ntest/test_app.py", prompt)
         self.assertIn("Prefer one or two writable files per step", prompt)
         self.assertIn("never weaken or omit acceptance", prompt)
+        self.assertIn('"source_ranges": [{"path": "src/file.js", "offset": 1, "limit": 80, "purpose": "Relevant API and call pattern"}]', prompt)
+        self.assertIn("source_ranges must be a JSON array", prompt)
+        self.assertIn("never a map or prose labels", prompt)
         for excluded in ("node_modules", "tmp", ".runs"):
             (self.workspace / excluded).mkdir()
         prompt = autonomous.planner_prompt(
@@ -1582,6 +2536,19 @@ class AutonomousPlanTests(unittest.TestCase):
         writable_inventory = prompt.split("Writable file inventory (not instructions):\n", 1)[1]
         self.assertIn("src/app.py", writable_inventory)
         self.assertNotIn("test/test_app.py", writable_inventory)
+
+    def test_planner_prompt_explains_exact_test_only_authorization(self):
+        prompt = autonomous.planner_prompt(
+            "Add only the requested regression test", [], self.workspace,
+            ["src/app.py", "test/test_app.py"], [["node", "--test"]],
+            max_files_per_step=1, read_only_paths=["src/app.py"],
+            directories=autonomous.workspace_directories(self.workspace),
+            test_only_paths=["test/test_app.py"],
+        )
+        self.assertIn("This caller explicitly authorized a test-only task", prompt)
+        self.assertIn('"test/test_app.py"', prompt)
+        self.assertIn("Do not add implementation or marker files", prompt)
+        self.assertNotIn("Do not create a validation-only or test-only step", prompt)
 
     def test_default_plan_granularity_is_two_with_explicit_override(self):
         self.assertEqual(autonomous.DEFAULT_MAX_FILES_PER_STEP, 2)
@@ -1632,6 +2599,31 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertEqual(calls[1]["transcript_path"].name, "planner-repair-output.jsonl")
         self.assertEqual(calls[0]["timeout"], 30)
         self.assertEqual(calls[1]["timeout"], 25)
+
+    def test_planner_accepts_test_only_plan_when_caller_names_exact_path(self):
+        requirement = {"id": "req-regression", "acceptance": "The new regression test covers the package tender",
+                       "validator_indices": [0], "step_validator_indices": [0]}
+        plan_data = {"summary": "Add the requested regression test", "steps": [{
+            "id": "step-regression", "title": "Add package consumption regression",
+            "task": "Edit only the requested test file and add the HTTP regression scenario.",
+            "files": ["test/new-feature.test.cjs"], "depends_on": [],
+            "checks": ["The new regression test passes"], "covers": ["req-regression"],
+        }]}
+        result_event = json.dumps({"type": "result", "subtype": "success",
+                                   "result": json.dumps(plan_data)})
+        with mock.patch.object(autonomous.dispatch, "claude_command", return_value=["claude"]), \
+             mock.patch.object(autonomous.dispatch, "cli_env", return_value={}), \
+             mock.patch.object(autonomous.dispatch, "run_cli_bounded",
+                               return_value=(result_event, "", 0, None, True)):
+            plan, receipt = autonomous.plan_with_qwen(
+                self.workspace, "Add the package redemption regression test", [requirement], "test-key",
+                timeout=30, max_files_per_step=1, validators=[["node", "--test"]],
+                read_only_paths=[], transcript_dir=self.runs_root,
+                test_only_paths=["test/new-feature.test.cjs"],
+            )
+
+        self.assertEqual(plan["steps"][0]["files"], ["test/new-feature.test.cjs"])
+        self.assertFalse(receipt["repaired"])
 
     def test_planner_does_not_start_repair_after_shared_deadline_expires(self):
         invalid = json.dumps({"type": "result", "subtype": "success", "result": "{bad"})
@@ -1759,6 +2751,106 @@ class AutonomousPlanTests(unittest.TestCase):
         state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
         self.assertEqual(state["status"], "failed_exception")
         self.assertFalse(state["workspace_dirty"])
+
+    def test_baseline_exception_is_saved_as_terminal_run_failure(self):
+        (self.workspace / ".qwen-disposable.json").write_text('{"disposable": true}', encoding="utf-8")
+        requirement = {"id": "req-feature", "acceptance": "Feature is implemented",
+                       "validator_indices": [0], "step_validator_indices": [0]}
+        with mock.patch.object(autonomous, "run_validators", side_effect=RuntimeError("validator launch failed")):
+            with self.assertRaisesRegex(RuntimeError, "validator launch failed"):
+                autonomous.run_request(
+                    self.workspace, "Implement a feature", [["acceptance"]],
+                    runs_root=self.runs_root, total_timeout=30, step_timeout=5,
+                    validator_timeout=5, requirements=[requirement],
+                )
+
+        run_dir = max(self.runs_root.glob("qwen-autonomous-*"), key=lambda item: item.stat().st_mtime)
+        state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["status"], "failed_exception")
+        self.assertIn("validator launch failed", state["error"])
+        self.assertTrue(state.get("finished_at"))
+        self.assertFalse(state["workspace_dirty"])
+
+    def test_gateway_readiness_exception_is_saved_as_terminal_run_failure(self):
+        (self.workspace / ".qwen-disposable.json").write_text('{"disposable": true}', encoding="utf-8")
+        requirement = {"id": "req-feature", "acceptance": "Feature is implemented",
+                       "validator_indices": [0], "step_validator_indices": [0]}
+
+        class Client:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def get(self, path):
+                if path == "/health/readiness":
+                    raise RuntimeError("gateway readiness unavailable")
+                raise AssertionError(f"unexpected gateway request: {path}")
+
+        with mock.patch.object(autonomous, "run_validators", return_value=[
+                {"argv": ["baseline"], "exit": 0, "stdout": "passed", "stderr": ""}]), \
+             mock.patch.object(autonomous.dispatch, "gateway_key", return_value="test-key"), \
+             mock.patch.object(autonomous.httpx, "Client", return_value=Client()):
+            with self.assertRaisesRegex(RuntimeError, "gateway readiness unavailable"):
+                autonomous.run_request(
+                    self.workspace, "Implement a feature", [["acceptance"]],
+                    runs_root=self.runs_root, total_timeout=30, step_timeout=5,
+                    validator_timeout=5, requirements=[requirement],
+                )
+
+        run_dir = max(self.runs_root.glob("qwen-autonomous-*"), key=lambda item: item.stat().st_mtime)
+        state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["status"], "failed_exception")
+        self.assertIn("gateway readiness unavailable", state["error"])
+        self.assertTrue(state.get("finished_at"))
+        self.assertFalse(state["workspace_dirty"])
+        self.assertEqual(state["baseline_validation"][0]["exit"], 0)
+
+    def test_workspace_run_lock_rejects_a_second_concurrent_run(self):
+        ready_file = self.runs_root / "workspace-lock-ready"
+        release_file = self.runs_root / "workspace-lock-release"
+        child_code = """
+import sys
+import time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import autonomous
+with_lock = autonomous.workspace_run_lock(Path(sys.argv[2]))
+with_lock.__enter__()
+Path(sys.argv[3]).write_text("LOCKED")
+deadline = time.monotonic() + 5
+while not Path(sys.argv[4]).exists() and time.monotonic() < deadline:
+    time.sleep(0.01)
+with_lock.__exit__(None, None, None)
+"""
+        child = subprocess.Popen(
+            [sys.executable, "-c", child_code, str(Path(__file__).parent), str(self.workspace),
+             str(ready_file), str(release_file)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while not ready_file.exists() and child.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(ready_file.exists(), "child process did not acquire the workspace lock in time")
+            with self.assertRaisesRegex(RuntimeError, "another Qwen run already holds"):
+                with autonomous.workspace_run_lock(self.workspace):
+                    self.fail("second process unexpectedly acquired the workspace lock")
+        finally:
+            release_file.write_text("release", encoding="utf-8")
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=5)
+            stderr = child.stderr.read()
+            child.stderr.close()
+            ready_file.unlink(missing_ok=True)
+            release_file.unlink(missing_ok=True)
+        self.assertEqual(child.returncode, 0, stderr)
+        with autonomous.workspace_run_lock(self.workspace):
+            pass  # A finished process releases its OS lock automatically.
 
     def test_run_request_stops_without_continuation_when_required_checkpoint_is_missing(self):
         (self.workspace / ".qwen-disposable.json").write_text('{"disposable": true}', encoding="utf-8")
@@ -1983,6 +3075,24 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertLessEqual(validator.call_args.kwargs["timeout"], 25)
         self.assertIn("passed", emit.call_args.args[0])
 
+    def test_implementation_checkpoint_accepts_first_non_ejs_edit_as_progress(self):
+        source = self.workspace / "src" / "booking-api-server.js"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("module.exports = {};\n", encoding="utf-8")
+        receipt = self.runs_root / "progress.json"
+        scope = {"root": str(self.workspace), "write_allowed": ["src/booking-api-server.js"],
+                 "validators": [["node", "check-ejs.js"]]}
+        payload = {"agent_type": "qwen-autonomous-implementer", "tool_calls": [{
+            "tool_name": "Edit", "tool_input": {"file_path": str(source)},
+            "tool_response": "The file has been updated successfully.",
+        }]}
+        with mock.patch.object(template_checkpoint.subprocess, "run") as validator:
+            result = template_checkpoint.run_checkpoint(payload, scope, receipt)
+        self.assertEqual(result["status"], "progress")
+        self.assertEqual(result["paths"], ["src/booking-api-server.js"])
+        validator.assert_not_called()
+        self.assertTrue(dispatch.checkpoint_receipt_complete(receipt))
+
     def test_ejs_checkpoint_ignores_reads_js_out_of_scope_failed_and_coordinator_calls(self):
         scope = {"root": str(self.workspace), "write_allowed": ["views/page.ejs"],
                  "validators": [["node", "check.js"]]}
@@ -2066,13 +3176,30 @@ class AutonomousPlanTests(unittest.TestCase):
 
     def test_missing_ejs_checkpoint_stops_worker_at_its_own_deadline(self):
         missing_receipt = self.runs_root / "missing-checkpoint.json"
+        dispatch_event = json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Agent", "input": {"description": "implement"}},
+        ]}})
+        source = f"import time; time.sleep(1.2); print({dispatch_event!r}, flush=True); time.sleep(3)"
+        started = time.monotonic()
         result = dispatch.run_cli_bounded(
-            [sys.executable, "-c", "import time; time.sleep(3)"], task_input="",
+            [sys.executable, "-c", source], task_input="",
             cwd=self.workspace, env=dict(os.environ), timeout=10, idle_timeout=10,
             checkpoint_receipt_path=missing_receipt, checkpoint_deadline=1,
         )
-        self.assertEqual(result[3], "Qwen EJS checkpoint was not reached within 1 seconds")
+        self.assertEqual(result[3], "Qwen first-edit checkpoint was not reached within 1 seconds after worker delegation")
+        self.assertGreaterEqual(time.monotonic() - started, 2.0)
         self.assertTrue(result[4])
+
+    def test_checkpoint_watchdog_waits_for_worker_delegation(self):
+        receipt = self.runs_root / "not-delegated-checkpoint.json"
+        started = time.monotonic()
+        result = dispatch.run_cli_bounded(
+            [sys.executable, "-c", "import time; time.sleep(1.2)"], task_input="",
+            cwd=self.workspace, env=dict(os.environ), timeout=5, idle_timeout=5,
+            checkpoint_receipt_path=receipt, checkpoint_deadline=0.2,
+        )
+        self.assertIsNone(result[3])
+        self.assertGreaterEqual(time.monotonic() - started, 1.0)
 
     def test_repair_without_ejs_checkpoint_remains_under_normal_total_timeout(self):
         receipt = self.runs_root / "repair-checkpoint.json"
@@ -2106,6 +3233,38 @@ class AutonomousPlanTests(unittest.TestCase):
         self.assertEqual([item["exit"] for item in results], [0, 0])
         self.assertTrue(all(0 < value <= 2 for value in calls))
 
+    def test_validator_rejects_missing_explicit_node_test_file_even_if_node_would_exit_zero(self):
+        validator = ["node", "--test", "test/booking-addons-public.test.cjs", "test/test_app.py"]
+        with mock.patch.object(autonomous.subprocess, "run") as run:
+            results = autonomous.run_validators(self.workspace, [validator], timeout=10)
+        self.assertEqual(results[0]["exit"], 2)
+        self.assertIn("test/booking-addons-public.test.cjs", results[0]["stderr"])
+        run.assert_not_called()
+
+    def test_validator_accepts_existing_node_test_targets(self):
+        validator = ["node", "--test", "test/test_app.py"]
+        with mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                validator, 0, "tests passed", "")) as run:
+            results = autonomous.run_validators(self.workspace, [validator], timeout=10)
+        self.assertEqual(results[0]["exit"], 0)
+        run.assert_called_once()
+
+    def test_validator_checks_test_target_after_option_terminator(self):
+        validator = ["node", "--test", "--", "test/missing.test.cjs"]
+        with mock.patch.object(autonomous.subprocess, "run") as run:
+            results = autonomous.run_validators(self.workspace, [validator], timeout=10)
+        self.assertEqual(results[0]["exit"], 2)
+        self.assertIn("test/missing.test.cjs", results[0]["stderr"])
+        run.assert_not_called()
+
+    def test_validator_skips_separate_test_reporter_destination_value(self):
+        validator = ["node", "--test", "--test-reporter-destination", "missing-results.tap", "test/test_app.py"]
+        with mock.patch.object(autonomous.subprocess, "run", return_value=subprocess.CompletedProcess(
+                validator, 0, "tests passed", "")) as run:
+            results = autonomous.run_validators(self.workspace, [validator], timeout=10)
+        self.assertEqual(results[0]["exit"], 0)
+        run.assert_called_once()
+
     def test_reconciliation_uses_running_repair_attempt_on_accepted_step(self):
         state_path = self.workspace / "state.json"
         before = autonomous.file_hashes(self.workspace)
@@ -2120,6 +3279,241 @@ class AutonomousPlanTests(unittest.TestCase):
         result = autonomous.reconcile_interrupted_state(state_path, self.workspace)
         self.assertEqual(result["status"], "interrupted_dirty")
         self.assertFalse(result["resume_allowed"])
+
+
+    # ------------------------------------------------------------------
+    # Run-scoped validator TEMP/TMP environment regression tests.
+    #
+    # These cover the behavior change that each run gets its own copied
+    # environment (TEMP/TMP pointed at that run's artifact directory) and
+    # that this environment is forwarded to the validator phases.  The
+    # parent os.environ must never be mutated and the forwarded value must
+    # be a distinct dict copy, never os.environ itself.
+    # ------------------------------------------------------------------
+
+    def test_run_validators_forwards_explicit_env_to_subprocess(self):
+        # Requirement 1a: run_validators must forward an explicitly supplied
+        # env dict verbatim to subprocess.run (env=... keyword).
+        env = {"TEMP": str(self.runs_root / "artifacts"),
+               "TMP": str(self.runs_root / "artifacts"),
+               "PATH": "/usr/bin"}
+        validator = ["echo", "temp"]
+        with mock.patch.object(autonomous.subprocess, "run",
+                               return_value=subprocess.CompletedProcess(
+                                   validator, 0, "", "")) as run:
+            autonomous.run_validators(self.workspace, [validator],
+                                      timeout=5, env=env)
+        run.assert_called_once()
+        self.assertIs(run.call_args.kwargs["env"], env)
+
+    def test_run_validators_sends_none_env_when_omitted(self):
+        # Requirement 1b: when no env is supplied run_validators must send
+        # env=None (never os.environ) so subprocess inherits the parent env.
+        validator = ["echo", "temp"]
+        with mock.patch.object(autonomous.subprocess, "run",
+                               return_value=subprocess.CompletedProcess(
+                                   validator, 0, "", "")) as run:
+            autonomous.run_validators(self.workspace, [validator], timeout=5)
+        run.assert_called_once()
+        self.assertIsNone(run.call_args.kwargs["env"])
+
+    def test_run_request_forwards_run_scoped_env_to_validator_phases(self):
+        # Requirement 2: run_request must forward ONE copied run-scoped
+        # environment to the baseline, step, repair, final and final-retry
+        # validator paths it exercises.  The parent os.environ must stay
+        # untouched and the forwarded dict must be a copy (identity !=
+        # os.environ).  The exact TEMP/TMP values are asserted in the
+        # template_checkpoint tests below; here the acceptance contract is
+        # that every validator phase receives a dict (never None, never
+        # os.environ itself).
+        (self.workspace / ".qwen-disposable.json").write_text(
+            '{"disposable": true}', encoding="utf-8")
+        (self.workspace / "views").mkdir()
+        (self.workspace / "views" / "page.ejs").write_text("<p>before</p>\n", encoding="utf-8")
+        requirement = {"id": "req-feature", "acceptance": "Feature is implemented",
+                      "validator_indices": [0], "step_validator_indices": [0]}
+        plan = {"summary": "One implementation step", "steps": [{
+            "id": "step-feature", "title": "Implement feature", "task": "Implement it",
+            "files": ["views/page.ejs"], "depends_on": [], "checks": ["Feature works"],
+            "covers": ["req-feature"], "step_validator_indices": [0],
+            "source_ranges": [{"path": "views/page.ejs", "offset": 1, "limit": 1,
+                               "purpose": "Existing implementation entry point"}],
+        }]}
+        # Drive the run through the same preverified-inspection path as the
+        # existing run_request fixtures: the EJS target exercises the
+        # orchestrator-to-child checkpoint temp-path handoff while the child
+        # and validator processes remain deterministic mocks.
+        preverified = {"step-feature": {
+            "summary": "Existing handler is one line in the assigned file.",
+            "implementation_plan": "Preserve its current behavior and add the feature in the same module.",
+            "risks": [],
+            "files": [{"path": "views/page.ejs", "symbols": ["template"],
+                       "ranges": [{"offset": 1, "limit": 1,
+                                   "purpose": "Existing implementation entry point"}]}],
+        }}
+
+        class Response:
+            def __init__(self, value=None):
+                self.value = value
+            def raise_for_status(self):
+                return None
+            def json(self):
+                return self.value
+
+        active = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
+                  "advisor_model": None, "advisor_reasoning_effort": None,
+                  "advisor_sensitivity": "medium", "advisor_trigger": None,
+                  "advisor_classifier": None, "fast_mode": False}
+
+        class Client:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def get(self, path):
+                return Response(active if path == "/api/active-model" else {})
+            def post(self, *args, **kwargs):
+                return Response({})
+
+        validator_calls = []
+
+        def record_validators(workspace, validators, **kwargs):
+            validator_calls.append((validators, kwargs.get("env")))
+            return [{"argv": list(argv), "exit": 0, "stdout": "passed", "stderr": ""}
+                    for argv in validators]
+
+        child_calls = []
+
+        def child(workspace, step, request, requirements, key, previous, **kwargs):
+            phase = kwargs.get("phase")
+            child_calls.append(kwargs)
+            if phase == "implementation":
+                (self.workspace / "views" / "page.ejs").write_text(
+                    "<p>feature</p>\n", encoding="utf-8")
+            return {"phase": phase, "success": True, "exit": 0, "stop_reason": None,
+                    "seconds": 1, "child_tool_calls": ["Edit"], "qwen_route_calls": 1,
+                    "child_handoff": True, "child_result": "done", "final": "complete",
+                    "early_template_checkpoint": {"status": "passed"},
+                    "read_audit": {"read_count": 0, "search_count": 0,
+                                   "inspection_count": 0,
+                                   "counts_by_tool": {"Read": 0, "Grep": 0, "Glob": 0},
+                                   "reads": [], "violations": [], "within_budget": True}}
+
+        parent_snapshot = {k: v for k, v in os.environ.items()}
+        passed = [{"argv": ["acceptance"], "exit": 0, "stdout": "passed", "stderr": ""}]
+        with mock.patch.object(autonomous, "run_validators",
+                               side_effect=record_validators), \
+             mock.patch.object(autonomous.httpx, "Client", return_value=Client()), \
+             mock.patch.object(autonomous.dispatch, "gateway_key", return_value="test-key"), \
+             mock.patch.object(autonomous.dispatch, "set_policy"), \
+             mock.patch.object(autonomous, "run_child", side_effect=child):
+            result = autonomous.run_request(
+                self.workspace, "Implement a feature", [["acceptance"]],
+                runs_root=self.runs_root, total_timeout=30, step_timeout=5,
+                validator_timeout=5, baseline_validators=[["baseline"]],
+                requirements=[requirement], plan_override=plan,
+                preverified_inspections=preverified,
+                checkpoint_validators=[["syntax"]])
+
+        # Parent environment must be byte-for-byte unchanged.
+        self.assertEqual(os.environ, parent_snapshot)
+
+        # The happy path exercises baseline, step, and final validation.
+        # All three must receive the same copied environment, and TEMP/TMP
+        # must live under this run's artifact directory.
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(len(child_calls), 1)
+        self.assertEqual(child_calls[0]["checkpoint_validators"], [["syntax"]])
+        self.assertEqual(Path(child_calls[0]["checkpoint_temp_dir"]).resolve(),
+                         Path(validator_calls[0][1]["TEMP"]).resolve())
+        self.assertEqual(len(validator_calls), 3)
+        self.assertEqual([validators for validators, _env in validator_calls],
+                         [[["baseline"]], [["acceptance"]], [["acceptance"]]])
+        envs = [env for _validators, env in validator_calls]
+        self.assertTrue(all(isinstance(env, dict) for env in envs))
+        self.assertTrue(all(env is envs[0] for env in envs))
+        self.assertIsNot(envs[0], os.environ)
+        self.assertEqual(envs[0]["TEMP"], envs[0]["TMP"])
+        validator_temp = Path(envs[0]["TEMP"]).resolve()
+        self.assertEqual(validator_temp.name, "validator-temp")
+        self.assertTrue(validator_temp.is_dir())
+        self.assertEqual(validator_temp.parent.parent, self.runs_root.resolve())
+
+    def test_worker_tool_settings_checkpoint_json_only_serializes_temp_dir(self):
+        # Requirement 3: worker_tool_settings must serialize ONLY the
+        # checkpoint temp directory into the saved checkpoint JSON.  It must
+        # never serialize the full copied environment or any credential.
+        step = {"id": "step-ui", "files": ["views/page.ejs"], "reference_paths": []}
+        temp_dir = str(self.runs_root / "artifacts")
+        secret_value = "super-secret-token"
+        settings_path = self.runs_root / "worker.jsonl"
+        autonomous.worker_tool_settings(
+            self.workspace, step, [], "implementation", settings_path,
+            checkpoint_validators=[["node", "scripts/check-ejs.js"]],
+            checkpoint_temp_dir=temp_dir)
+        checkpoint_path = self.runs_root / "worker.checkpoint.json"
+        payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        # The checkpoint temp directory must be present.
+        self.assertIn("checkpoint_temp_dir", payload)
+        self.assertEqual(payload["checkpoint_temp_dir"], temp_dir)
+        # No environment mapping may be serialized.
+        self.assertNotIn("env", payload)
+        self.assertNotIn("environment", payload)
+        self.assertNotIn("TEMP", payload)
+        self.assertNotIn("TMP", payload)
+        # No credential value may be serialized anywhere in the checkpoint.
+        self.assertNotIn(secret_value, json.dumps(payload))
+        self.assertNotIn("token", json.dumps(payload).lower())
+
+    def test_template_checkpoint_forwards_configured_temp_env_to_subprocess(self):
+        # Requirement 4a: when a checkpoint temp directory is configured,
+        # template_checkpoint.run_checkpoint must forward a copied env whose
+        # TEMP/TMP point at that directory to the validator subprocess.
+        template = self.workspace / "views" / "page.ejs"
+        template.parent.mkdir(parents=True, exist_ok=True)
+        template.write_text("<p>ok</p>\n", encoding="utf-8")
+        receipt = self.runs_root / "receipt.json"
+        scope = {"root": str(self.workspace), "write_allowed": ["views/page.ejs"],
+                 "validators": [["node", "scripts/check-ejs.js"]],
+                 "checkpoint_temp_dir": str(self.runs_root / "artifacts")}
+        payload = {"agent_type": "qwen-autonomous-implementer", "tool_calls": [{
+            "tool_name": "Edit", "tool_input": {"file_path": str(template)},
+            "tool_response": "The file has been updated successfully."}]}
+        parent_snapshot = {k: v for k, v in os.environ.items()}
+        with mock.patch.object(template_checkpoint.subprocess, "run",
+                               return_value=subprocess.CompletedProcess(
+                                   [], 0, "EJS syntax valid", "")) as run:
+            result = template_checkpoint.run_checkpoint(payload, scope, receipt)
+        self.assertEqual(result["status"], "passed")
+        run.assert_called_once()
+        forwarded = run.call_args.kwargs.get("env")
+        self.assertIsNotNone(forwarded, "configured temp dir must forward an env")
+        self.assertIsNot(forwarded, os.environ)
+        self.assertEqual(forwarded["TEMP"], scope["checkpoint_temp_dir"])
+        self.assertEqual(forwarded["TMP"], scope["checkpoint_temp_dir"])
+        # Parent env must be unchanged.
+        self.assertEqual(os.environ, parent_snapshot)
+
+    def test_template_checkpoint_preserves_none_env_when_no_temp_configured(self):
+        # Requirement 4b: when no checkpoint temp directory is configured,
+        # template_checkpoint.run_checkpoint must forward env=None (so the
+        # parent env is inherited) rather than a fabricated environment.
+        template = self.workspace / "views" / "page.ejs"
+        template.parent.mkdir(parents=True, exist_ok=True)
+        template.write_text("<p>ok</p>\n", encoding="utf-8")
+        receipt = self.runs_root / "receipt.json"
+        scope = {"root": str(self.workspace), "write_allowed": ["views/page.ejs"],
+                 "validators": [["node", "scripts/check-ejs.js"]]}
+        payload = {"agent_type": "qwen-autonomous-implementer", "tool_calls": [{
+            "tool_name": "Edit", "tool_input": {"file_path": str(template)},
+            "tool_response": "The file has been updated successfully."}]}
+        with mock.patch.object(template_checkpoint.subprocess, "run",
+                               return_value=subprocess.CompletedProcess(
+                                   [], 0, "EJS syntax valid", "")) as run:
+            result = template_checkpoint.run_checkpoint(payload, scope, receipt)
+        self.assertEqual(result["status"], "passed")
+        run.assert_called_once()
+        self.assertIsNone(run.call_args.kwargs.get("env"))
 
 
 if __name__ == "__main__":

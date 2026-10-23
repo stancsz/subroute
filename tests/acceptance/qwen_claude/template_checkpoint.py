@@ -63,7 +63,7 @@ def _successful(response: object) -> bool:
                 or "permission denied" in first_line)
 
 
-def changed_ejs_paths(payload: dict, scope: dict) -> list[str]:
+def changed_allowed_paths(payload: dict, scope: dict) -> list[str]:
     root = Path(scope["root"]).resolve()
     allowed = {_canonical(root, value) for value in scope.get("write_allowed", [])}
     allowed.discard(None)
@@ -77,7 +77,7 @@ def changed_ejs_paths(payload: dict, scope: dict) -> list[str]:
         if not isinstance(tool_input, dict):
             continue
         target = _canonical(root, tool_input.get("file_path"))
-        if target in allowed and target.suffix.lower() == ".ejs":
+        if target in allowed:
             found.add(target.relative_to(root).as_posix())
     return sorted(found)
 
@@ -112,11 +112,23 @@ def _emit(context: str) -> None:
 def run_checkpoint(payload: dict, scope: dict, receipt_path: Path) -> dict | None:
     if payload.get("agent_type") != "qwen-autonomous-implementer":
         return None
-    paths = changed_ejs_paths(payload, scope)
+    paths = changed_allowed_paths(payload, scope)
     if not paths or not _claim_once(receipt_path):
         return None
 
     root = Path(scope["root"]).resolve()
+    ejs_paths = [path for path in paths if Path(path).suffix.lower() == ".ejs"]
+    if not ejs_paths:
+        result = {"status": "progress", "paths": paths, "completed_at": time.time()}
+        _emit("First scoped implementation edit recorded for " + ", ".join(paths) +
+              ". Continue the assigned step; EJS syntax feedback will run after a template edit.")
+        _write_receipt(receipt_path, result)
+        try:
+            receipt_path.with_suffix(receipt_path.suffix + ".lock").unlink()
+        except OSError:
+            pass
+        return result
+
     validators = scope.get("validators")
     if (not isinstance(validators, list) or not 1 <= len(validators) <= MAX_VALIDATORS
             or any(not isinstance(argv, list) or not argv
@@ -126,6 +138,13 @@ def run_checkpoint(payload: dict, scope: dict, receipt_path: Path) -> dict | Non
         _emit("Early EJS checkpoint could not run: caller validator configuration is invalid. "
               "Continue implementation; the runner will apply final acceptance checks.")
     else:
+        temp_dir = scope.get("checkpoint_temp_dir")
+        if isinstance(temp_dir, str) and temp_dir.strip():
+            env = dict(os.environ)
+            env["TEMP"] = temp_dir
+            env["TMP"] = temp_dir
+        else:
+            env = None
         diagnostics = []
         passed = True
         started = time.monotonic()
@@ -139,7 +158,8 @@ def run_checkpoint(payload: dict, scope: dict, receipt_path: Path) -> dict | Non
             try:
                 proc = subprocess.run(argv, cwd=root, capture_output=True, text=True,
                                       encoding="utf-8", errors="replace",
-                                      timeout=min(VALIDATOR_TIMEOUT, max(1, int(remaining))), shell=False)
+                                      timeout=min(VALIDATOR_TIMEOUT, max(1, int(remaining))), shell=False,
+                                      env=env)
                 exit_code = proc.returncode
                 stdout, stderr = proc.stdout or "", proc.stderr or ""
             except subprocess.TimeoutExpired as exc:
@@ -152,18 +172,18 @@ def run_checkpoint(payload: dict, scope: dict, receipt_path: Path) -> dict | Non
             diagnostics.append({"argv": argv, "exit": exit_code,
                                 "stdout": stdout[-MAX_OUTPUT_CHARS:],
                                 "stderr": stderr[-MAX_OUTPUT_CHARS:]})
-        result = {"status": "passed" if passed else "failed", "paths": paths,
+        result = {"status": "passed" if passed else "failed", "paths": ejs_paths,
                   "validators": diagnostics, "completed_at": time.time()}
         if passed:
             context = ("Early EJS syntax checkpoint passed for the current template batch: "
-                       + ", ".join(paths)
+                       + ", ".join(ejs_paths)
                        + ". Continue the assigned step; the runner will still run final acceptance checks.")
         else:
             errors = "\n".join(
                 f"$ {' '.join(item['argv'])} (exit {item['exit']})\n"
                 f"{item['stdout']}\n{item['stderr']}"
                 for item in diagnostics if item["exit"] != 0)
-            context = ("Early EJS syntax checkpoint failed for " + ", ".join(paths)
+            context = ("Early EJS syntax checkpoint failed for " + ", ".join(ejs_paths)
                        + ". Fix these diagnostics before continuing; do not weaken tests.\n"
                        + errors)
         _emit(context)

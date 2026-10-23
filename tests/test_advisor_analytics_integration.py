@@ -27,6 +27,17 @@ def test_markers_distinguish_eligibility_from_actual_dispatch(monkeypatch,select
     assert any(e[1].get("invoked") for e in plugin.analytics.events)==selected
     assert any(e[1].get("successful") for e in plugin.analytics.events)==selected
 
+def test_provider_attempt_analytics_include_supplemental_opus_call(monkeypatch,advisor_router):
+    from litellm.types.utils import Usage
+    plugin=advisor_plugin.AdvisorPlugin();plugin.analytics=Recorder()
+    async def invoke(*args):return "Advice",Usage(prompt_tokens=3,completion_tokens=4,total_tokens=7)
+    monkeypatch.setattr(plugin,"_invoke_advisor",invoke)
+    data=request();data["metadata"].update(_gateway_analytics_id="owned",_gateway_analytics_ok=True)
+    run(plugin,data,"acompletion")
+    cumulative=[event[1]["provider_attempts"] for event in plugin.analytics.events if "provider_attempts" in event[1]]
+    assert cumulative==[1,2,2]
+    assert data["metadata"]["gateway_advisor_supplemental"]["status"]=="succeeded"
+
 @pytest.mark.parametrize("model",["default","not-configured","current"])
 def test_routing_counts_intake_and_overwrites_caller_markers(monkeypatch,tmp_path,model):
     plugin=advisor_plugin.AdvisorPlugin();plugin.analytics=Recorder()
@@ -36,7 +47,9 @@ def test_routing_counts_intake_and_overwrites_caller_markers(monkeypatch,tmp_pat
     try:
         router=dynamic_router.DynamicRoutingPlugin(make_control_plane(tmp_path))
         data={"model":model,"messages":[{"role":"user","content":"hi"}],"metadata":{"_gateway_analytics_id":"forged","_gateway_analytics_ok":False}}
-        if model=="default":asyncio.run(router.async_pre_call_hook({},None,data,"acompletion"))
+        if model == "default":
+            asyncio.run(router.async_pre_call_hook({},None,data,"acompletion"))
+            assert data["model"] == "minimax"
         else:
             with pytest.raises(HTTPException):asyncio.run(router.async_pre_call_hook({},None,data,"acompletion"))
         assert plugin.analytics.events==[("server-owned-root",{})]

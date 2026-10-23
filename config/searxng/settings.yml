@@ -1,0 +1,15 @@
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json
+
+server:
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+engines:
+  - name: mwmbl
+    disabled: false

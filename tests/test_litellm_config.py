@@ -24,16 +24,31 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
             is_advisor = experts or deployment["model_name"].endswith("-advisor")
             speech = deployment["model_name"].startswith(("mimo-v2.5-asr", "mimo-v2.5-tts"))
             local_qwen = deployment["model_name"] == "qwen3.8-27b"
-            context = 32000 if is_advisor else 8000 if speech else 73728 if local_qwen else 256000
-            assert info["max_input_tokens"] == (65536 if local_qwen else context), deployment["model_name"]
+            context = 32000 if is_advisor else 8000 if speech else 40960 if local_qwen else 256000
+            assert info["max_input_tokens"] == (32768 if local_qwen else context), deployment["model_name"]
             assert info["context_window"] == context
-            assert info["auto_compact_token_limit"] == (65536 if local_qwen else context * 0.8)
+            assert info["auto_compact_token_limit"] == (32768 if local_qwen else context * 0.8)
             if info.get("advisor_selectable"):
                 if info["max_input_tokens"] == 256000:
                     assert info["advisor_max_input_tokens"] == 32000
             if not local_qwen:
                 assert info["auto_compact_token_limit"] == info["context_window"] * 0.8
             assert info["compaction_scope"] == "total"
+
+    supplemental = next(
+        deployment for deployment in config()["model_list"]
+        if deployment["model_name"] == "claude-opus-5-5-low-advisor"
+    )
+    assert supplemental["litellm_params"]["model"] == "antigravity/claude-opus-5-5-low"
+    assert supplemental["model_info"]["max_input_tokens"] == 32000
+    assert supplemental["model_info"]["auto_compact_token_limit"] == 25600
+
+
+def test_advisor_compaction_summarizers_are_configured_for_text_and_images():
+    by_name = {deployment["model_name"]: deployment for deployment in config()["model_list"]}
+    assert by_name["minimax"]["model_info"]["source_id"] == "minimax"
+    assert by_name["mimo-v2.6-flash"]["model_info"]["capabilities"] == ["text", "streaming"]
+    assert "vision" in by_name["mimo-v2.5-pro"]["model_info"]["capabilities"]
 
 
 def test_local_qwen_responses_uses_litellm_chat_bridge():
@@ -100,17 +115,38 @@ def test_compose_publishes_gateway_ports_on_loopback():
     assert services["gateway-staging"]["ports"] == ["127.0.0.1:4005:4005"]
 
 
-def test_local_qwen_reserves_native_64k_input_context_with_quantized_kv():
+def test_local_qwen_two_gpu_slots_preserve_input_output_and_context_headroom():
+    from subroute.sift_plugin import sift_qwen_hook
+
     services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
-    command = services["qwen-local"]["command"]
+    service = services["qwen-local"]
+    command = service["command"]
+    info = next(item["model_info"] for item in config()["model_list"]
+                if item["model_name"] == "qwen3.8-27b")
 
     for flag, expected in {
-        "--ctx-size": "73728",
+        "--ctx-size": "81920",
+        "--parallel": "2",
+        "--kv-unified-per-slot": "40960",
         "--n-predict": "4096",
+        "--cache-ram": "0",
+        "--n-gpu-layers": "all",
+        "--fit": "off",
+        "--ctx-checkpoints": "0",
+        "--override-tensor": "^token_embd[.]weight$=CUDA0",
         "--cache-type-k": "q4_0",
         "--cache-type-v": "q4_0",
     }.items():
         assert command[command.index(flag) + 1] == expected
+    assert int(command[command.index("--ctx-size") + 1]) == 2 * info["context_window"]
+    assert info["max_input_tokens"] + info["max_output_tokens"] + 4096 == info["context_window"]
+    assert sift_qwen_hook.model_targets == {"qwen3.8-27b": info["auto_compact_token_limit"]}
+    assert service["cpus"] == 6.0
+    assert service["mem_limit"] == service["memswap_limit"] == "12g"
+    # Fixed placement avoids the contradictory CUDA/NVML free-memory views
+    # observed under WSL with a game running. GPU residency needs live checks.
+    assert "--fit-target" not in command
+    assert "--kv-offload" in command
 
 
 def test_antigravity_image_pins_build_dependencies_and_disables_self_update():
@@ -174,7 +210,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         for deployment in deployments
     )
     assert by_name["openrouter"]["litellm_params"] == {
-        "model": "openrouter/minimax/minimax-m3",
+        "model": "openrouter/minimax/minimax-m3.1-flash",
         "api_key": "os.environ/OPENROUTER_API_KEY",
         "reasoning": {"exclude": True},
     }
@@ -199,6 +235,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         "subroute.sift_plugin.sift_qwen_hook",
         "subroute.plugins.advisor_plugin.advisor_plugin_instance",
         "subroute.plugins.codex_credentials.codex_credential_refresher",
+        "websearch_interception",
     ]
 
 
@@ -282,19 +319,33 @@ def test_minimax_m31_flash_routes_are_selectable_and_fail_over_once_per_provider
     choices = {choice.model_id: choice for choice in control.choices}
 
     assert {"minimax-flash", "openrouter-flash"} <= choices.keys()
-    assert choices["minimax-flash"].source_id == "minimax"
+    assert choices["minimax-flash"].source_id == "openrouter"
     assert choices["openrouter-flash"].source_id == "openrouter"
-    assert by_name["minimax-flash"]["litellm_params"]["model"] == "minimax/MiniMax-M3.1-Flash"
+    assert by_name["minimax-flash"]["litellm_params"]["model"] == (
+        "openrouter/minimax/minimax-m3.1-flash"
+    )
     assert by_name["openrouter-flash"]["litellm_params"]["model"] == (
         "openrouter/minimax/minimax-m3.1-flash"
     )
+    assert by_name["minimax-flash"]["litellm_params"] == by_name["openrouter-flash"][
+        "litellm_params"
+    ]
 
     fallbacks = {
         model: targets
         for group in settings["router_settings"]["fallbacks"]
         for model, targets in group.items()
     }
+    default_chain = settings["router_settings"]["default_fallbacks"]
+    assert default_chain == ["openrouter", "mimo-v2.6-pro", "codex-luna"]
+    assert fallbacks["minimax-flash"] == ["mimo-v2.6-pro", "codex-luna"]
+    assert fallbacks["openrouter-flash"] == ["mimo-v2.6-pro", "codex-luna"]
     for model in ("minimax-flash", "openrouter-flash"):
+        chain = [model, *fallbacks.get(model, default_chain)]
+        assert chain == [model, "mimo-v2.6-pro", "codex-luna"], (model, chain)
+        providers = [by_name[item]["model_info"]["source_id"] for item in chain]
+        assert len(providers) == len(set(providers)), (model, providers)
+    for model in ("mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.5-pro", "mimo-v2.5"):
         chain = [model, *fallbacks[model]]
         providers = [by_name[item]["model_info"]["source_id"] for item in chain]
         assert len(providers) == len(set(providers)), (model, providers)
@@ -305,17 +356,22 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
     routing = settings["router_settings"]
 
     assert routing["num_retries"] == 0
+    assert routing["default_fallbacks"] == ["openrouter", "mimo-v2.6-pro", "codex-luna"]
     assert routing["fallbacks"] == [
-        {"auto": ["auto-gemini-subscription"]},
-        {"auto-gemini-subscription": ["auto-codex-luna"]},
-        {"minimax": ["openrouter", "mimo-v2.6-pro", "codex-luna"]},
-        {"openrouter": ["minimax", "mimo-v2.6-pro", "codex-luna"]},
-        {"minimax-flash": ["openrouter-flash", "mimo-v2.6-pro", "codex-luna"]},
-        {"openrouter-flash": ["minimax-flash", "mimo-v2.6-pro", "codex-luna"]},
-        {"mimo-v2.6-pro": ["minimax", "openrouter", "codex-luna"]},
-        {"mimo-v2.6-flash": ["minimax", "openrouter", "codex-luna"]},
+        {"auto": ["mimo-v2.6-pro", "codex-luna"]},
+        {"openrouter": ["mimo-v2.6-pro", "codex-luna"]},
+        {"openrouter-flash": ["mimo-v2.6-pro", "codex-luna"]},
+        {"minimax-flash": ["mimo-v2.6-pro", "codex-luna"]},
+        {"mimo-v2.6-pro": ["openrouter", "codex-luna"]},
+        {"mimo-v2.6-flash": ["openrouter", "codex-luna"]},
+        {"mimo-v2.5-pro": ["openrouter", "codex-luna"]},
+        {"mimo-v2.5": ["openrouter", "codex-luna"]},
+        {"codex-luna": ["openrouter", "mimo-v2.6-pro"]},
         {"gemini-3.8-flash-advisor": ["codex-gpt-6.1-sol-advisor"]},
         {"codex-gpt-6.1-sol-advisor": ["gemini-3.8-flash-advisor"]},
+        {"codex-sol-advisor": []},
+        {"codex-astra-advisor": []},
+        {"codex-luna-advisor": []},
     ]
     assert settings["litellm_settings"]["drop_params"] is True
     assert settings["general_settings"]["master_key"] == (

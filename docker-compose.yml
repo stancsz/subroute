@@ -31,6 +31,23 @@ services:
       timeout: 3s
       retries: 30
 
+  # Private, self-hosted search backend for LiteLLM's native WebSearch hook.
+  # Kept on the Compose network only; no host port is published.
+  searxng:
+    image: ghcr.io/searxng/searxng:2026.10.19-81371861f@sha256:aa7270053bc3bf92155e2af83e2b0a7c3833c209cdeb8d396861a00c55ee7110
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set a random SEARXNG_SECRET in .env}
+      SEARXNG_LIMITER: "false"
+      SEARXNG_IMAGE_PROXY: "false"
+    volumes:
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    expose:
+      - "8080"
+    cpus: 1.0
+    mem_limit: 1g
+    memswap_limit: 1g
+
   gateway:
     image: subroute-gateway:advisor-ranker-v1
     build:
@@ -71,6 +88,7 @@ services:
       - MINIMAX_API_KEY
       - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY
+      - SEARXNG_API_BASE=http://searxng:8080
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000", "--host", "0.0.0.0", "--telemetry", "False"]
@@ -99,8 +117,6 @@ services:
       - ACTIVE_MODEL_STATE_PATH=/app/state/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
       - SUBROUTE_ENVIRONMENT=staging
-      # Keep staging review routed to Gemini 4 Argon even if the policy file is edited.
-      - SUBROUTE_LOCKED_ADVISOR_MODEL=gemini-subscription-argon
       - LITELLM_LOG=INFO
       - SUBROUTE_ACCOUNTING_SECRET
       - GATEWAY_MASTER_KEY
@@ -116,6 +132,7 @@ services:
       - MINIMAX_API_KEY
       - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY
+      - SEARXNG_API_BASE=http://searxng:8080
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["--config", "/app/config/litellm.yaml", "--port", "4005", "--host", "0.0.0.0", "--telemetry", "False"]
@@ -156,8 +173,13 @@ services:
 
   # Text-only Unsloth GGUF server, included in the default Compose stack.
   qwen-local:
+    environment:
+      GGML_OP_OFFLOAD_MIN_BATCH: "32"
     image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:b0baccbe2e00b5d74e63f85f9f023c93d61d0f329475269e1e7002e87eb875ea
     restart: always
+    cpus: 6.0
+    mem_limit: 12g
+    memswap_limit: 12g
     ports:
       - "127.0.0.1:8088:8080"
     volumes:
@@ -186,25 +208,48 @@ services:
       - --port
       - "8080"
       - --ctx-size
-      - "73728"
+      - "81920"
+      - --kv-unified
+      - --kv-unified-per-slot
+      - "40960"
+      - --cache-ram
+      - "0"
       - --n-predict
       - "4096"
       - --reasoning-effort
       - low
       - --reasoning-budget
-      - "512"
+      - "64"
       - --parallel
-      - "1"
+      - "2"
+      - --threads
+      - "6"
+      - --threads-batch
+      - "6"
+      - --poll
+      - "0"
+      - --batch-size
+      - "128"
+      - --ubatch-size
+      - "32"
+      - --fit
+      - "off"
       - --n-gpu-layers
-      - auto
-      - --fit-target
-      - "1536"
+      - "all"
       - --flash-attn
       - "on"
       - --cache-type-k
       - q4_0
       - --cache-type-v
       - q4_0
+      # Keep all model weights and live attention/recurrent state on CUDA0.
+      - --override-tensor
+      - '^token_embd[.]weight$=CUDA0'
+      - --kv-offload
+      - --ctx-checkpoints
+      - "0"
+      - --reasoning
+      - "off"
 
 volumes:
   litellm-postgres-data:

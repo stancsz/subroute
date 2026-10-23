@@ -115,7 +115,7 @@ def main() -> int:
                                  capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
     audits = [{"protocol": protocol, "compacted": compacted == "true", "input_tokens": int(raw), "forwarded_tokens": int(forwarded), "target": int(target), "output_limit": int(output_limit)}
               for protocol, compacted, raw, forwarded, target, output_limit in re.findall(
-                  r"sift_request protocol=(\w+) compacted=(true|false) input_tokens=(\d+) forwarded_tokens=(\d+) target=(\d+) output_limit=(-?\d+)",
+                  r"sift_request protocol=(\w+) compacted=(true|false) [^\r\n]*?input_tokens=(\d+) forwarded_tokens=(\d+) target=(\d+) output_limit=(-?\d+)",
                   gateway_logs.stdout + gateway_logs.stderr) if int(target) == 24_576]
     outcome = {"client": "codex", "model": MODEL, "task": args.task, "smoke": args.smoke,
                "client_version": client_version,

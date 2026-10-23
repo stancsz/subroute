@@ -62,6 +62,8 @@ ADVISOR_BRIEF_INSTRUCTIONS = (
     "and 120 words. Do not repeat the request, narrate your reasoning, or write the final "
     "answer. If the approach is sound, say so briefly."
 )
+SUPPLEMENTAL_ADVISOR_MODEL = "claude-opus-5-5-low-advisor"
+SUPPLEMENTAL_ADVISOR_PROVIDER_MODEL = "claude-opus-5-5-low"
 logger = logging.getLogger(__name__)
 _SECRET_FIELD = re.compile(
     r"(?i)\b(authorization|api[\s_-]?key|access[\s_-]?token|refresh[\s_-]?token|token|password)(['\"]?\s*[:=]\s*['\"]?)([^'\"\s,;}\]]+)"
@@ -74,8 +76,10 @@ COMPACTION_INSTRUCTIONS = (
     "and tool results. Remove repetition and obsolete detail. Return only the briefing, with no preamble."
 )
 COMPACTION_MAX_OUTPUT_TOKENS = 8192
+ADVISOR_FORWARD_LIMIT = 16_384
+COMPACTION_FORWARD_LIMIT = 32_768
 MINIMAX_COMPACTION_TIMEOUT = 30.0
-LUNA_COMPACTION_TIMEOUT = 60.0
+MIMO_COMPACTION_TIMEOUT = 30.0
 
 
 def _safe_error_reason(error: Exception) -> str:
@@ -263,12 +267,36 @@ class AdvisorPlugin(CustomLogger):
         return isinstance(value, str) and ("data:image/" in value or "data:audio/" in value)
 
     @staticmethod
+    def _contains_non_image_media(value: Any) -> bool:
+        if isinstance(value, dict):
+            if value.get("type") in {"audio", "input_audio", "output_audio", "video", "file"}:
+                return True
+            if value.get("type") in {"image_url", "input_image"}:
+                return False
+            return any(AdvisorPlugin._contains_non_image_media(item) for item in value.values())
+        if isinstance(value, list):
+            return any(AdvisorPlugin._contains_non_image_media(item) for item in value)
+        return isinstance(value, str) and ("data:audio/" in value or "data:video/" in value)
+
+    @staticmethod
     def _summary_messages(
         messages: list[dict[str, Any]], summary: str,
     ) -> list[dict[str, Any]]:
+        from copy import deepcopy
         latest_user = AdvisorPlugin._latest_user_index(messages)
         if latest_user < 0:
             raise ValueError("Advisor context compaction requires a user message")
+        prior_images = []
+        for message in messages[:latest_user]:
+            content = message.get("content")
+            if message.get("role") != "user" or not isinstance(content, list):
+                continue
+            images = [deepcopy(part) for part in content
+                      if isinstance(part, dict) and part.get("type") in {"image_url", "input_image"}]
+            if images:
+                preserved = {key: deepcopy(value) for key, value in message.items() if key != "content"}
+                preserved["content"] = images
+                prior_images.append(preserved)
         result: list[dict[str, Any]] = []
         for index, message in enumerate(messages):
             if index == latest_user:
@@ -276,6 +304,7 @@ class AdvisorPlugin(CustomLogger):
                     "role": "assistant",
                     "content": f"Relevant prior context, compacted for this advisor call:\n{summary}",
                 })
+                result.extend(prior_images)
             if index < latest_user and message.get("role") not in {"system", "developer"}:
                 continue
             result.append(message)
@@ -373,13 +402,14 @@ class AdvisorPlugin(CustomLogger):
     async def _minimax_compaction(router: Any, messages: list[dict[str, Any]]) -> tuple[str, Any]:
         from subroute.usage_accounting import accounting_role
         transcript = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+        prompt = await AdvisorPlugin._compact_request_for_dispatch(router, "minimax", [
+            {"role": "system", "content": COMPACTION_INSTRUCTIONS},
+            {"role": "user", "content": transcript},
+        ])
         with accounting_role("compaction"):
             response = await router.acompletion(
                 model="minimax",
-                messages=[
-                    {"role": "system", "content": COMPACTION_INSTRUCTIONS},
-                    {"role": "user", "content": transcript},
-                ],
+                messages=prompt,
                 max_tokens=COMPACTION_MAX_OUTPUT_TOKENS,
                 timeout=MINIMAX_COMPACTION_TIMEOUT,
                 num_retries=0,
@@ -389,7 +419,15 @@ class AdvisorPlugin(CustomLogger):
         return AdvisorPlugin._completion_text(response), getattr(response, "usage", None)
 
     @classmethod
-    def _luna_compaction_prompt(cls, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _mimo_compaction_prompt(
+        cls, messages: list[dict[str, Any]], *, multimodal: bool = False,
+    ) -> list[dict[str, Any]]:
+        if not multimodal:
+            transcript = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+            return [
+                {"role": "system", "content": COMPACTION_INSTRUCTIONS},
+                {"role": "user", "content": transcript},
+            ]
         images: list[dict[str, Any]] = []
         transcript: list[dict[str, Any]] = []
         for message in messages:
@@ -400,7 +438,7 @@ class AdvisorPlugin(CustomLogger):
                 for part in content:
                     if isinstance(part, dict) and part.get("type") in {"image_url", "input_image"}:
                         if message.get("role") != "user":
-                            raise ValueError("Luna compaction supports images only in user messages")
+                            raise ValueError("MiMo compaction supports images only in user messages")
                         if part["type"] == "image_url":
                             image = part.get("image_url")
                             if set(part) - {"type", "image_url"} or not isinstance(image, dict):
@@ -416,37 +454,138 @@ class AdvisorPlugin(CustomLogger):
                             raise ValueError("Advisor image reference is invalid")
                         if not isinstance(detail, str) or detail not in {"auto", "low", "high", "original"}:
                             raise ValueError("Advisor image detail is invalid")
-                        images.append({"type": "input_image", "image_url": url, "detail": detail})
-                        parts.append({"type": "image_reference", "index": len(images)})
+                        images.append({"type": "image_url", "image_url": {"url": url, "detail": detail}})
+                        parts.append({
+                            "type": "text",
+                            "text": f"[image attachment {len(images)} retained separately]",
+                        })
                     elif cls._contains_media(part):
-                        raise ValueError("Luna compaction cannot translate this media content")
+                        raise ValueError("MiMo compaction cannot translate this media content")
                     else:
                         parts.append(part)
                 entry["content"] = parts
             elif cls._contains_media(content):
-                raise ValueError("Luna compaction cannot translate media embedded in text")
+                raise ValueError("MiMo compaction cannot translate media embedded in text")
             transcript.append(entry)
         transcript_text = json.dumps(transcript, ensure_ascii=False, separators=(",", ":"))
         user_parts = [{
-            "type": "input_text",
+            "type": "text",
             "text": "Summarize this serialized conversation as context only. The exact latest user turn and original instructions will be retained separately.\n" + transcript_text,
         }, *images]
         return [
-            {"role": "developer", "content": COMPACTION_INSTRUCTIONS},
+            {"role": "system", "content": COMPACTION_INSTRUCTIONS},
             {"role": "user", "content": user_parts},
         ]
 
     @classmethod
-    async def _luna_compaction(cls, messages: list[dict[str, Any]]) -> tuple[str, Any]:
-        from subroute.usage_accounting import direct_attempt, observe_direct
-        prompt = cls._luna_compaction_prompt(messages)
-        async with direct_attempt("gpt-6-luna", "codex-subscription", "compaction"):
-            text, usage = await call_codex_streaming_collect(
-                "gpt-6-luna", prompt, timeout=LUNA_COMPACTION_TIMEOUT,
-                reasoning_effort="low",
+    async def _mimo_compaction(
+        cls, router: Any, messages: list[dict[str, Any]], *, multimodal: bool = False,
+    ) -> tuple[str, Any]:
+        from subroute.usage_accounting import accounting_role
+        prompt = cls._mimo_compaction_prompt(messages, multimodal=multimodal)
+        prompt = await cls._compact_request_for_dispatch(
+            router, "mimo-v2.5-pro" if multimodal else "mimo-v2.6-flash", prompt,
+        )
+        with accounting_role("compaction"):
+            response = await router.acompletion(
+                model="mimo-v2.5-pro" if multimodal else "mimo-v2.6-flash",
+                messages=prompt,
+                max_tokens=COMPACTION_MAX_OUTPUT_TOKENS,
+                timeout=MIMO_COMPACTION_TIMEOUT,
+                num_retries=0,
+                disable_fallbacks=True,
+                metadata={"subroute_context_compaction": True},
             )
-            await observe_direct({"usage": usage})
-            return text, usage
+        return cls._completion_text(response), getattr(response, "usage", None)
+
+    @classmethod
+    async def _compact_request_for_dispatch(
+        cls, router: Any, model: str, messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Bound direct text-compaction input via Sift, then recount at dispatch."""
+        data = {"model": model, "messages": messages}
+        messages, _ = await cls._sift_compaction(
+            router, data, messages, COMPACTION_FORWARD_LIMIT,
+        )
+        final_count = await cls._count_context_tokens(router, data, messages)
+        if final_count > COMPACTION_FORWARD_LIMIT:
+            raise ValueError("Text compaction request exceeds the 32768-token forwarding limit")
+        return messages
+
+    @staticmethod
+    async def _sift_compaction(
+        router: Any, data: dict[str, Any], messages: list[dict[str, Any]], target: int,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Run Sift on text while retaining and counting opaque user image blocks."""
+        from copy import deepcopy
+        from sift.core import compact_messages
+
+        latest_user = AdvisorPlugin._latest_user_index(messages)
+        latest_original = deepcopy(messages[latest_user]) if latest_user >= 0 else None
+        image_messages: list[tuple[int, dict[str, Any]]] = []
+        sift_messages: list[dict[str, Any]] = []
+        image_number = 0
+        for message in messages:
+            entry = deepcopy(message)
+            content = message.get("content")
+            if isinstance(content, list):
+                text_parts: list[Any] = []
+                images: list[dict[str, Any]] = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") in {"image_url", "input_image"}:
+                        if message.get("role") != "user":
+                            raise ValueError("Sift supports retained advisor images only in user messages")
+                        image_number += 1
+                        images.append(deepcopy(part))
+                        text_parts.append({
+                            "type": "text",
+                            "text": f"[image attachment {image_number} retained separately]",
+                        })
+                    elif AdvisorPlugin._contains_media(part):
+                        raise ValueError("Sift cannot compact this advisor media content")
+                    else:
+                        text_parts.append(part)
+                if images:
+                    preserved = {key: deepcopy(value) for key, value in message.items() if key != "content"}
+                    preserved["content"] = images
+                    image_messages.append((len(sift_messages), preserved))
+                entry["content"] = text_parts
+            elif AdvisorPlugin._contains_media(content):
+                raise ValueError("Sift cannot compact media embedded in advisor text")
+            sift_messages.append(entry)
+
+        counting_data = {
+            key: value for key, value in data.items()
+            if key not in {"input", "instructions", "messages"}
+        }
+
+        def restore(candidate: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            restored = deepcopy(candidate)
+            candidate_latest = AdvisorPlugin._latest_user_index(restored)
+            if candidate_latest < 0:
+                raise ValueError("Sift compaction lost the current user turn")
+            if latest_original is not None:
+                restored[candidate_latest] = deepcopy(latest_original)
+            # The exact latest user message already contains its images. Restore
+            # only older image blocks separately so they survive text extraction
+            # without duplicating images from the active turn.
+            historical_images = [
+                message for index, message in image_messages if index != latest_user
+            ]
+            restored[candidate_latest:candidate_latest] = deepcopy(historical_images)
+            return restored
+
+        def count(candidate: list[dict[str, Any]]) -> int:
+            restored = restore(candidate)
+            request_kwargs = {**counting_data, "messages": restored}
+            return router._count_pre_call_check_tokens(
+                messages=restored, input=None, request_kwargs=request_kwargs,
+            )
+
+        result = await asyncio.to_thread(
+            compact_messages, sift_messages, count, target=target, protocol="openai",
+        )
+        return restore(result.messages), result.audit
 
     @staticmethod
     async def _invoke_advisor(
@@ -458,6 +597,16 @@ class AdvisorPlugin(CustomLogger):
             result = await AdvisorPlugin._invoke_advisor_transport(model, messages, effort)
             await observe_direct({"usage": result[1]})
             return result
+
+    @classmethod
+    async def _check_advisor_dispatch(
+        cls, router: Any, model: str, data: dict, messages: list[dict[str, Any]],
+    ) -> int:
+        """Recount the exact advisor copy immediately before each provider dispatch."""
+        count = await cls._count_context_tokens(router, {**data, "model": model}, messages)
+        if count > ADVISOR_FORWARD_LIMIT:
+            raise ValueError("Advisor request exceeds the 16384-token forwarding limit")
+        return count
 
     @staticmethod
     async def _invoke_advisor_transport(
@@ -483,9 +632,44 @@ class AdvisorPlugin(CustomLogger):
         limit, compact_limit = cls._context_limits(router, model)
         if limit is None or compact_limit is None:
             raise RuntimeError("Advisor context limit is not configured")
-        input_tokens = await cls._count_context_tokens(router, data, messages)
+        count_data = {**data, "model": model}
+        input_tokens = await cls._count_context_tokens(router, count_data, messages)
+        limit = min(limit, ADVISOR_FORWARD_LIMIT)
+        compact_limit = min(compact_limit, ADVISOR_FORWARD_LIMIT)
         if input_tokens <= limit:
             return messages, None
+
+        attempts: list[dict[str, Any]] = []
+        compaction_source = messages
+        sift_assisted = False
+        try:
+            compaction_source, sift_audit = await cls._sift_compaction(
+                router, count_data, messages, compact_limit,
+            )
+            sift_assisted = sift_audit.get("compacted") is True
+            attempts.append({
+                "model": "sift", "status": "compacted" if sift_assisted else "not_needed",
+                "estimated_context_tokens": sift_audit.get("forwarded_tokens"),
+                "input_tokens": sift_audit.get("input_tokens"),
+                "usage_source": "estimated",
+            })
+        except Exception as exc:
+            attempts.append({
+                "model": "sift", "status": "failed",
+                "reason": _safe_error_reason(exc),
+            })
+
+        if not sift_assisted:
+            raise AdvisorContextCompactionError(
+                input_tokens=input_tokens, limit=limit, target=compact_limit, attempts=attempts,
+            )
+        sift_tokens = await cls._count_context_tokens(router, count_data, compaction_source)
+        if sift_tokens > compact_limit:
+            attempts[0]["status"] = "over_budget"
+            attempts[0]["estimated_context_tokens"] = sift_tokens
+            raise AdvisorContextCompactionError(
+                input_tokens=input_tokens, limit=limit, target=compact_limit, attempts=attempts,
+            )
 
         latest_user = cls._latest_user_index(messages)
         if latest_user < 0 or not any(
@@ -494,63 +678,94 @@ class AdvisorPlugin(CustomLogger):
         ):
             raise AdvisorContextCompactionError(
                 input_tokens=input_tokens, limit=limit, target=compact_limit,
-                attempts=[{
+                attempts=[*attempts, {
                     "model": "none", "status": "over_budget",
                     "reason": "no_compactable_prior_turns",
                 }],
             )
 
-        attempts: list[dict[str, Any]] = []
-        compacted_messages: list[dict[str, Any]] | None = None
-        summary: str | None = None
         if cls._contains_media(messages):
-            attempts.append({
-                "model": "minimax", "status": "skipped",
-                "reason": "unsupported_multimodal_input",
-            })
-        else:
+            if any(
+                message.get("role") != "user" and cls._contains_media(message.get("content"))
+                for message in messages
+            ) or any(cls._contains_non_image_media(message.get("content")) for message in messages):
+                raise AdvisorContextCompactionError(
+                    input_tokens=input_tokens, limit=limit, target=compact_limit,
+                    attempts=[*attempts, {
+                        "model": "mimo-v2.5-pro", "status": "skipped",
+                        "reason": "unsupported_multimodal_input",
+                    }],
+                )
             try:
-                summary, usage = await cls._minimax_compaction(router, messages)
+                summary, usage = await cls._mimo_compaction(
+                    router, compaction_source, multimodal=True,
+                )
                 compacted_messages = cls._summary_messages(messages, summary)
-                compacted_tokens = await cls._count_context_tokens(router, data, compacted_messages)
-                attempt = {
-                    "model": "minimax", "status": "succeeded" if compacted_tokens <= compact_limit else "over_budget",
+                compacted_tokens = await cls._count_context_tokens(router, count_data, compacted_messages)
+                attempts.append({
+                    "model": "mimo-v2.5-pro",
+                    "status": "succeeded" if compacted_tokens <= compact_limit else "over_budget",
                     **cls._usage_receipt(usage), "estimated_context_tokens": compacted_tokens,
-                }
-                attempts.append(attempt)
+                })
                 if compacted_tokens <= compact_limit:
                     return compacted_messages, {
-                        "status": "compacted", "provider": "minimax",
+                        "status": "compacted", "provider": "mimo-v2.5-pro",
+                        "assisted_by": ["sift"] if sift_assisted else [],
                         "original_estimated_tokens": input_tokens,
                         "final_estimated_tokens": compacted_tokens,
                         "target_tokens": compact_limit, "attempts": attempts,
                     }
             except Exception as exc:
                 attempts.append({
-                    "model": "minimax", "status": "failed",
+                    "model": "mimo-v2.5-pro", "status": "failed",
                     "reason": _safe_error_reason(exc),
                 })
+            raise AdvisorContextCompactionError(
+                input_tokens=input_tokens, limit=limit, target=compact_limit, attempts=attempts,
+            )
 
         try:
-            summary, usage = await cls._luna_compaction(messages)
+            summary, usage = await cls._minimax_compaction(router, compaction_source)
             compacted_messages = cls._summary_messages(messages, summary)
-            compacted_tokens = await cls._count_context_tokens(router, data, compacted_messages)
-            attempt = {
-                "model": "codex-luna-advisor",
-                "status": "succeeded" if compacted_tokens <= compact_limit else "over_budget",
+            compacted_tokens = await cls._count_context_tokens(router, count_data, compacted_messages)
+            attempts.append({
+                "model": "minimax", "status": "succeeded" if compacted_tokens <= compact_limit else "over_budget",
                 **cls._usage_receipt(usage), "estimated_context_tokens": compacted_tokens,
-            }
-            attempts.append(attempt)
+            })
             if compacted_tokens <= compact_limit:
                 return compacted_messages, {
-                    "status": "compacted", "provider": "codex-luna-advisor",
+                    "status": "compacted", "provider": "minimax",
+                    "assisted_by": ["sift"] if sift_assisted else [],
                     "original_estimated_tokens": input_tokens,
                     "final_estimated_tokens": compacted_tokens,
                     "target_tokens": compact_limit, "attempts": attempts,
                 }
         except Exception as exc:
             attempts.append({
-                "model": "codex-luna-advisor", "status": "failed",
+                "model": "minimax", "status": "failed",
+                "reason": _safe_error_reason(exc),
+            })
+
+        try:
+            summary, usage = await cls._mimo_compaction(router, compaction_source)
+            compacted_messages = cls._summary_messages(messages, summary)
+            compacted_tokens = await cls._count_context_tokens(router, count_data, compacted_messages)
+            attempts.append({
+                "model": "mimo-v2.6-flash",
+                "status": "succeeded" if compacted_tokens <= compact_limit else "over_budget",
+                **cls._usage_receipt(usage), "estimated_context_tokens": compacted_tokens,
+            })
+            if compacted_tokens <= compact_limit:
+                return compacted_messages, {
+                    "status": "compacted", "provider": "mimo-v2.6-flash",
+                    "assisted_by": ["sift"] if sift_assisted else [],
+                    "original_estimated_tokens": input_tokens,
+                    "final_estimated_tokens": compacted_tokens,
+                    "target_tokens": compact_limit, "attempts": attempts,
+                }
+        except Exception as exc:
+            attempts.append({
+                "model": "mimo-v2.6-flash", "status": "failed",
                 "reason": _safe_error_reason(exc),
             })
 
@@ -683,6 +898,7 @@ class AdvisorPlugin(CustomLogger):
                     compaction["final_estimated_tokens"], compaction["attempts"],
                 )
             try:
+                await self._check_advisor_dispatch(router, advisor_model, data, advisor_messages)
                 await self._record_analytics(metadata, invoked=True, provider_attempts=1)
                 advice, usage = await self._invoke_advisor(
                     advisor_model, advisor_messages, advisor_effort,
@@ -701,6 +917,7 @@ class AdvisorPlugin(CustomLogger):
                     fallback_model, fallback_attempt["reason"],
                 )
                 await self._record_analytics(metadata, invoked=True, provider_attempts=2)
+                await self._check_advisor_dispatch(router, fallback_model, data, advisor_messages)
                 advice, usage = await self._invoke_advisor(
                     fallback_model, advisor_messages, advisor_effort,
                 )
@@ -774,19 +991,137 @@ class AdvisorPlugin(CustomLogger):
                     }
                 },
             ) from exc
-        await self._record_analytics(metadata, successful=True)
+
+        # Preserve the original provider receipt even if the independent call
+        # below fails and blocks dispatch of the target request.
+        metadata["gateway_advisor"] = {
+            "status": "advice_ready", "model": advisor_model,
+            "resolved_model": resolved_advisor_model, "call_type": call_type,
+            "consultation_id": consultation_id, "usage_source": "provider",
+            "input_tokens": getattr(usage, "prompt_tokens", None),
+            "output_tokens": getattr(usage, "completion_tokens", None),
+            "reasoning_effort": advisor_effort,
+            **({"fallback_attempt": fallback_attempt} if fallback_attempt else {}),
+        }
+        advisor_provider_attempts = 1 + int(fallback_attempt is not None)
+
+        # The selected saved Advisor consultation always receives one additional
+        # independent review. Use a distinct copy and the same bounded compaction
+        # flow, with the supplemental deployment's strict 32K input cap.
+        supplemental_id = uuid.uuid4().hex
+        metadata["gateway_advisor_supplemental"] = {
+            "status": "pending", "model": SUPPLEMENTAL_ADVISOR_PROVIDER_MODEL,
+            "provider": "antigravity", "consultation_id": consultation_id,
+            "supplemental_call_id": supplemental_id,
+            "gateway_request_id": data.get("litellm_call_id"),
+        }
+        supplemental_attempted = False
+        try:
+            from subroute.usage_accounting import direct_attempt, observe_direct
+            supplemental_count_data = {**data, "model": SUPPLEMENTAL_ADVISOR_MODEL}
+            supplemental_messages, supplemental_compaction = await self._prepare_advisor_messages(
+                router, SUPPLEMENTAL_ADVISOR_MODEL, supplemental_count_data,
+                self._brief_advisor_messages(messages),
+            )
+            dispatched_estimated_tokens = (
+                supplemental_compaction["final_estimated_tokens"]
+                if supplemental_compaction is not None
+                else await self._count_context_tokens(
+                    router, supplemental_count_data, supplemental_messages,
+                )
+            )
+            metadata["gateway_advisor_supplemental"]["estimated_input_tokens"] = dispatched_estimated_tokens
+            dispatched_estimated_tokens = await self._check_advisor_dispatch(
+                router, SUPPLEMENTAL_ADVISOR_MODEL, supplemental_count_data, supplemental_messages,
+            )
+            metadata["gateway_advisor_supplemental"]["estimated_input_tokens"] = dispatched_estimated_tokens
+            if supplemental_compaction is not None:
+                metadata["gateway_advisor_supplemental"]["original_estimated_input_tokens"] = (
+                    supplemental_compaction["original_estimated_tokens"]
+                )
+                metadata["gateway_advisor_supplemental"]["compaction"] = supplemental_compaction
+            supplemental_attempted = True
+            await self._record_analytics(
+                metadata, invoked=True,
+                provider_attempts=advisor_provider_attempts + 1,
+            )
+            async with direct_attempt(SUPPLEMENTAL_ADVISOR_PROVIDER_MODEL, "antigravity", "advisor"):
+                response = await router.acompletion(
+                    model=SUPPLEMENTAL_ADVISOR_MODEL,
+                    messages=supplemental_messages,
+                    num_retries=0,
+                    disable_fallbacks=True,
+                    metadata={
+                        "gateway_advisor_supplemental": True,
+                        "gateway_request_id": data.get("litellm_call_id"),
+                        "gateway_advisor_consultation_id": consultation_id,
+                        "gateway_advisor_supplemental_call_id": supplemental_id,
+                    },
+                )
+                await observe_direct(response)
+            supplemental_usage = getattr(response, "usage", None)
+            supplemental_advice = self._completion_text(response)
+            input_tokens = getattr(supplemental_usage, "prompt_tokens", None)
+            output_tokens = getattr(supplemental_usage, "completion_tokens", None)
+            if type(input_tokens) is not int or input_tokens < 0 or type(output_tokens) is not int or output_tokens < 0:
+                raise RuntimeError("Supplemental Advisor response omitted provider usage")
+            metadata["gateway_advisor_supplemental"].update({
+                "status": "succeeded", "usage_source": "provider",
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            })
+        except Exception as exc:
+            await self._record_analytics(
+                metadata, failed=True,
+                provider_attempts=advisor_provider_attempts + int(supplemental_attempted),
+            )
+            reason = _safe_error_reason(exc)
+            metadata["gateway_advisor_supplemental"].update({
+                "status": "failed", "usage_source": "unavailable",
+                "reason": reason,
+            })
+            logger.error(
+                "supplemental advisor failed gateway_request_id=%s consultation_id=%s supplemental_call_id=%s model=%s provider=antigravity error_type=%s error=%s",
+                data.get("litellm_call_id"), consultation_id, supplemental_id,
+                SUPPLEMENTAL_ADVISOR_PROVIDER_MODEL, type(exc).__name__, reason,
+            )
+            raise HTTPException(
+                status_code=504 if isinstance(exc, TimeoutError) else 502,
+                detail={"error": {
+                    "type": "supplemental_advisor_failed",
+                    "message": "Supplemental Advisor failed; base request was not sent",
+                    "request_id": data.get("litellm_call_id"),
+                    "consultation_id": consultation_id,
+                    "supplemental_call_id": supplemental_id,
+                }},
+            ) from exc
+        await self._record_analytics(
+            metadata, successful=True,
+            provider_attempts=advisor_provider_attempts + 1,
+        )
         if call_type in MESSAGE_CALL_TYPES:
             data["messages"] = [
                 *(data.get("messages") or []),
                 {"role": "developer", "content": f"Independent advisor guidance:\n{advice}"},
+                {
+                    "role": "developer",
+                    "content": (
+                        "Supplemental independent review (Claude Opus 5.5 Low):\n"
+                        f"{supplemental_advice}"
+                    ),
+                },
             ]
         if call_type in RESPONSES_CALL_TYPES:
             existing_instructions = data.get("instructions")
             guidance = f"Independent advisor guidance:\n{advice}"
             data["instructions"] = (
-                f"{existing_instructions}\n\n{guidance}"
+                f"{existing_instructions}\n\n{guidance}\n\n"
+                f"Supplemental independent review (Claude Opus 5.5 Low):\n{supplemental_advice}"
                 if isinstance(existing_instructions, str) and existing_instructions
-                else guidance
+                else (
+                    f"{guidance}\n\n"
+                    f"Supplemental independent review (Claude Opus 5.5 Low):\n{supplemental_advice}"
+                )
             )
         metadata["gateway_advisor"] = {
             "status": "advice_injected", "model": advisor_model,
@@ -800,6 +1135,8 @@ class AdvisorPlugin(CustomLogger):
         }
         if metadata.get("gateway_advisor_compaction"):
             metadata["gateway_advisor"]["compaction"] = metadata["gateway_advisor_compaction"]
+        metadata["gateway_advisor_supplemental"]["advice"] = supplemental_advice
+        metadata["gateway_advisor"]["status"] = "advice_injected"
         logger.warning(
             "advisor advice_injected consultation_id=%s call_type=%s model=%s input_tokens=%s output_tokens=%s base_model=%s reasoning_effort=%s",
             consultation_id, call_type, advisor_model, usage.prompt_tokens,

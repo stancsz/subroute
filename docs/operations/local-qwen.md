@@ -4,10 +4,12 @@ Subroute supports two local Qwen paths. Both keep LiteLLM as the OpenAI-compatib
 
 | Path | Inference service | Subroute model | Current model |
 | --- | --- | --- | --- |
-| Compose CUDA | `qwen-local`, using llama.cpp | `qwen3.8-27b` | Unsloth Qwen3.8-27B `UD-IQ3_S` GGUF |
+| Compose CUDA | `qwen-local`, using llama.cpp | `qwen3.8-27b` | Unsloth Dynamic 3.0 Qwen3.8-27B `UD-IQ2_XXS` GGUF |
 | Ollama | Ollama server on the host | `desktop` | `qwen2.5-coder` |
 
 Use the Compose path for the repository's pinned Qwen3.8 setup. Use Ollama when you want Ollama to manage model downloads and GPU placement. The aliases are not interchangeable: changing the engine also changes the model and template.
+
+**Current status (2026-10-21):** The owner approved two-bit IQ2_XXS, two concurrent requests, GPU-only model residency and a monitored 10 GiB VRAM target. The saved Compose configuration now matches that profile. All 65/65 layers, input embedding and model/KV/recurrent state were verified on GPU in the standalone trial, at about 9.25 GiB measured allocation. Gaming is explicitly deferred. The native trials remain failed overall despite a clean single 32K terminal result and 30 to 34 tokens/s during shared generation. The bounded Claude run ended with one useful integrated regression, unreliable further test generation and 28.06 active minutes across harness changes. Qwen is stopped after clean unloading. Read [the current budget and evidence](qwen-gpu-only-budget.md) before relying on performance or coexistence. The gaming override only changes restart behavior, keeping model settings owned by the base file.
 
 ## GPU prerequisites
 
@@ -27,7 +29,7 @@ The Compose service reserves one NVIDIA GPU in `docker-compose.yml`. It does not
 
 ## Option A: repository-managed llama.cpp service
 
-The `qwen-local` service uses a digest-pinned CUDA-enabled llama.cpp image. On first start, [`start.sh`](../../sidecars/qwen-local/start.sh) downloads the pinned Unsloth GGUF revision, verifies its SHA-256, and stores it in the persistent `qwen-local-models` volume. The download is about 12 GB. The model API listens inside Compose at `qwen-local:8080`; Compose publishes it on the host at `127.0.0.1:8088`.
+The `qwen-local` service uses a digest-pinned CUDA-enabled llama.cpp image. On first start, [`start.sh`](../../sidecars/qwen-local/start.sh) downloads the pinned Unsloth Dynamic 3.0 `UD-IQ2_XXS` GGUF revision, verifies its SHA-256, and stores it in the persistent `qwen-local-models` volume. The download is 7.27 GB (decimal). The model API listens inside Compose at `qwen-local:8080`; Compose publishes it on the host at `127.0.0.1:8088`.
 
 From the repository root, start the gateway and Qwen service:
 
@@ -59,7 +61,9 @@ curl.exe http://127.0.0.1:4000/v1/chat/completions `
 
 For clients using the Anthropic Messages API, use the existing local Qwen route documented in the [Claude Code setup](../../README.md#local-qwen-runtimes). In both cases, if the saved model-routing mode is `force`, switch it to `alias` or `off` so the explicit Qwen model selection reaches its route.
 
-The current server configuration uses one request slot, a 73,728-token context, a 4,096-token output cap, Q4_0 KV cache, low reasoning effort, and automatic GPU-layer placement. The vision projector is disabled. GPU placement and speed depend on free VRAM at server startup. The model's advertised or gateway intake limit is not a promise that all of that context fits in GPU memory.
+The server configuration uses **two request slots**, 81,920 total tokens and a 40,960-token limit per slot. Each request keeps the 32,768-token Sift/input target and 4,096-token output cap, leaving 4,096 tokens of allowance. Do not fill all 40,960 tokens with prompt plus output: the pinned server needs a boundary margin. The profile uses all GPU layers, explicit CUDA0 input-embedding placement, GPU Q4_0 KV, fitting disabled and host prompt-cache/context checkpoints disabled. Reasoning output is disabled. Compose limits inference to six CPUs and **12 GiB RAM without swap**; batch/microbatch sizes are 128/32. The vision projector is disabled. The **10 GiB VRAM target is monitored, not a Docker-enforced quota**. GPU residency does not reserve GPU compute for games. Two-bit quantization trades weight precision for fit; the real test-writing workload and a later visible-game trial are required to judge usefulness. See [the current budget](qwen-gpu-only-budget.md) for exact pins, failed tests and measured limits.
+
+Sift is active by default on the local Qwen route. The repository Qwen CLI runner defaults to a 256,000-token client history window, 90% client compaction, 4K output and disabled thinking. Gateway Sift stays at32K and native slots stay40K; a client override up to1,000,000is available, with full-size latency/quality unverified. See [the current productive defaults and workload evidence](qwen-gpu-only-budget.md#productive-qwen-defaults-and-corrected-workload).
 
 Useful lifecycle commands:
 
@@ -122,7 +126,7 @@ The repository does not declare an Ollama container service. This avoids adding 
 ## Troubleshooting
 
 - **Compose reports no compatible GPU:** verify `nvidia-smi` on the host, then verify Docker GPU passthrough with the test command above. On Linux, check NVIDIA Container Toolkit configuration and restart Docker after configuring it.
-- **Qwen is slow or fails to load:** check `docker compose logs qwen-local` and free VRAM on the host. The service chooses GPU layers automatically at startup; close other GPU workloads and restart `qwen-local` to retry placement.
+- **Qwen is slow or fails to load:** check `docker compose logs qwen-local` and free VRAM on the host. The service uses all-GPU placement with the IQ2 model and two slots. Verify the model pin and allocation logs against the current budget. Docker does not enforce a 10 GiB GPU quota; stop inference if measured allocation exceeds the target. A restart alone does not retune placement.
 - **Ollama works on the host but not through Subroute:** check `OLLAMA_API_BASE` from the gateway container's point of view. On Windows Docker Desktop, the default host alias is configured. On Linux, confirm Ollama listens on an address the Compose bridge can reach and that the firewall permits that connection.
 - **Model selection appears ignored:** inspect the saved policy in the control desk. In `force` mode, choose `alias` or `off` for explicit local model selection.
 - **GPU use is unclear in Ollama:** keep a model loaded by sending a request, then inspect `ollama ps` and host GPU utilization. Host `nvidia-smi` alone does not show whether a specific model is fully or partly offloaded.

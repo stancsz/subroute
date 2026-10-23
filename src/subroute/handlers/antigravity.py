@@ -21,6 +21,7 @@ from subroute.audio import AUDIO_REQUEST_BYTES, MAX_AUDIO_BYTES, MAX_AUDIO_FILES
 
 
 MODELS = {
+    "claude-opus-5-5-low": "Claude Opus 5.5 (Low)",
     "gemini-4-argon": "Gemini 4 Argon (High)",
     "gemini-4-argon-high": "Gemini 4 Argon (High)",
     "gemini-4-argon-medium": "Gemini 4 Argon (Medium)",

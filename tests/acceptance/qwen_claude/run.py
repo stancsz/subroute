@@ -30,9 +30,18 @@ ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = Path(__file__).resolve().parent
 BASE_URL = "http://127.0.0.1:4005"
 MODEL = "qwen3.8-27b"
+QWEN_INPUT_TARGET = 32_768
+QWEN_CONTEXT_TOKENS = 40_960  # Native per-slot capacity, not client history.
+QWEN_CLIENT_CONTEXT_TOKENS = 256_000
+QWEN_RAW_INPUT_LIMIT = 1_000_000
+# Sift owns32K forwarding; the client retains a larger bounded history.
+QWEN_AUTO_COMPACT_PERCENT = 90
 CHILD_MODE = "qwen-child"
 DIRECT_MODE = "direct"
-CHILD_PARENT_MODEL = "mimo-v2.6-pro"
+# Keep the one-shot delegating coordinator on the same supported local Qwen
+# route as the implementation child. An unavailable coordinator model otherwise
+# prevents the child Agent call before the Qwen worker receives the task.
+CHILD_PARENT_MODEL = MODEL
 CHILD_AGENT_NAME = "qwen-runner-implementer"
 CHILD_MARKER_PREFIX = "QWEN_CHILD_COMPLETE_"
 CHILD_TURN_CAP = 24
@@ -129,24 +138,56 @@ TASKS = {
 
 
 def gateway_key() -> str:
-    result = subprocess.run(
-        ["docker", "compose", "exec", "-T", "gateway-staging", "printenv", "GATEWAY_MASTER_KEY"],
-        cwd=ROOT, capture_output=True, text=True, timeout=15, check=True,
-    )
-    value = result.stdout.strip()
+    value = os.environ.get("GATEWAY_MASTER_KEY", "").strip()
     if not value:
-        raise RuntimeError("staging gateway has no master key")
+        dotenv = ROOT / ".env"
+        try:
+            for line in dotenv.read_text(encoding="utf-8").splitlines():
+                candidate = line.strip()
+                if candidate.startswith("export "):
+                    candidate = candidate[7:].lstrip()
+                name, separator, raw_value = candidate.partition("=")
+                if separator and name.strip() == "GATEWAY_MASTER_KEY":
+                    value = raw_value.strip()
+                    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\\\"'":
+                        value = value[1:-1]
+                    break
+        except OSError:
+            pass
+    if value:
+        # Docker Compose injects this project setting into gateway-staging.
+        # Reading the same configured value avoids making a healthy HTTP route
+        # depend on the Docker control socket being responsive.
+        return value
+
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "exec", "-T", "gateway-staging", "printenv", "GATEWAY_MASTER_KEY"],
+            cwd=ROOT, capture_output=True, text=True, timeout=15, check=True,
+        )
+        value = result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        value = ""
+    if not value:
+        raise RuntimeError("staging gateway master key was unavailable from Docker and project configuration")
     return value
 
 
 def set_policy(client: httpx.Client, state: dict, *, test: bool) -> None:
+    advisor_locked = False
+    if test:
+        advisor_locked = client.get("/api/routing-options").json().get("advisor_model_locked") is True
     routing = {
-        "model": state["active_model"],
+        "model": MODEL if test else state["active_model"],
         "mode": "alias" if test else state["mode"],
         "reasoning_effort": state["reasoning_effort"],
         "fast_mode": state.get("fast_mode", False),
     }
     client.post("/api/active-model", json=routing).raise_for_status()
+    # A locked account Advisor cannot be disabled for the staging run. Leave
+    # that policy untouched rather than sending an invalid null update.
+    if test and advisor_locked:
+        return
     advisor = {
         "advisor_model": None if test else state["advisor_model"],
         "reasoning_effort": None if test else state["advisor_reasoning_effort"],
@@ -243,7 +284,13 @@ def child_agent_spec(name: str, directory: Path, marker: str,
     definition = {
         "description": f"Bounded Qwen implementation worker for {name}.",
         "prompt": (
-            "Complete this task autonomously. You may read fixture files and tests, but edit "
+            "Complete this task autonomously using one inspect-edit-finish pass. First read each "
+            "task-required source, contract, and test file once; then make the necessary edits. "
+            "The runner validates your changes after you return, so do not run tests, reread files, "
+            "or make speculative cleanup edits. Re-read a file only once if a concrete contradiction "
+            "blocks the assigned implementation. After the required edits are complete, report briefly "
+            "and return the required marker immediately; do not wait for external validation. You may "
+            "read fixture files and tests, but edit "
             "only the exact absolute source paths listed below. Do not delegate, use shell "
             "commands, or claim test results; the runner executes tests independently after "
             "you return. Report actual changes and limitations. End with the unique marker "
@@ -363,8 +410,10 @@ def qwen_child_checks(name: str, directory: Path, events: list[dict], marker: st
             "child_tool_names": child_tools, "qwen_route_calls": qwen_route_calls}
 
 
-def cli_env(key: str, *, auto_compact_percent: int = 75,
-            client_context_tokens: int = 65_536) -> dict[str, str]:
+def cli_env(key: str, *, auto_compact_percent: int = QWEN_AUTO_COMPACT_PERCENT,
+            client_context_tokens: int = QWEN_CLIENT_CONTEXT_TOKENS) -> dict[str, str]:
+    if type(client_context_tokens) is not int or not QWEN_INPUT_TARGET <= client_context_tokens <= QWEN_RAW_INPUT_LIMIT:
+        raise ValueError("Client history window must be32768..1000000tokens; native capacity remains40960")
     env = {name: value for name, value in os.environ.items()
            if not name.startswith(("ANTHROPIC_", "CLAUDE_"))}
     env.update({
@@ -374,7 +423,7 @@ def cli_env(key: str, *, auto_compact_percent: int = 75,
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": str(client_context_tokens),
         "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": str(auto_compact_percent),
         "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "4096",
-        "MAX_THINKING_TOKENS": "512",
+        "MAX_THINKING_TOKENS": "0",
     })
     return env
 
@@ -403,7 +452,20 @@ def checkpoint_receipt_complete(path: Path | None) -> bool:
         receipt = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return isinstance(receipt, dict) and receipt.get("status") in {"passed", "failed"}
+    return isinstance(receipt, dict) and receipt.get("status") in {"passed", "failed", "progress"}
+
+
+def is_agent_dispatch_event(line: str) -> bool:
+    """Start the first-edit watchdog when the coordinator actually delegates."""
+    try:
+        event = json.loads(line)
+    except (TypeError, json.JSONDecodeError):
+        return False
+    message = event.get("message") if isinstance(event, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    return (isinstance(content, list) and any(
+        isinstance(item, dict) and item.get("type") == "tool_use" and item.get("name") == "Agent"
+        for item in content))
 
 
 def run_cli_bounded(command: list[str], *, task_input: str, cwd: Path,
@@ -444,6 +506,7 @@ def run_cli_bounded(command: list[str], *, task_input: str, cwd: Path,
     output: list[str] = []
     errors: list[str] = []
     started = last_progress = time.monotonic()
+    checkpoint_started: float | None = None
     closed_streams: set[str] = set()
     timeout_reason = None
     cleanup_verified = None
@@ -453,10 +516,11 @@ def run_cli_bounded(command: list[str], *, task_input: str, cwd: Path,
             if now - started >= timeout:
                 timeout_reason = f"Claude Code exceeded the {timeout}-second total task limit"
             elif (checkpoint_deadline is not None and checkpoint_receipt_path is not None
+                  and checkpoint_started is not None
                   and not checkpoint_receipt_complete(checkpoint_receipt_path)
-                  and now - started >= checkpoint_deadline):
-                timeout_reason = ("Qwen EJS checkpoint was not reached within "
-                                  f"{checkpoint_deadline} seconds")
+                  and now - checkpoint_started >= checkpoint_deadline):
+                timeout_reason = ("Qwen first-edit checkpoint was not reached within "
+                                  f"{checkpoint_deadline} seconds after worker delegation")
             elif now - last_progress >= idle_timeout:
                 timeout_reason = f"Claude Code produced no output for {idle_timeout} seconds"
             if timeout_reason:
@@ -498,6 +562,8 @@ def run_cli_bounded(command: list[str], *, task_input: str, cwd: Path,
                 if transcript is not None:
                     transcript.write(redact_text(line, redact_values))
                     transcript.flush()
+                if stream_name == "stdout" and checkpoint_started is None and is_agent_dispatch_event(line):
+                    checkpoint_started = time.monotonic()
                 last_progress = time.monotonic()
     except BaseException:
         if process.poll() is None:
@@ -590,8 +656,8 @@ def holdout_tests(name: str, directory: Path) -> subprocess.CompletedProcess[str
 
 def run_task(name: str, directory: Path, key: str, *, verify_in_cli: bool = False,
              timeout: int = 240, max_turns: int | None = None,
-             auto_compact_percent: int = 75,
-             client_context_tokens: int = 65_536,
+             auto_compact_percent: int = QWEN_AUTO_COMPACT_PERCENT,
+             client_context_tokens: int = QWEN_CLIENT_CONTEXT_TOKENS,
              dispatch_mode: str = DIRECT_MODE) -> dict:
     source_names, prompt = TASKS[name]
     source_names = (source_names,) if isinstance(source_names, str) else source_names
@@ -761,10 +827,10 @@ def run_task(name: str, directory: Path, key: str, *, verify_in_cli: bool = Fals
     audits = [{"protocol": protocol, "compacted": compacted == "true", "input_tokens": int(raw),
                "forwarded_tokens": int(forwarded), "target": int(target), "output_limit": int(output_limit)}
               for protocol, compacted, raw, forwarded, target, output_limit in re.findall(
-                  r"sift_request protocol=(\w+) compacted=(true|false) input_tokens=(\d+) forwarded_tokens=(\d+) target=(\d+) output_limit=(-?\d+)",
-                  gateway_logs.stdout + gateway_logs.stderr) if int(target) in {24_576, 65_536}]
+                  r"sift_request protocol=(\w+) compacted=(true|false) [^\r\n]*?input_tokens=(\d+) forwarded_tokens=(\d+) target=(\d+) output_limit=(-?\d+)",
+                  gateway_logs.stdout + gateway_logs.stderr) if int(target) in {24_576, QWEN_INPUT_TARGET}]
     qwen_route_calls = len(re.findall(r"completion\(\) model=\s*qwen3\.8-27b", gateway_logs.stdout + gateway_logs.stderr))
-    qwen_sift_requests = sum(audit["protocol"] == "anthropic_messages" and audit["target"] == 65_536
+    qwen_sift_requests = sum(audit["protocol"] == "anthropic_messages" and audit["target"] == QWEN_INPUT_TARGET
                              for audit in audits)
     calls = [block for event in events if event.get("type") == "assistant"
              for block in event.get("message", {}).get("content", [])
@@ -892,13 +958,13 @@ def main() -> int:
     parser.add_argument("--verify-in-cli", action="store_true", help="let Claude Code run the fixture tests with PowerShell")
     parser.add_argument("--timeout", type=int, default=300, help="wall-clock limit per task in seconds")
     parser.add_argument("--max-turns", type=int, default=None)
-    parser.add_argument("--auto-compact-percent", type=int, default=75)
-    parser.add_argument("--client-context-tokens", type=int, default=65_536)
+    parser.add_argument("--auto-compact-percent", type=int, default=QWEN_AUTO_COMPACT_PERCENT)
+    parser.add_argument("--client-context-tokens", type=int, default=QWEN_CLIENT_CONTEXT_TOKENS)
     args = parser.parse_args()
     if not 1 <= args.auto_compact_percent <= 100:
         parser.error("--auto-compact-percent must be between 1 and 100")
-    if args.client_context_tokens < 32_768:
-        parser.error("--client-context-tokens must be at least 32768")
+    if not QWEN_INPUT_TARGET <= args.client_context_tokens <= QWEN_RAW_INPUT_LIMIT:
+        parser.error("--client-context-tokens must be between32768and1000000")
     if args.execution_mode == CHILD_MODE and args.verify_in_cli:
         parser.error("--verify-in-cli is unavailable in qwen-child mode; the runner checks tests after the child returns")
     if args.execution_mode == CHILD_MODE:

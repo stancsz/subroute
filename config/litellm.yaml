@@ -1,8 +1,7 @@
 model_list:
   # Native provider adapters. Change model_name to the stable public aliases
   # that coding tools should select. Add deployments rather than Python code.
-  # Explicit automatic route. LiteLLM tries this MiniMax deployment first,
-  # then the configured Gemini and Codex subscription groups on provider error.
+  # `auto` starts with the OpenRouter MiniMax M3.1 Flash route.
   - model_name: auto
     model_info:
       <<: &context_policy
@@ -14,38 +13,10 @@ model_list:
       selectable: false
       disable_background_health_check: true
     litellm_params:
-      model: openrouter/minimax/minimax-m3
+      model: openrouter/minimax/minimax-m3.1-flash
       api_key: os.environ/OPENROUTER_API_KEY
       reasoning:
         exclude: true
-
-  # Private fallback groups keep this chain scoped to `auto`; requests made
-  # directly to gemini-subscription or codex-luna remain fail-closed.
-  - model_name: auto-gemini-subscription
-    model_info:
-      <<: *context_policy
-      display_name: "Auto fallback: Gemini 3.8 Flash"
-      selectable: false
-      disable_background_health_check: true
-    litellm_params:
-      model: antigravity/gemini-3.8-flash
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: auto-codex-luna
-    model_info:
-      <<: *context_policy
-      display_name: "Auto fallback: Codex Luna"
-      selectable: false
-      disable_background_health_check: true
-    litellm_params:
-      model: codex-subscription/gpt-6-luna
-      api_base: https://chatgpt.com/backend-api/codex
-      api_key: refreshed-at-dispatch
-      extra_headers:
-        ChatGPT-Account-ID: refreshed-at-dispatch
-        User-Agent: OpenAI-Codex/0.151.0 (Windows)
-      allowed_openai_params: [reasoning_effort]
-      store: false
 
   # Advisor-only Gemini alias keeps its fallback policy separate from the
   # public Gemini target route.
@@ -62,17 +33,29 @@ model_list:
       model: antigravity/gemini-3.8-flash
       allowed_openai_params: [reasoning_effort]
 
+  # Supplemental Advisor call on the verified Antigravity subscription model.
+  - model_name: claude-opus-5-5-low-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: total
+      display_name: "Supplemental Advisor: Claude Opus 5.5 Low"
+      selectable: false
+      disable_background_health_check: true
+    litellm_params:
+      model: antigravity/claude-opus-5-5-low
+
   - model_name: openrouter
     model_info:
       <<: *context_policy
-      display_name: MiniMax M3
+      display_name: MiniMax M3.1 Flash
       provider: OpenRouter
       source_id: openrouter
       access: API key
-      reasoning_note: This M3 route uses adaptive thinking; graded effort levels are not exposed.
       capabilities: [tools, streaming]
     litellm_params:
-      model: openrouter/minimax/minimax-m3
+      model: openrouter/minimax/minimax-m3.1-flash
       api_key: os.environ/OPENROUTER_API_KEY
       reasoning:
         exclude: true
@@ -349,18 +332,22 @@ model_list:
       reasoning_split: true
       api_key: os.environ/MINIMAX_API_KEY
 
+  # Public alias for the M3.1 Flash route. The alias stays stable for clients
+  # and for the saved control-desk target; the route behind it is OpenRouter's
+  # M3.1 Flash, matching `openrouter-flash`.
   - model_name: minimax-flash
     model_info:
       <<: *context_policy
       display_name: MiniMax M3.1 Flash
-      provider: MiniMax
-      source_id: minimax
+      provider: OpenRouter
+      source_id: openrouter
       access: API key
       capabilities: [tools, streaming]
     litellm_params:
-      model: minimax/MiniMax-M3.1-Flash
-      reasoning_split: true
-      api_key: os.environ/MINIMAX_API_KEY
+      model: openrouter/minimax/minimax-m3.1-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+      reasoning:
+        exclude: true
 
   # LiteLLM 1.101.0 has a native MiniMax TTS provider for /v1/audio/speech.
   - model_name: minimax-tts
@@ -528,14 +515,14 @@ model_list:
       model: ollama/qwen2.5-coder
       api_base: os.environ/OLLAMA_API_BASE
 
-  # Optional Compose profile local-qwen serves Unsloth's 3-bit GGUF through
-  # llama.cpp. The 72K window reserves 64K for input, 4K for output and 4K headroom.
+  # Compose serves Unsloth Dynamic 3.0 IQ2_XXS through llama.cpp with two slots.
+  # Each 40K slot reserves 32K for input/Sift, 4K for output and 4K headroom.
   - model_name: qwen3.8-27b
     model_info:
-      max_input_tokens: 65536
+      max_input_tokens: 32768
       max_output_tokens: 4096
-      context_window: 73728
-      auto_compact_token_limit: 65536
+      context_window: 40960
+      auto_compact_token_limit: 32768
       compaction_scope: total
       display_name: qwen3.8-27b
       provider: Local
@@ -552,27 +539,47 @@ model_list:
 
 router_settings:
   enable_pre_call_checks: true
-  # Keep ordinary model requests fail-closed unless their model group has an
-  # explicit fallback below. Audio-only provider_content_filter refusals are
-  # typed as ContentPolicyViolationError and receive at most two same-input retries.
+  # Bound every provider attempt so one stalled upstream cannot stall the
+  # ordered chain. LiteLLM applies it per attempt, not to the whole chain.
+  timeout: 45
+  # Catch provider failures for eligible text/chat requests in one consistent
+  # order. The request model stays client-visible; only the internal provider
+  # changes. The pre-call hook disables this chain for media and special APIs.
+  default_fallbacks: [openrouter, mimo-v2.6-pro, codex-luna]
+  # Try the configured chain once, without recursively reopening it from a
+  # failed fallback target. This preserves order and prevents provider repeats.
+  max_fallbacks: 1
   num_retries: 0
   model_group_retry_policy:
     gemini-subscription:
       ContentPolicyViolationErrorRetries: 2
   fallbacks:
-    - auto: [auto-gemini-subscription]
-    - auto-gemini-subscription: [auto-codex-luna]
-    # Selected MiniMax, OpenRouter, and Xiaomi routes fail over in order.
-    # MiMo Pro represents Xiaomi in the chain so one provider is not called twice.
-    - minimax: [openrouter, mimo-v2.6-pro, codex-luna]
-    - openrouter: [minimax, mimo-v2.6-pro, codex-luna]
-    - minimax-flash: [openrouter-flash, mimo-v2.6-pro, codex-luna]
-    - openrouter-flash: [minimax-flash, mimo-v2.6-pro, codex-luna]
-    - mimo-v2.6-pro: [minimax, openrouter, codex-luna]
-    - mimo-v2.6-flash: [minimax, openrouter, codex-luna]
-    # Keep Advisor fallback isolated from the public Gemini target alias.
+    # These targets are themselves members of the default chain. Skip the
+    # current provider so the fallback walk never repeats an attempt.
+    - auto: [mimo-v2.6-pro, codex-luna]
+    - openrouter: [mimo-v2.6-pro, codex-luna]
+    # `openrouter-flash` and `minimax-flash` are the same OpenRouter M3.1 Flash
+    # route. The duplicate OpenRouter provider is skipped, so both walk
+    # MiMo V2.6 Pro and then GPT-6 Luna exactly once.
+    - openrouter-flash: [mimo-v2.6-pro, codex-luna]
+    - minimax-flash: [mimo-v2.6-pro, codex-luna]
+    - mimo-v2.6-pro: [openrouter, codex-luna]
+    - mimo-v2.6-flash: [openrouter, codex-luna]
+    - mimo-v2.5-pro: [openrouter, codex-luna]
+    - mimo-v2.5: [openrouter, codex-luna]
+    - codex-luna: [openrouter, mimo-v2.6-pro]
+    # Keep Advisor failover separate from the target catch-all chain.
     - gemini-3.8-flash-advisor: [codex-gpt-6.1-sol-advisor]
     - codex-gpt-6.1-sol-advisor: [gemini-3.8-flash-advisor]
+    - codex-sol-advisor: []
+    - codex-astra-advisor: []
+    - codex-luna-advisor: []
+
+search_tools:
+  - search_tool_name: subroute-searxng
+    litellm_params:
+      search_provider: searxng
+      api_base: os.environ/SEARXNG_API_BASE
 
 litellm_settings:
   # Xiaomi and local OpenAI-compatible backends implement Chat Completions.
@@ -584,9 +591,13 @@ litellm_settings:
     - subroute.plugins.dynamic_router.dynamic_routing_plugin
     # Heal oversized automatic-route histories before advisor/provider checks.
     - subroute.sift_plugin.sift_auto_hook
+    # Local Qwen Sift is enabled by default; requests need no opt-in.
     - subroute.sift_plugin.sift_qwen_hook
     - subroute.plugins.advisor_plugin.advisor_plugin_instance
+    # Apply the shared text-target forwarding budget after routing and advisor guidance.
+    - subroute.sift_plugin.sift_target_hook
     - subroute.plugins.codex_credentials.codex_credential_refresher
+    - websearch_interception
   custom_provider_map:
     - provider: codex-subscription
       custom_handler: subroute.handlers.codex_subscription.codex_subscription_handler
@@ -594,6 +605,9 @@ litellm_settings:
       custom_handler: subroute.handlers.antigravity.antigravity_handler
     - provider: codex-advisor
       custom_handler: subroute.handlers.codex_advisor.codex_advisor_handler
+  websearch_interception_params:
+    enabled_providers: ["openrouter"]
+    search_tool_name: "subroute-searxng"
   # This removes known unsupported top-level parameters. It does not guarantee
   # cross-provider tool, vision, context, reasoning, or streaming compatibility.
   drop_params: true

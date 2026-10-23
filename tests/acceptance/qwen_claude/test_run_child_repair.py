@@ -37,12 +37,82 @@ def cli_events(marker: str, source_path: str, *, label: str, include_marker: boo
 
 
 class ChildRepairTests(unittest.TestCase):
+    def test_gateway_key_uses_project_dotenv_without_docker_control(self):
+        with tempfile.TemporaryDirectory(prefix="qwen-gateway-key-test-") as temporary:
+            root = Path(temporary)
+            (root / ".env").write_text("GATEWAY_MASTER_KEY='test-key'\n", encoding="utf-8")
+            with mock.patch.object(runner, "ROOT", root), \
+                    mock.patch.object(runner.subprocess, "run",
+                                      side_effect=subprocess.TimeoutExpired("docker compose exec", 15)), \
+                    mock.patch.dict(runner.os.environ, {"GATEWAY_MASTER_KEY": ""}):
+                self.assertEqual(runner.gateway_key(), "test-key")
+                runner.subprocess.run.assert_not_called()
+
+    def test_staging_policy_explicitly_selects_qwen_and_preserves_locked_advisor(self):
+        response = mock.Mock()
+        response.json.return_value = {"advisor_model_locked": True}
+        client = mock.Mock()
+        client.get.return_value = response
+        state = {"active_model": "mimo-v2.6-pro", "mode": "force",
+                 "reasoning_effort": None, "fast_mode": False,
+                 "advisor_model": "gemini-subscription-argon",
+                 "advisor_reasoning_effort": None, "advisor_sensitivity": "frequent"}
+
+        runner.set_policy(client, state, test=True)
+
+        client.get.assert_called_once_with("/api/routing-options")
+        client.post.assert_called_once_with("/api/active-model", json={
+            "model": "qwen3.8-27b", "mode": "alias",
+            "reasoning_effort": None, "fast_mode": False,
+        })
+
+    def test_staging_policy_disables_only_an_unlocked_advisor_and_restores_snapshot(self):
+        response = mock.Mock()
+        response.json.return_value = {"advisor_model_locked": False}
+        client = mock.Mock()
+        client.get.return_value = response
+        state = {"active_model": "mimo-v2.6-pro", "mode": "force",
+                 "reasoning_effort": None, "fast_mode": False,
+                 "advisor_model": "gemini-subscription-argon",
+                 "advisor_reasoning_effort": "low", "advisor_sensitivity": "frequent"}
+
+        runner.set_policy(client, state, test=True)
+        runner.set_policy(client, state, test=False)
+
+        self.assertEqual(client.post.call_args_list, [
+            mock.call("/api/active-model", json={"model": "qwen3.8-27b", "mode": "alias",
+                                                  "reasoning_effort": None, "fast_mode": False}),
+            mock.call("/api/advisor-model", json={"advisor_model": None, "reasoning_effort": None,
+                                                   "advisor_sensitivity": "frequent"}),
+            mock.call("/api/active-model", json={"model": "mimo-v2.6-pro", "mode": "force",
+                                                  "reasoning_effort": None, "fast_mode": False}),
+            mock.call("/api/advisor-model", json={"advisor_model": "gemini-subscription-argon",
+                                                   "reasoning_effort": "low",
+                                                   "advisor_sensitivity": "frequent"}),
+        ])
+
     def test_child_budget_supports_a_normal_multi_file_task(self):
         self.assertEqual(runner.CHILD_TURN_CAP, 24)
         self.assertEqual(runner.CHILD_TIMEOUT, 600)
-        self.assertEqual(runner.run_task.__kwdefaults__["client_context_tokens"], 65_536)
-        self.assertEqual(runner.cli_env("test-key")["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "65536")
+        self.assertEqual(runner.run_task.__kwdefaults__["client_context_tokens"], 256_000)
+        self.assertEqual(runner.cli_env("test-key")["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "256000")
+        environment = runner.cli_env("test-key")
+        client_context = int(environment["CLAUDE_CODE_MAX_CONTEXT_TOKENS"])
+        client_cutoff = client_context * int(environment["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"]) // 100
+        self.assertGreater(client_cutoff, runner.QWEN_INPUT_TARGET)
+        self.assertLess(client_cutoff, client_context)
+        self.assertEqual(int(environment["CLAUDE_CODE_MAX_OUTPUT_TOKENS"]), 4096)
+        self.assertEqual(environment["MAX_THINKING_TOKENS"], "0")
+        self.assertEqual(runner.QWEN_CONTEXT_TOKENS, 40_960)
+        self.assertGreater(client_context, runner.QWEN_CONTEXT_TOKENS)
+        self.assertEqual(environment["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], str(client_context))
+        self.assertEqual(runner.cli_env("test-key", client_context_tokens=1_000_000)["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "1000000")
+        for invalid in (1_000_001, True, 32_767):
+            with self.assertRaises(ValueError):
+                runner.cli_env("test-key", client_context_tokens=invalid)
         command = runner.claude_command(dispatch_mode=runner.CHILD_MODE)
+        self.assertEqual(runner.CHILD_PARENT_MODEL, runner.MODEL)
+        self.assertEqual(command[command.index("--model") + 1], runner.MODEL)
         self.assertEqual(command[command.index("--max-turns") + 1], "24")
 
     def test_nested_paths_use_canonical_relative_names(self):
@@ -94,8 +164,8 @@ class ChildRepairTests(unittest.TestCase):
 
             log_output = (
                 "completion() model= qwen3.8-27b\n"
-                "sift_request protocol=anthropic_messages compacted=false input_tokens=100 "
-                "forwarded_tokens=100 target=65536 output_limit=4096\n"
+                "sift_request protocol=anthropic_messages compacted=false active_tool_results_compacted=0 input_tokens=100 "
+                "forwarded_tokens=100 target=32768 output_limit=4096\n"
             )
 
             with (
@@ -118,6 +188,13 @@ class ChildRepairTests(unittest.TestCase):
             self.assertEqual(outcome["cli_exit"], 0)
             self.assertTrue(outcome["tests_passed"])
             self.assertTrue(outcome["child_acceptance"]["passed"], outcome["child_acceptance"])
+            self.assertTrue(outcome["child_acceptance"]["checks"]["sift_route_confirmed"])
+            self.assertEqual(outcome["qwen_sift_requests"], 1)
+            child_prompt = json.loads(runner.child_agent_spec(
+                "cache_report", workspace, "QWEN_CHILD_COMPLETE_TEST"))[
+                    runner.CHILD_AGENT_NAME]["prompt"]
+            self.assertIn("one inspect-edit-finish pass", child_prompt)
+            self.assertIn("return the required marker immediately", child_prompt)
             self.assertTrue(outcome["visible_tests_unchanged"])
             self.assertTrue(outcome["write_scope_clean"])
             self.assertEqual(outcome["changed_files"], ["cache_report.py"])

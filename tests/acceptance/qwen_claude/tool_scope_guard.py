@@ -15,7 +15,7 @@ import sys
 MAX_READ_LINES = 200
 MAX_SCOUT_READ_LINES = 80
 # Grep's Qwen tool schema commonly defaults head_limit to 60. Scout output is
-# still bounded by exact-path access, a six-call budget, and the transcript
+# still bounded by exact-path access, per-operation quotas, and the transcript
 # character ceiling, so tolerate that default instead of stalling on a deny.
 MAX_SCOUT_GREP_HEAD_LIMIT = 100
 
@@ -89,7 +89,7 @@ def authorize(tool: str, tool_input: dict, scope: dict) -> str | None:
                             break
             except OSError:
                 return "Read target is missing or unreadable"
-            offset, limit = tool_input.get("offset"), tool_input.get("limit")
+            offset, limit = tool_input.get("offset", 1), tool_input.get("limit")
             ranged = (isinstance(offset, int) and not isinstance(offset, bool)
                       and isinstance(limit, int) and not isinstance(limit, bool))
             if line_count > MAX_READ_LINES and (
@@ -98,7 +98,7 @@ def authorize(tool: str, tool_input: dict, scope: dict) -> str | None:
             if canonical_target in range_restricted:
                 ranges_by_path = scope.get("read_ranges", {})
                 ranges = ranges_by_path.get(canonical_target, []) if isinstance(ranges_by_path, dict) else []
-                if not ranged or offset < 1 or limit < 1 or limit > MAX_READ_LINES:
+                if "offset" not in tool_input or not ranged or offset < 1 or limit < 1 or limit > MAX_READ_LINES:
                     return "Read must use offset and limit within a caller-verified source range"
                 end = offset + limit - 1
                 contained = any(
@@ -123,6 +123,92 @@ def authorize(tool: str, tool_input: dict, scope: dict) -> str | None:
     return None
 
 
+def claim_scout_attempt(tool: str, scope: dict) -> str | None:
+    """Charge a scout Read/Grep only after exact scope authorization succeeds."""
+    limit = scope.get("scout_tool_call_limit", 8)
+    counter_dir = scope.get("scout_call_counter_dir")
+    if (not isinstance(limit, int) or isinstance(limit, bool) or limit < 1
+            or not isinstance(counter_dir, str) or not counter_dir.strip()):
+        return "Source scout call counter is invalid"
+    counter_path = Path(counter_dir)
+    per_tool_limits = scope.get("scout_tool_limits", {})
+    per_tool_limit = per_tool_limits.get(tool) if isinstance(per_tool_limits, dict) else None
+    if not isinstance(per_tool_limit, int) or isinstance(per_tool_limit, bool) or per_tool_limit < 1:
+        return "Source scout per-tool call budget is invalid"
+    prefix = "search" if tool == "Grep" else "read"
+    total_ticket = _claim_ticket(counter_path, "total", limit)
+    if total_ticket is None:
+        return f"Source scout is limited to {limit} combined Read/Grep attempts"
+    if _claim_ticket(counter_path, prefix, per_tool_limit) is None:
+        # Return the combined ticket: an exhausted per-tool quota must not
+        # consume capacity reserved for other authorized operations.
+        total_ticket.unlink(missing_ok=True)
+        return f"Source scout is limited to {per_tool_limit} {prefix} attempts"
+    return None
+
+
+def claim_scout_denial(scope: dict) -> str | None:
+    """Bound denied requests separately so they do not consume allowed reads."""
+    counter_dir = scope.get("scout_call_counter_dir")
+    limit = scope.get("scout_denied_attempt_limit", 4)
+    if (not isinstance(counter_dir, str) or not counter_dir.strip()
+            or not isinstance(limit, int) or isinstance(limit, bool) or limit < 1):
+        return "Source scout denied-attempt counter is invalid"
+    if _claim_ticket(Path(counter_dir), "denied", limit) is None:
+        return f"Source scout exceeded {limit} guard-denied attempts"
+    return None
+
+
+def claim_implementation_attempt(tool: str, scope: dict) -> str | None:
+    """Hard-cap authorized implementation reads and searches per child run."""
+    counter_dir = scope.get("implementation_call_counter_dir")
+    limits = scope.get("implementation_tool_limits", {})
+    per_tool_limit = limits.get("Read" if tool == "Read" else "Grep") if isinstance(limits, dict) else None
+    if (not isinstance(counter_dir, str) or not counter_dir.strip()
+            or not isinstance(per_tool_limit, int) or isinstance(per_tool_limit, bool)
+            or per_tool_limit < 1):
+        return "Implementation call counter is invalid"
+    counter_path = Path(counter_dir)
+    pre_edit_limit = scope.get("implementation_pre_edit_read_limit", 4)
+    if (tool == "Read" and not (counter_path / "first-edit.ticket").exists()
+            and isinstance(pre_edit_limit, int) and not isinstance(pre_edit_limit, bool)
+            and pre_edit_limit > 0
+            and len(list(counter_path.glob("pre-edit-read-*.ticket"))) >= pre_edit_limit):
+        return (f"Implementation is limited to {pre_edit_limit} Reads before the first edit; "
+                "edit an assigned file now")
+    total_limit = limits.get("Read", 0) + limits.get("Grep", 0)
+    total_ticket = _claim_ticket(counter_path, "total", total_limit)
+    if total_ticket is None:
+        return f"Implementation is limited to {total_limit} combined Read/Grep attempts; edit the assigned files now"
+    prefix = "read" if tool == "Read" else "search"
+    if _claim_ticket(counter_path, prefix, per_tool_limit) is None:
+        total_ticket.unlink(missing_ok=True)
+        return f"Implementation is limited to {per_tool_limit} {prefix} attempts; edit the assigned files now"
+    if tool == "Read" and not (counter_path / "first-edit.ticket").exists():
+        _claim_ticket(counter_path, "pre-edit-read", pre_edit_limit)
+    return None
+
+
+def mark_implementation_edit(scope: dict) -> None:
+    counter_dir = scope.get("implementation_call_counter_dir")
+    if isinstance(counter_dir, str) and counter_dir.strip():
+        try:
+            descriptor = os.open(Path(counter_dir) / "first-edit.ticket",
+                                 os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            return
+        os.close(descriptor)
+
+
+def claim_implementation_denial(scope: dict) -> None:
+    """Record guard denials separately from the authorized operation budget."""
+    counter_dir = scope.get("implementation_call_counter_dir")
+    limit = scope.get("implementation_denied_attempt_limit", 4)
+    if (isinstance(counter_dir, str) and counter_dir.strip()
+            and isinstance(limit, int) and not isinstance(limit, bool) and limit > 0):
+        _claim_ticket(Path(counter_dir), "denied", limit)
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read())
@@ -131,33 +217,31 @@ def main() -> int:
         scope_path = Path(sys.argv[1])
         scope = json.loads(scope_path.read_text(encoding="utf-8"))
         reason = authorize(tool, tool_input if isinstance(tool_input, dict) else {}, scope)
+        if scope.get("scout_mode") is True and tool in {"Read", "Grep"}:
+            if reason:
+                claim_scout_denial(scope)
+                _emit_deny(reason)
+                return 0
+            ticket_reason = claim_scout_attempt(tool, scope)
+            if ticket_reason:
+                claim_scout_denial(scope)
+                _emit_deny(ticket_reason)
+                return 0
+        if scope.get("implementation_mode") is True and tool in {"Read", "Grep"}:
+            if reason:
+                claim_implementation_denial(scope)
+                _emit_deny(reason)
+                return 0
+            ticket_reason = claim_implementation_attempt(tool, scope)
+            if ticket_reason:
+                claim_implementation_denial(scope)
+                _emit_deny(ticket_reason)
+                return 0
+        if scope.get("implementation_mode") is True and tool in {"Edit", "Write"} and reason is None:
+            mark_implementation_edit(scope)
         if reason:
             _emit_deny(reason)
             return 0
-        if scope.get("scout_mode") is True and tool in {"Read", "Grep"}:
-            limit = scope.get("scout_tool_call_limit", 6)
-            counter_dir = scope.get("scout_call_counter_dir")
-            if (not isinstance(limit, int) or isinstance(limit, bool) or limit < 1
-                    or not isinstance(counter_dir, str) or not counter_dir.strip()):
-                _emit_deny("Source scout call counter is invalid")
-                return 0
-            counter_path = Path(counter_dir)
-            per_tool_limits = scope.get("scout_tool_limits", {})
-            per_tool_limit = per_tool_limits.get(tool) if isinstance(per_tool_limits, dict) else None
-            if not isinstance(per_tool_limit, int) or isinstance(per_tool_limit, bool) or per_tool_limit < 1:
-                _emit_deny("Source scout per-tool call budget is invalid")
-                return 0
-            prefix = "search" if tool in {"Grep", "Glob"} else "read"
-            tool_ticket = _claim_ticket(counter_path, prefix, per_tool_limit)
-            if tool_ticket is None:
-                _emit_deny(f"Source scout is limited to {per_tool_limit} {prefix} calls")
-                return 0
-            if _claim_ticket(counter_path, "total", limit) is None:
-                # Roll back the per-tool reservation so denied calls consume no
-                # authorized-operation budget, even when calls race.
-                tool_ticket.unlink(missing_ok=True)
-                _emit_deny(f"Source scout is limited to {limit} combined Read/Grep calls")
-                return 0
     except Exception as exc:  # Fail closed if the scope or hook input is malformed.
         _emit_deny(f"File tool scope validation failed: {type(exc).__name__}")
     return 0

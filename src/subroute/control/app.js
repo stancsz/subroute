@@ -25,7 +25,7 @@ new MutationObserver(() => {
   policySummary.textContent = failed ? "Not saved · previous policy remains active" : !routingReady ? "Policy unavailable · editing disabled" : (status.includes("Saving") || status.startsWith("Choose")) ? status : `Saved policy ${status.match(/v\d+/)?.[0] || "active"}`;
   document.querySelector("#routing-description").textContent = !routingReady ? "The policy cannot be edited until the gateway reconnects." : "Changes save automatically and apply to new requests.";
 }).observe(routeStatus, {childList:true, subtree:true, characterData:true});
-let workingDirectory = null, routingReady = false, advisorModelLocked = false;
+let workingDirectory = null, routingReady = false;
 let routingModels = [], advisorModels = [];
 let analyticsPending = false;
 
@@ -47,10 +47,9 @@ function setGatewayStatus(online) {
 function option(value, label) { const node = document.createElement("option"); node.value = value; node.textContent = label; return node; }
 
 function setRoutingDisabled(value) {
-  for (const select of [routeProvider, routeMode]) select.disabled = value;
-  advisorProvider.disabled = value || advisorModelLocked;
+  for (const select of [routeProvider, advisorProvider, routeMode]) select.disabled = value;
   routeModel.disabled = value || !routeProvider.value;
-  routeAdvisor.disabled = value || advisorModelLocked || !advisorProvider.value;
+  routeAdvisor.disabled = value || !advisorProvider.value;
   routeEffort.disabled = value || !routeModel.value || routeMode.value === "off" || routeEffort.options.length < 2;
   routeFast.disabled = value || routeFastField.hidden || routeMode.value === "off";
   advisorEffort.disabled = value || !routeAdvisor.value || advisorEffort.options.length < 2;
@@ -63,7 +62,7 @@ function renderAdvisorFrequency(busy = false) {
   advisorFrequencyValue.textContent = `~${frequencyRates[index]}%`;
   advisorFrequency.setAttribute("aria-valuetext", `${frequencyNames[index]}, about ${frequencyRates[index]} percent`);
   document.querySelectorAll(".frequency-stops span").forEach((node, i) => node.classList.toggle("selected", i === index));
-  document.querySelector("#route-advisor-frequency-state").textContent = busy ? "Frequency control is unavailable while policy loads or saves." : !routeAdvisor.value ? "Choose an advisor to enable selection." : "Selected requests receive one advisor consultation before the target responds.";
+  document.querySelector("#route-advisor-frequency-state").textContent = busy ? "Frequency control is unavailable while policy loads or saves." : !routeAdvisor.value ? "Choose an advisor to enable selection." : "Selected requests receive the chosen advisor plus Claude Opus 5.5 Low via Antigravity (max 32,000 input tokens) before the target responds. Oversized context is compacted with Sift, then MiniMax or MiMo.";
 }
 
 function clearAdvisorAnalytics(message) {
@@ -101,18 +100,18 @@ async function refreshAdvisorAnalytics() {
   }
 }
 
-function renderProviderMenu(select, choices, selected, advisor = false, locked = false) {
+function renderProviderMenu(select, choices, selected, emptyLabel = "No providers configured") {
   const visible = choices.filter(item => item.configured || item.model_id === selected);
   const providers = [...new Set(visible.map(item => item.provider))].sort();
-  select.replaceChildren(...(advisor && !locked ? [option("", "No advisor")] : []), ...providers.map(provider => option(provider, provider)));
-  if (!providers.length && !advisor) select.append(option("", "No providers configured"));
+  select.replaceChildren(...providers.map(provider => option(provider, provider)));
+  if (!providers.length) select.append(option("", emptyLabel));
   select.value = choices.find(item => item.model_id === selected)?.provider || "";
 }
 
-function renderModelMenu(select, choices, provider, selected) {
+function renderModelMenu(select, choices, provider, selected, emptyLabel = "Choose a model…") {
   const visible = choices.filter(item => item.provider === provider && (item.configured || item.model_id === selected));
   select.replaceChildren();
-  if (!selected) select.append(option("", provider ? "Choose a model…" : "No advisor selected"));
+  if (!selected) select.append(option("", provider ? emptyLabel : "Choose a provider…"));
   for (const access of [...new Set(visible.map(item => item.access))]) {
     const group = document.createElement("optgroup"); group.label = access;
     for (const item of visible.filter(item => item.access === access)) {
@@ -131,7 +130,7 @@ function renderEfforts(select, choices, model, selected, helpId, advisor = false
   const fallback = !model ? "Choose a model first" : !choice?.configured ? "Provider setup required" : efforts.length ? "Default (client or provider)" : "Provider managed";
   select.replaceChildren(option("", fallback), ...efforts.map(effort => option(effort, labels[effort] || effort)));
   select.value = efforts.includes(selected) ? selected : "";
-  let help = !model ? (advisor && !advisorProvider.value ? "No advisor will be consulted." : "Only models from configured connections are shown.") : !choice?.configured ? "This saved route needs provider configuration before it can be used." : !efforts.length ? (choice.reasoning_note || "This route has no verified reasoning effort control.") : advisor ? `${choice.access}. Reasoning is independent of the target.` : `${choice.access}. Lower effort favors speed; higher effort allows more reasoning.`;
+  let help = !model ? "Choose a configured provider and model." : !choice?.configured ? "This saved route needs provider configuration before it can be used." : !efforts.length ? (choice.reasoning_note || "This route has no verified reasoning effort control.") : advisor ? `${choice.access}. Reasoning is independent of the target.` : `${choice.access}. Lower effort favors speed; higher effort allows more reasoning.`;
   if (efforts.length && choice.reasoning_note) help += ` ${choice.reasoning_note}`;
   if (model?.startsWith("gemini-subscription") && !advisor) help += " Text and schema-constrained tool calls; client tools are not run by the subscription. SSE is buffered until completion; vision is unsupported. Output limits are backend-managed; client token caps are not enforced.";
   if (!advisor && routeMode.value === "off") help = "Routing is off. The client chooses the model and reasoning.";
@@ -158,11 +157,10 @@ async function renderRouting() {
       throw new Error("The page and gateway versions differ. Refresh after the gateway restarts.");
     }
     routingModels = routing.models; advisorModels = routing.advisor_models;
-    advisorModelLocked = routing.advisor_model_locked === true;
     renderProviderMenu(routeProvider, routingModels, routing.state.active_model);
-    renderProviderMenu(advisorProvider, advisorModels, routing.state.advisor_model, true, advisorModelLocked);
+    renderProviderMenu(advisorProvider, advisorModels, routing.state.advisor_model, "No advisors configured");
     renderModelMenu(routeModel, routingModels, routeProvider.value, routing.state.active_model);
-    renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, routing.state.advisor_model);
+    renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, routing.state.advisor_model, "Choose an advisor model…");
     routeMode.querySelector("[data-unavailable]")?.remove();
     routeMode.value = routing.state.mode;
     const frequencyIndex = frequencyPresets.indexOf(routing.state.advisor_sensitivity);
@@ -170,10 +168,8 @@ async function renderRouting() {
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
     renderTargetSpeed(routing.state.fast_mode);
     renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
-    document.querySelector("#advisor-policy-note").textContent = advisorModelLocked
-      ? "Gemini 4 Argon is fixed by gateway policy; frequency still controls which eligible requests receive a consultation."
-      : "An optional second opinion on eligible API requests";
-    document.querySelector("#advisor-lock-pill").textContent = advisorModelLocked ? "Model locked" : "Optional";
+    document.querySelector("#advisor-policy-note").textContent = "Selected consultations also call Claude Opus 5.5 Low via Antigravity (max 32,000 input tokens). Oversized context is compacted with Sift, then MiniMax or MiMo.";
+    document.querySelector("#advisor-policy-pill").textContent = "Saved per environment";
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
     routeKey.textContent = routing.client_api_key_required ? "CLIENT API KEY REQUIRED" : "LOCAL CLIENT KEY BYPASS";
     setRoutingDisabled(false); routingReady = true;
@@ -203,7 +199,7 @@ async function saveAdvisorRouting() {
   setRoutingDisabled(true); routeStatus.textContent = "Saving advisor…";
   try {
     const state = await request("/api/advisor-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ advisor_model: routeAdvisor.value || null, reasoning_effort: advisorEffort.value || null, advisor_sensitivity: frequencyPresets[Number(advisorFrequency.value)] }) });
-    routeStatus.textContent = `Advisor ${state.advisor_model ? "saved" : "disabled"} · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorAnalytics();
+    routeStatus.textContent = `Advisor saved · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorAnalytics();
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
   finally {
     // Disabling a keyboard-operated control moves focus to the document body.
@@ -307,7 +303,7 @@ routeProvider.addEventListener("change", () => {
   setRoutingDisabled(false); routeStatus.textContent = "Choose a target model to save this provider.";
 });
 advisorProvider.addEventListener("change", () => {
-  renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, null);
+  renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, null, "Choose an advisor model…");
   renderEfforts(advisorEffort, advisorModels, "", null, "#route-advisor-effort-help", true);
   setRoutingDisabled(false);
   if (!advisorProvider.value) saveAdvisorRouting();

@@ -8,7 +8,11 @@ It runs only against an explicitly supplied disposable workspace.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
+import difflib
+from functools import wraps
+import glob
 import hashlib
 import json
 import os
@@ -22,6 +26,7 @@ import uuid
 
 import httpx
 import run as dispatch
+import tool_result_guard
 
 
 DEFAULT_MAX_FILES_PER_STEP = 2
@@ -32,8 +37,12 @@ MAX_PLAN_STEPS = 40
 # phase quota for one diagnostic repair instead of giving the first attempt all
 # of it.
 INSPECTION_PHASE_LIMITS = {"reads": 18, "searches": 18, "inspections": 36}
-IMPLEMENTATION_INITIAL_LIMITS = {"reads": 22, "searches": 14, "inspections": 36}
+IMPLEMENTATION_INITIAL_LIMITS = {"reads": 10, "searches": 3, "inspections": 13}
 IMPLEMENTATION_PHASE_LIMITS = {"reads": 28, "searches": 18, "inspections": 46}
+# A hard per-child implementation cap prevents read-only loops. A fresh bounded
+# repair child gets its own budget after the controller has diagnosed failure.
+IMPLEMENTATION_TOOL_LIMITS = {"reads": 10, "searches": 3}
+IMPLEMENTATION_DENIED_ATTEMPT_LIMIT = 4
 STEP_INSPECTION_LIMITS = {
     key: INSPECTION_PHASE_LIMITS[key] + IMPLEMENTATION_PHASE_LIMITS[key]
     for key in ("reads", "searches", "inspections")
@@ -45,14 +54,23 @@ MAX_INSPECTION_CALLS_PER_STEP = 12
 MAX_LARGE_FILE_READ_LINES = 200
 LARGE_FILE_LINE_THRESHOLD = 400
 PLANNER_TIMEOUT = 180
-CHILD_STEP_TIMEOUT = 420
+CHILD_STEP_TIMEOUT = 600
 CHILD_IDLE_TIMEOUT = 300
 CHILD_STEP_TURNS = 32
-SOURCE_SCOUT_TIMEOUT = 180
-SOURCE_SCOUT_MAX_TURNS = 10
-SOURCE_SCOUT_OUTPUT_CHAR_LIMIT = 32_000  # Approximate 8k-token ceiling; checked on returned tool text.
+SOURCE_SCOUT_TIMEOUT = 420
+SOURCE_SCOUT_MAX_TURNS = 24
+SOURCE_SCOUT_OUTPUT_CHAR_LIMIT = 64_000  # Thirteen 4,000-char results plus a bounded handoff.
+SOURCE_SCOUT_HANDOFF_CHAR_LIMIT = 12_000
+SOURCE_SCOUT_SUMMARY_CHAR_LIMIT = 4_000
+# The PostToolUse hook's replacement is wrapped again by Claude Code's CLI
+# transcript. Leave headroom for that wrapper so the delivered result remains
+# under the separate transcript audit ceiling.
+SOURCE_READ_RESULT_CHAR_LIMIT = 4_000
+SOURCE_READ_HOOK_OUTPUT_CHAR_LIMIT = 3_500
+MAX_SCOPE_GUARD_DENIAL_CHARS = 1_024
 SOURCE_SCOUT_MAX_READ_LINES = 80
-SOURCE_SCOUT_LIMITS = {"reads": 4, "searches": 3, "inspections": 6}
+SOURCE_SCOUT_LIMITS = {"reads": 5, "searches": 7, "inspections": 13}
+SOURCE_SCOUT_DENIED_ATTEMPT_LIMIT = 4
 EXCLUDED_DIRS = {".git", ".runs", "node_modules", ".venv", "venv", "tmp", "dist", "build", "coverage"}
 AUTONOMOUS_CHILD = "qwen-autonomous-implementer"
 MARKER_PREFIX = "QWEN_AUTONOMOUS_COMPLETE_"
@@ -101,9 +119,48 @@ def workspace_directories(workspace: Path) -> list[str]:
 
 def is_test_path(path: str) -> bool:
     parts = PurePosixPath(path).parts
-    name = parts[-1].lower() if parts else ""
-    return (any(part.lower() in {"test", "tests", "__tests__"} for part in parts)
-            or ".test." in name or ".spec." in name)
+    raw_name = parts[-1] if parts else ""
+    name = raw_name.lower()
+    if any(part.lower() in {"test", "tests", "__tests__", "spec", "specs"} for part in parts):
+        return True
+    if re.search(r"\.(?:test|spec)\.", name):
+        return True
+    extension = PurePosixPath(name).suffix
+    if extension == ".py" and name.startswith("test"):
+        return True  # unittest and pytest discovery both use test*.py by default.
+    if extension in {".py", ".go", ".rs", ".rb", ".java", ".kt", ".kts", ".cs", ".cpp", ".cc", ".cxx"} \
+            and re.search(r"_test\.[^.]+$", name):
+        return True
+    if (extension in {".rb", ".py", ".js", ".jsx", ".ts", ".tsx"}
+            and re.search(r"_spec\.[^.]+$", name)):
+        return True  # RSpec and common *_spec.* test discovery conventions.
+    return (re.match(r"^(?:test|spec)[A-Z]", raw_name) is not None
+            or re.match(r"^(?:Test|Spec)[A-Z]", raw_name) is not None
+            or re.search(r"(?:Test|Tests|Spec|Specs)(?:\.[^.]+)?$", raw_name) is not None)
+
+
+def normalize_test_only_paths(workspace: Path, paths: list[str] | None) -> list[str]:
+    """Validate the caller's exact write allowlist for a test-only request."""
+    if paths is None:
+        return []
+    if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
+        raise ValueError("test_only_paths must be a list of exact workspace-relative test paths")
+    normalized = [relative_target(workspace, path) for path in paths]
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("test_only_paths must not contain duplicates")
+    if any(not is_test_path(path) for path in normalized):
+        raise ValueError("test_only_paths may contain only recognized test files")
+    return normalized
+
+
+def step_changes_match_mode(changed_paths: list[str], test_only_paths: list[str]) -> bool:
+    """Require a real implementation edit unless the caller named exact test-only targets."""
+    if not changed_paths:
+        return False
+    changed = set(changed_paths)
+    if test_only_paths:
+        return all(is_test_path(path) for path in changed) and changed.issubset(set(test_only_paths))
+    return any(not is_test_path(path) for path in changed)
 
 
 def snapshot_files(workspace: Path) -> list[str]:
@@ -211,11 +268,145 @@ def tool_result_text(result: dict | None) -> str:
     return ""
 
 
+def qwen_route_verification(telemetry_status: str, qwen_calls: int | None,
+                            sift_requests: int | None, *, transcript_qwen: bool = False,
+                            gateway_base_url: str | None = None,
+                            sift_hook_configured: bool = False) -> bool:
+    """Verify Qwen/Sift routing from telemetry or explicit local route evidence."""
+    valid_qwen = isinstance(qwen_calls, int) and not isinstance(qwen_calls, bool) and qwen_calls > 0
+    valid_sift = isinstance(sift_requests, int) and not isinstance(sift_requests, bool) and sift_requests > 0
+    if telemetry_status == "available":
+        return valid_qwen and valid_sift
+    # Docker logs are not available on every host. Accept the alternative only
+    # when the actual child transcript names the configured Qwen model and the
+    # request was sent through this repository's local gateway with its Qwen
+    # Sift callback configured. Keep the telemetry counters unavailable so this
+    # is never represented as log-verified provider usage.
+    return (transcript_qwen is True and gateway_base_url == dispatch.BASE_URL
+            and sift_hook_configured is True)
+
+
+def configured_qwen_sift_hook() -> bool:
+    """Check that the local gateway configuration installs Sift on Qwen."""
+    config = Path(__file__).resolve().parents[3] / "config" / "litellm.yaml"
+    try:
+        contents = config.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return "subroute.sift_plugin.sift_qwen_hook" in contents
+
+
+def read_context_from_events(events: list[dict], workspace: Path, *,
+                             allowed_paths: list[str], allowed_ranges: dict[str, list[dict]] | None = None,
+                             max_chars: int = 2_200) -> str:
+    """Carry compact successful source reads into a fresh continuation child."""
+    allowed = {relative_target(workspace, path) for path in allowed_paths}
+    reads: dict[str, tuple[str, int | None, int | None]] = {}
+    results: dict[str, dict] = {}
+    for event in events:
+        if event.get("type") == "assistant":
+            for block in message_blocks(event):
+                if block.get("type") != "tool_use" or block.get("name") != "Read":
+                    continue
+                tool_input = block.get("input")
+                tool_input = tool_input if isinstance(tool_input, dict) else {}
+                raw_path = tool_input.get("file_path")
+                if not isinstance(raw_path, str):
+                    continue
+                try:
+                    candidate = Path(raw_path)
+                    if candidate.is_absolute():
+                        raw_path = candidate.resolve().relative_to(workspace.resolve()).as_posix()
+                    relative = relative_target(workspace, raw_path)
+                except (OSError, ValueError, RuntimeError):
+                    continue
+                if relative not in allowed:
+                    continue
+                offset, limit = tool_input.get("offset"), tool_input.get("limit")
+                if allowed_ranges and relative in allowed_ranges:
+                    ranged = (isinstance(offset, int) and not isinstance(offset, bool)
+                              and isinstance(limit, int) and not isinstance(limit, bool))
+                    end = offset + limit - 1 if ranged and offset >= 1 and limit >= 1 else None
+                    if not ranged or not any(
+                            isinstance(span, dict)
+                            and isinstance(span.get("offset"), int)
+                            and isinstance(span.get("limit"), int)
+                            and span["offset"] <= offset
+                            and end <= span["offset"] + span["limit"] - 1
+                            for span in allowed_ranges[relative]):
+                        continue
+                reads[block.get("id")] = (relative, offset, limit)
+        elif event.get("type") == "user":
+            for block in message_blocks(event):
+                tool_id = block.get("tool_use_id")
+                if tool_id in reads and block.get("type") == "tool_result":
+                    results[tool_id] = block
+
+    chunks: list[str] = []
+    seen: set[tuple[str, int | None, int | None]] = set()
+    used = 0
+    path_priority = {relative_target(workspace, path): index
+                     for index, path in enumerate(allowed_paths)}
+    ordered_reads = sorted(
+        reads.items(),
+        key=lambda item: (path_priority.get(item[1][0], len(path_priority)),
+                          -(item[1][1] if isinstance(item[1][1], int) else 0)),
+    )
+    for tool_id, (relative, offset, limit) in ordered_reads:
+        result = results.get(tool_id)
+        if not result or result.get("is_error") is True:
+            continue
+        content = tool_result_text(result).strip()
+        if not content or "QWEN_SCOPE_GUARD_DENY:" in content:
+            continue
+        key = (relative, offset, limit)
+        if key in seen:
+            continue
+        seen.add(key)
+        label = f"{relative}" + (f" lines {offset}-{offset + limit - 1}" if offset and limit else "")
+        chunk = f"[{label}]\n{content}"
+        remaining = max_chars - used
+        if remaining <= 0:
+            break
+        if len(chunk) > remaining:
+            chunk = chunk[:max(0, remaining - 24)].rstrip() + "\n[excerpt truncated]"
+        chunks.append(chunk)
+        used += len(chunk) + 2
+    return "\n\n".join(chunks)
+
+
+def scoped_workspace_diff(before_contents: dict[str, str], workspace: Path,
+                          changed_paths: list[str], *, max_chars: int = 2_600) -> str:
+    """Describe the current step-owned diff against its exact pre-worker files."""
+    chunks = []
+    for raw_path in changed_paths:
+        try:
+            relative = relative_target(workspace, raw_path)
+            before = before_contents.get(relative)
+            after = (workspace / relative).read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError, RuntimeError):
+            continue
+        if before is None:
+            before = ""
+        diff = "".join(difflib.unified_diff(
+            before.splitlines(keepends=True), after.splitlines(keepends=True),
+            fromfile=f"a/{relative}", tofile=f"b/{relative}"))
+        if diff:
+            chunks.append(diff.rstrip())
+    joined = "\n".join(chunks)
+    if len(joined) <= max_chars:
+        return joined
+    head = max_chars // 2
+    tail = max_chars - head - 30
+    return joined[:head].rstrip() + "\n...[diff middle omitted]...\n" + joined[-tail:].lstrip()
+
+
 def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEPS,
                   max_files_per_step: int = DEFAULT_MAX_FILES_PER_STEP,
                   requirements: list[dict] | None = None,
                   read_only_paths: list[str] | None = None,
-                  validator_count: int | None = None) -> dict:
+                  validator_count: int | None = None,
+                  test_only_paths: list[str] | None = None) -> dict:
     steps = plan.get("steps")
     if not isinstance(steps, list) or not 1 <= len(steps) <= max_steps:
         raise ValueError(f"plan must contain between 1 and {max_steps} steps")
@@ -223,6 +414,7 @@ def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEP
     completed_ids = set()
     existing = set(workspace_files(workspace))
     protected = {relative_target(workspace, item) for item in (read_only_paths or [])}
+    authorized_test_paths = set(normalize_test_only_paths(workspace, test_only_paths))
     for index, step in enumerate(steps, 1):
         if not isinstance(step, dict):
             raise ValueError(f"step {index} must be an object")
@@ -244,13 +436,26 @@ def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEP
         if not isinstance(deps, list) or any(not isinstance(dep, str) or dep not in completed_ids for dep in deps):
             raise ValueError(f"step {step_id} has a forward, unknown, or non-sequential dependency")
         paths = [relative_target(workspace, file) for file in files]
+        if authorized_test_paths and (
+                not all(is_test_path(path) for path in paths)
+                or not set(paths).issubset(authorized_test_paths)):
+            raise ValueError(f"step {step_id} exceeds the caller's exact test-only path allowlist")
         if not isinstance(reference_files, list) or len(reference_files) > 40:
             raise ValueError(f"step {step_id} reference_paths must be a list of at most 40 existing files")
-        references = [relative_target(workspace, file) for file in reference_files]
+        declared_references = [relative_target(workspace, file) for file in reference_files]
+        if len(set(declared_references)) != len(declared_references):
+            raise ValueError(f"step {step_id} reference_paths must be unique and read-only")
+        if set(declared_references) & set(paths):
+            raise ValueError(f"step {step_id} reference_paths must be unique and read-only")
         # Give scout and implementation workers exact read-only access to direct
         # local modules used by assigned source files. This avoids directory
         # searches when an imported domain API's signature determines the change.
-        references = sorted((set(references) | set(local_js_import_paths(workspace, paths))) - set(paths))
+        # A caller-authorized test-only change should stay within its explicit
+        # read scope. Import discovery from the test file tends to pull every
+        # production dependency into inspection and defeat that narrow task.
+        inferred_references = (set() if authorized_test_paths and set(paths).issubset(authorized_test_paths)
+                               else set(local_js_import_paths(workspace, paths)) - set(paths))
+        references = sorted(set(declared_references) | inferred_references)
         if len(references) > 40:
             raise ValueError(f"step {step_id} has more than 40 exact read-only references after dependency discovery")
         if len(set(references)) != len(references) or set(references) & set(paths):
@@ -276,13 +481,17 @@ def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEP
                     or not isinstance(purpose, str) or not purpose.strip() or len(purpose) > 240):
                 raise ValueError(f"step {step_id} source range needs a valid offset, limit (1-200), and purpose")
             line_count = len((workspace / hint_path).read_text(encoding="utf-8", errors="replace").splitlines())
-            if offset > max(1, line_count) or offset + limit - 1 > line_count:
+            if offset > max(1, line_count) or line_count == 0:
                 raise ValueError(f"step {step_id} source range exceeds file bounds: {hint_path}")
-            normalized_ranges.append({"path": hint_path, "offset": offset, "limit": limit,
+            # A planner may request a familiar 40- or 60-line excerpt from a
+            # shorter file. Since these are advisory landmarks, trim only the
+            # end to EOF; never shift an invalid starting line or path.
+            bounded_limit = min(limit, line_count - offset + 1)
+            normalized_ranges.append({"path": hint_path, "offset": offset, "limit": bounded_limit,
                                      "purpose": purpose.strip()})
         if set(paths) & protected:
             raise ValueError(f"step {step_id} targets a read-only path")
-        if all(is_test_path(path) for path in paths):
+        if all(is_test_path(path) for path in paths) and not set(paths).issubset(authorized_test_paths):
             raise ValueError(f"step {step_id} is test-only; include its implementation files in the same step")
         if len(set(paths)) != len(paths):
             raise ValueError(f"step {step_id} repeats a file path")
@@ -300,15 +509,102 @@ def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEP
         # impossible for the worker; reject and let the one bounded plan repair
         # promote the path to writable (or split the step).
         change_verbs = re.compile(r"\b(add|update|modify|edit|change|replace|remove|wire|implement|repoint)\b", re.I)
+        negated_change = re.compile(
+            r"\b(?:do|must|should|can)\s+not\s*$|\b(?:don't|mustn't|shouldn't|can't|cannot)\s*$|"
+            r"\b(?:avoid|without)\s*$", re.I)
         plan_text = "\n".join([task, *checks])
+        clauses = re.split(r"(?<=[.!?])\s+|[;\n]", plan_text)
+
+        def has_positive_change(clause: str) -> bool:
+            return any(not negated_change.search(clause[max(0, verb.start() - 32):verb.start()])
+                       for verb in change_verbs.finditer(clause))
+
+        def directly_targets_reference(clause: str, reference: str) -> bool:
+            """Match edit verbs locally associated with this exact path."""
+            path_matches = list(re.finditer(re.escape(reference), clause, re.I))
+            if not path_matches:
+                return False
+            for verb in change_verbs.finditer(clause):
+                if negated_change.search(clause[max(0, verb.start() - 32):verb.start()]):
+                    continue
+                for path_match in path_matches:
+                    left, right = sorted((verb.start(), path_match.start()))
+                    between = clause[left:right]
+                    # An explicit target usually reads "modify path" or
+                    # "update behavior in path". Keep this local so an
+                    # unrelated action elsewhere in a long planner sentence
+                    # cannot capture every later reference path.
+                    if between.count(" ") <= 7 and not re.search(r"[,;.!?]", between):
+                        return True
+            return False
+
         for reference in references:
-            for match in re.finditer(re.escape(reference), plan_text, re.I):
-                context = plan_text[max(0, match.start() - 180):match.end() + 180]
-                if change_verbs.search(context):
+            mention_indices = [index for index, clause in enumerate(clauses)
+                               if re.search(re.escape(reference), clause, re.I)]
+            for index in mention_indices:
+                clause = clauses[index]
+                # A common valid plan sentence is "Update page.ejs (reusing
+                # partial.ejs)". The page is the edit target; the partial is
+                # explicitly described as an implementation reference. Do not
+                # let the sentence's leading "Update" turn every later path
+                # mention into a writable target.
+                reference_start = re.search(re.escape(reference), clause, re.I).start()
+                reference_prefix = clause[:reference_start]
+                explicitly_reused_reference = re.search(
+                    r"\b(?:reusing|using|reading|read|consulting|consult|calling|call|inspect|inspecting|"
+                    r"excerpts?\s+(?:from|of))\s*\(?\s*$",
+                    reference_prefix, re.I,
+                ) is not None and not has_positive_change(
+                    clause[reference_start + len(reference):])
+                explicitly_cited_reference = re.search(
+                    r"\b(?:per|from|following|against|according\s+to)\s+"
+                    r"(?:(?:the|this|that)\s+)?"
+                    r"(?:(?:immutable|read[- ]only|acceptance|caller-supplied)\s+){0,2}$",
+                    reference_prefix, re.I,
+                ) is not None
+                explicitly_protected_reference = re.search(
+                    r"\b(?:do|must|should|can)\s+not\s+(?:edit|change|modify)\s+"
+                    r"(?:[\w./-]+(?:\s*(?:,|and|or)\s*[\w./-]+)*"
+                    r"\s*(?:(?:,|and|or)\s*)?)?\s*$",
+                    reference_prefix, re.I,
+                ) is not None
+                reference_suffix = clause[reference_start + len(reference):]
+                explicitly_verified_test = (
+                    is_test_path(reference)
+                    and re.search(r"\b(?:make|keep|ensure|run|execute)\b", reference_prefix, re.I)
+                    and re.search(r"\bpass(?:es|ing)?\b", reference_suffix, re.I)
+                    and not has_positive_change(reference_suffix)
+                )
+                # A single planner sentence may name several read-only
+                # references after describing an edit to a different module.
+                # Attribute a direct edit verb only when it targets this exact
+                # path; neighboring clauses catch explicit pronouns such as
+                # "read helper.js, then update it".
+                if (directly_targets_reference(clause, reference)
+                        and not explicitly_reused_reference and not explicitly_cited_reference
+                        and not explicitly_protected_reference and not explicitly_verified_test):
                     raise ValueError(
                         f"step {step_id} describes read-only reference {reference} as a change target; "
                         "list it in files or remove the change from the step"
                     )
+                # Plans sometimes name a reference, then use a pronoun in the
+                # next sentence as the edit target ("read helper.js; update it").
+                # Catch that direct anaphora without treating unrelated edits in
+                # the surrounding plan as edits to every nearby reference.
+                for neighbor_index in (index - 1, index + 1):
+                    if not 0 <= neighbor_index < len(clauses):
+                        continue
+                    neighbor = clauses[neighbor_index]
+                    indirect_target = re.search(
+                        r"\b(?:it|this|that|the same file|the file|the module|the helper|the source|the reference|"
+                        r"the(?:\s+[\w-]+){0,3}\s+(?:helper|module|source|reference|file))\b", neighbor, re.I)
+                    possessive_file_link = re.search(
+                        r"\b(?:its|this|that)\s+(?:file|module|source|implementation)\b", clause, re.I)
+                    if has_positive_change(neighbor) and (indirect_target or possessive_file_link):
+                        raise ValueError(
+                            f"step {step_id} describes read-only reference {reference} as a change target; "
+                            "list it in files or remove the change from the step"
+                        )
         covers = step.get("covers", [])
         if not isinstance(covers, list) or any(not isinstance(item, str) for item in covers):
             raise ValueError(f"step {step_id} covers must be a list of requirement ids")
@@ -345,12 +641,20 @@ def validate_plan(plan: dict, workspace: Path, *, max_steps: int = MAX_PLAN_STEP
 
 
 def planner_prompt(request: str, requirements: list[dict], workspace: Path, files: list[str], validators: list[list[str]], *,
-                   max_files_per_step: int, read_only_paths: list[str], directories: list[str] | None = None) -> str:
+                   max_files_per_step: int, read_only_paths: list[str], directories: list[str] | None = None,
+                   test_only_paths: list[str] | None = None) -> str:
     read_only = {relative_target(workspace, path) for path in read_only_paths}
     writable_files = [path for path in files if relative_target(workspace, path) not in read_only]
     inventory = "\n".join(writable_files[:5000])
     reference_inventory = "\n".join(sorted(read_only)) or "(none)"
     directory_inventory = "\n".join(directories or []) or ". (workspace root only)"
+    authorized_test_paths = normalize_test_only_paths(workspace, test_only_paths)
+    test_only_guidance = (
+        "This caller explicitly authorized a test-only task. Every writable target and every changed file must "
+        f"be one of these exact paths: {json.dumps(authorized_test_paths)}. Do not add implementation or marker files. "
+        if authorized_test_paths else
+        "Do not create a validation-only or test-only step; put each test change in the same step as its implementation files. "
+    )
     return (
         "You are the planning lead for a real repository change. Inspect only what you need, "
         "then return one JSON object and no other text. For this planning call, do not use tools; "
@@ -362,8 +666,8 @@ def planner_prompt(request: str, requirements: list[dict], workspace: Path, file
         "Do not create read-only "
         "research, inspection, or file-reading steps; the implementation worker can inspect files "
         "within its assigned step before editing. Every step must make an implementation change "
-        "to at least one listed file and must map to at least one explicit requirement. Do not "
-        "create a validation-only or test-only step; put each test change in the same step as its implementation files. "
+        "to at least one listed file and must map to at least one explicit requirement. "
+        f"{test_only_guidance}"
         "The runner executes request-level "
         "validators independently after implementation. "
         "Decompose the complete user request "
@@ -373,13 +677,18 @@ def planner_prompt(request: str, requirements: list[dict], workspace: Path, file
         "files when appropriate. Use reference_paths for existing supporting files the worker may read but must not edit. "
         "For each implementation step, include the source file for an imported function or domain API in reference_paths when its behavior or accepted options determine the requested change; for example, if a route must call booking.availableSlots with a new option, include the file that defines booking.availableSlots. "
         "Before returning, cross-check every explicit file path against the action requested: if the task/checks say to add, update, modify, edit, change, replace, remove, wire, implement, or repoint behavior in that file, it MUST be listed in files, never reference_paths. If the feature needs more than the writable-file limit, split it into ordered implementation steps; do not demote a required change target to read-only. "
-        "Each step needs id, title, task, files, reference_paths, depends_on, checks. "
+        "Each step needs id, title, task, files, reference_paths, source_ranges, depends_on, checks. "
+        "source_ranges must be a JSON array (use [] when no useful exact line hint is known), never a map or prose labels. "
+        "Each source range is an object with exactly these fields: path (an existing path in files or reference_paths), "
+        "offset (1-based integer line number), limit (integer from 1 to 200), and purpose (short string). "
+        "Use bounded ranges that help the implementation worker inspect only relevant code; do not use ranges to authorize writes. "
         "Step validators are caller-owned: do not select or omit them; the runner maps each covered requirement to its supplied step_validator_indices. "
         "Do not claim the request is done in the plan. Avoid generated, dependency, data, and "
         "credential files. Paths must be relative and must not contain '..'. New files may only be placed "
         "in the workspace root or an existing directory listed below; do not invent parent directories.\n\n"
         "JSON schema: {\"summary\": string, \"steps\": [{\"id\": \"step-1\", "
         "\"title\": string, \"task\": string, \"files\": [string], \"reference_paths\": [existing read-only file path], "
+        "\"source_ranges\": [{\"path\": \"src/file.js\", \"offset\": 1, \"limit\": 80, \"purpose\": \"Relevant API and call pattern\"}], "
         "\"depends_on\": [prior step id], \"checks\": [string], "
         "\"covers\": [requirement id]}]}\n\n"
         f"User request:\n{request}\n\nFinal request-level validators (run after all steps):\n"
@@ -396,11 +705,13 @@ def planner_prompt(request: str, requirements: list[dict], workspace: Path, file
 
 def plan_with_qwen(workspace: Path, request: str, requirements: list[dict], key: str, *, timeout: int,
                    max_files_per_step: int, validators: list[list[str]],
-                   read_only_paths: list[str], transcript_dir: Path) -> tuple[dict, dict]:
+                   read_only_paths: list[str], transcript_dir: Path,
+                   test_only_paths: list[str] | None = None) -> tuple[dict, dict]:
     prompt = planner_prompt(request, requirements, workspace, workspace_files(workspace),
                             validators, max_files_per_step=max_files_per_step,
                             read_only_paths=read_only_paths,
-                            directories=workspace_directories(workspace))
+                            directories=workspace_directories(workspace),
+                            test_only_paths=test_only_paths)
     command = dispatch.claude_command(tools="", max_turns=2,
                                      model=dispatch.MODEL, bare=True)
     start = time.perf_counter()
@@ -424,7 +735,7 @@ def plan_with_qwen(workspace: Path, request: str, requirements: list[dict], key:
             )
         output, stderr, code, stop_reason, cleanup = dispatch.run_cli_bounded(
             command, task_input=attempt_prompt, cwd=workspace,
-            env=dispatch.cli_env(key, client_context_tokens=65_536), timeout=max(1, int(remaining)),
+            env=dispatch.cli_env(key), timeout=max(1, int(remaining)),
             idle_timeout=max(1, min(int(remaining), 240)),
             transcript_path=transcript_dir / ("planner-output.jsonl" if attempt_index == 0
                                                else "planner-repair-output.jsonl"),
@@ -446,7 +757,8 @@ def plan_with_qwen(workspace: Path, request: str, requirements: list[dict], key:
         try:
             plan = validate_plan(extract_json(candidate_text), workspace,
                                  max_files_per_step=max_files_per_step, requirements=requirements,
-                                 read_only_paths=read_only_paths, validator_count=len(validators))
+                                 read_only_paths=read_only_paths, validator_count=len(validators),
+                                 test_only_paths=test_only_paths)
         except (ValueError, json.JSONDecodeError) as exc:
             repair_reason = f"{type(exc).__name__}: {exc}"
             attempts.append({"attempt": attempt_index + 1, "status": "invalid_plan",
@@ -528,7 +840,7 @@ def audit_worker_reads(workspace: Path, events: list[dict], *,
                 violations.append({"tool": tool_name, "reason": "read_path_outside_workspace"})
                 continue
             line_count = 0
-            if tool_name == "Read":
+            if tool_name == "Read" and not denied:
                 try:
                     with target.open("r", encoding="utf-8", errors="replace") as source:
                         for line_count, _ in enumerate(source, start=1):
@@ -604,6 +916,235 @@ def audit_worker_reads(workspace: Path, events: list[dict], *,
             "inspection_count": inspection_count, "counts_by_tool": counts,
             "reads": reads, "violations": violations,
             "limits": limits, "within_budget": not violations}
+
+
+def scout_tool_emitted_attempt_counts(events: list[dict]) -> dict[str, int]:
+    """Count every emitted scout Read/Grep tool_use, including guard denials."""
+    counts = {"Read": 0, "Grep": 0}
+    for event in events:
+        if event.get("type") != "assistant":
+            continue
+        for block in message_blocks(event):
+            if block.get("type") == "tool_use" and block.get("name") in counts:
+                counts[block["name"]] += 1
+    return counts
+
+
+def scout_tool_attempt_counts(events: list[dict]) -> dict[str, int]:
+    """Count operations that passed the scope guard; denied attempts read no files."""
+    denied_ids = {
+        block.get("tool_use_id")
+        for event in events if event.get("type") == "user"
+        for block in message_blocks(event)
+        if block.get("type") == "tool_result" and block.get("is_error") is True
+        and isinstance(block.get("content"), str)
+        and block["content"].startswith("QWEN_SCOPE_GUARD_DENY: ")
+    }
+    counts = {"Read": 0, "Grep": 0}
+    for event in events:
+        if event.get("type") != "assistant":
+            continue
+        for block in message_blocks(event):
+            if (block.get("type") == "tool_use" and block.get("name") in counts
+                    and block.get("id") not in denied_ids):
+                counts[block["name"]] += 1
+    return counts
+
+
+def source_scout_budget_violations(permitted: dict[str, int],
+                                   emitted: dict[str, int]) -> list[dict]:
+    """Enforce successful-operation quotas and a separate bounded denial allowance."""
+    violations = []
+    permitted_calls = sum(permitted.values())
+    denied_calls = sum(emitted.values()) - permitted_calls
+    if permitted_calls > SOURCE_SCOUT_LIMITS["inspections"]:
+        violations.append({"reason": "source_scout_tool_call_budget_exceeded",
+                           "count": permitted_calls,
+                           "limit": SOURCE_SCOUT_LIMITS["inspections"]})
+    for tool_name, count in permitted.items():
+        limit = SOURCE_SCOUT_LIMITS["reads" if tool_name == "Read" else "searches"]
+        if count > limit:
+            violations.append({"reason": "source_scout_per_tool_attempt_budget_exceeded",
+                               "tool": tool_name, "count": count, "limit": limit})
+    if denied_calls > SOURCE_SCOUT_DENIED_ATTEMPT_LIMIT:
+        violations.append({"reason": "source_scout_denied_attempt_budget_exceeded",
+                           "count": denied_calls,
+                           "limit": SOURCE_SCOUT_DENIED_ATTEMPT_LIMIT})
+    return violations
+
+
+def audit_tool_result_caps(events: list[dict], audit_path: Path, limit: int,
+                           workspace: Path | None = None) -> dict:
+    """Join each successful Read/Grep result to its unique hook receipt and source."""
+    expected = {}
+    delivered = {}
+    delivered_text = {}
+    delivered_is_error = {}
+    violations = []
+    scope_guard_denials = 0
+    for event in events:
+        if event.get("type") == "assistant":
+            for block in message_blocks(event):
+                if block.get("type") == "tool_use" and block.get("name") in {"Read", "Grep"}:
+                    tool_id = block.get("id")
+                    if not isinstance(tool_id, str) or not tool_id:
+                        violations.append({"reason": "tool_result_tool_use_id_invalid"})
+                        continue
+                    if tool_id in expected:
+                        violations.append({"reason": "tool_result_tool_use_id_duplicate",
+                                           "tool_use_id": tool_id})
+                    expected[tool_id] = {"tool": block.get("name"),
+                                         "input": block.get("input") or {}}
+        elif event.get("type") == "user":
+            for block in message_blocks(event):
+                if (block.get("type") == "tool_result"
+                        and block.get("tool_use_id") in expected):
+                    tool_id = block.get("tool_use_id")
+                    result_content = block.get("content", "")
+                    if (block.get("is_error") is True and isinstance(result_content, str)
+                            and result_content.startswith("QWEN_SCOPE_GUARD_DENY: ")
+                            and len(result_content) <= MAX_SCOPE_GUARD_DENIAL_CHARS):
+                        scope_guard_denials += 1
+                        continue
+                    if tool_id in delivered:
+                        violations.append({"reason": "tool_result_success_duplicate",
+                                           "tool_use_id": tool_id})
+                        continue
+                    delivered[tool_id] = len(json.dumps(
+                        block.get("content", ""), ensure_ascii=False, separators=(",", ":")))
+                    delivered_is_error[tool_id] = block.get("is_error") is True
+                    def strings(value):
+                        if isinstance(value, str):
+                            yield value
+                        elif isinstance(value, dict):
+                            for child in value.values():
+                                yield from strings(child)
+                        elif isinstance(value, list):
+                            for child in value:
+                                yield from strings(child)
+                    delivered_text[tool_id] = "\n".join(strings(block.get("content", "")))
+    records = []
+    receipt_dir = audit_path.with_name(audit_path.name + ".receipts")
+    if receipt_dir.is_dir():
+        for receipt_path in sorted(receipt_dir.glob("*.json")):
+            try:
+                record = json.loads(receipt_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                violations.append({"reason": "tool_result_cap_receipt_invalid",
+                                   "receipt": receipt_path.name})
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+            else:
+                violations.append({"reason": "tool_result_cap_receipt_invalid",
+                                   "receipt": receipt_path.name})
+    elif audit_path.is_file():
+        for line in audit_path.read_text(encoding="utf-8").splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+    by_id = {}
+    for record in records:
+        tool_id = record.get("tool_use_id")
+        if not isinstance(tool_id, str) or not tool_id:
+            violations.append({"reason": "tool_result_cap_receipt_id_invalid"})
+        elif tool_id in by_id:
+            violations.append({"reason": "tool_result_cap_receipt_duplicate",
+                               "tool_use_id": tool_id})
+        else:
+            by_id[tool_id] = record
+    for tool_id in by_id.keys() - expected.keys():
+        violations.append({"reason": "tool_result_cap_receipt_unmatched", "tool_use_id": tool_id})
+    marker_ids = [record.get("marker_id") for record in records
+                  if record.get("truncated") is True]
+    seen_markers = set()
+    for marker_id in marker_ids:
+        if not isinstance(marker_id, str) or not marker_id:
+            violations.append({"reason": "tool_result_cap_marker_id_invalid"})
+        elif marker_id in seen_markers:
+            violations.append({"reason": "tool_result_cap_marker_id_duplicate", "marker_id": marker_id})
+        seen_markers.add(marker_id)
+    for tool_id, transcript_chars in delivered.items():
+        record = by_id.get(tool_id)
+        tool_info = expected[tool_id]
+        if record is None:
+            violations.append({"reason": "tool_result_cap_receipt_missing", "tool_use_id": tool_id})
+            continue
+        if record.get("tool") != tool_info["tool"]:
+            violations.append({"reason": "tool_result_cap_tool_mismatch", "tool_use_id": tool_id,
+                               "transcript_tool": tool_info["tool"],
+                               "receipt_tool": record.get("tool")})
+        if record.get("cap_failed") is True:
+            violations.append({"reason": "tool_result_cap_failed", "tool_use_id": tool_id,
+                               "characters": record.get("delivered_chars"), "limit": limit})
+        if record.get("delivered_chars", limit + 1) > limit or transcript_chars > limit:
+            violations.append({"reason": "tool_result_delivered_over_limit", "tool_use_id": tool_id,
+                               "receipt_chars": record.get("delivered_chars"),
+                               "transcript_chars": transcript_chars, "limit": limit})
+        marker_id = record.get("marker_id")
+        if record.get("truncated") is True and (
+                not isinstance(marker_id, str) or not marker_id
+                or f"{tool_result_guard.TRUNCATION_PREFIX}{tool_info['tool']} id={marker_id};" not in
+                delivered_text.get(tool_id, "")):
+            violations.append({"reason": "truncation_marker_missing_from_delivered_result",
+                               "tool_use_id": tool_id, "marker_id": marker_id})
+    def source_info(tool_info):
+        inputs = tool_info["input"] if isinstance(tool_info["input"], dict) else {}
+        raw_path = inputs.get("file_path", inputs.get("path"))
+        path = None
+        if isinstance(raw_path, str) and workspace is not None:
+            try:
+                candidate = Path(raw_path)
+                if candidate.is_absolute():
+                    root = workspace.resolve()
+                    resolved = candidate.resolve()
+                    if resolved != root and root not in resolved.parents:
+                        raise ValueError("absolute source path escapes workspace")
+                    path = relative_target(workspace, resolved.relative_to(root).as_posix())
+                else:
+                    path = relative_target(workspace, raw_path)
+            except (ValueError, OSError):
+                path = raw_path
+        elif isinstance(raw_path, str):
+            path = raw_path
+        info = {"tool": tool_info["tool"], "path": path}
+        if tool_info["tool"] == "Read":
+            info.update({"offset": inputs.get("offset"), "limit": inputs.get("limit")})
+        else:
+            info.update({"pattern": inputs.get("pattern"), "head_limit": inputs.get("head_limit")})
+        return info
+    error_results = sum(1 for tool_id in delivered if delivered_is_error.get(tool_id, False))
+    return {"limit": limit, "successful_results": len(delivered) - error_results,
+            "error_results": error_results, "tool_results": len(delivered),
+            "scope_guard_denials": scope_guard_denials,
+            "receipts": len(records), "results": [
+                {"tool_use_id": tool_id, **source_info(expected[tool_id]),
+                 "transcript_chars": chars, "receipt": by_id.get(tool_id)}
+                for tool_id, chars in delivered.items()],
+            "violations": violations, "within_budget": not violations}
+
+
+def attach_verified_result_caps(report: dict | None, read_audit: dict) -> dict | None:
+    """Keep controller-derived tool-to-marker mapping beside the worker handoff."""
+    if report is None:
+        return None
+    caps = (read_audit.get("result_cap_audit") or {}).get("results", [])
+    report = dict(report)
+    report["runner_verified_result_caps"] = [
+        {"tool_use_id": item.get("tool_use_id"), "tool": item.get("tool"),
+         "path": item.get("path"), "offset": item.get("offset"), "limit": item.get("limit"),
+         "pattern": item.get("pattern"), "head_limit": item.get("head_limit"),
+         "marker_id": ((item.get("receipt") or {}).get("marker_id")
+                       if (item.get("receipt") or {}).get("truncated") is True else None),
+         "original_chars": (item.get("receipt") or {}).get("original_chars"),
+         "delivered_chars": (item.get("receipt") or {}).get("delivered_chars"),
+         "truncated": (item.get("receipt") or {}).get("truncated") is True}
+        for item in caps if isinstance(item, dict) and isinstance(item.get("receipt"), dict)
+    ]
+    return report
 
 
 def combine_read_audits(*audits: dict, limits: dict | None = None) -> dict:
@@ -768,6 +1309,66 @@ def large_source_targets(workspace: Path, paths: list[str]) -> list[str]:
     return large
 
 
+def audited_read_source_map(step: dict, workspace: Path, audit: dict) -> dict:
+    """Build a minimal source map from successful, scope-audited Read calls.
+
+    Qwen sometimes returns useful inspection evidence in a custom JSON shape
+    instead of the requested handoff schema. The controller can still safely
+    hand off exact source ranges because the read audit records paths and line
+    windows independently of the model's prose.
+    """
+    allowed = [relative_target(workspace, path) for path in
+               [*(step.get("files") or []), *(step.get("reference_paths") or [])]]
+    allowed_set = set(allowed)
+    ranges_by_path: dict[str, list[dict]] = {}
+    seen: set[tuple[str, int, int]] = set()
+    for item in audit.get("reads") or []:
+        if (not isinstance(item, dict) or item.get("tool") != "Read"
+                or item.get("denied_before_execution") is True
+                or not isinstance(item.get("path"), str)):
+            continue
+        try:
+            path = relative_target(workspace, item["path"])
+        except (OSError, ValueError, RuntimeError):
+            continue
+        offset, limit = item.get("offset"), item.get("limit")
+        if (path not in allowed_set or not isinstance(offset, int) or isinstance(offset, bool)
+                or not isinstance(limit, int) or isinstance(limit, bool)
+                or offset < 1 or not 1 <= limit <= 200):
+            continue
+        key = (path, offset, limit)
+        if key in seen:
+            continue
+        seen.add(key)
+        ranges_by_path.setdefault(path, []).append({
+            "offset": offset, "limit": limit,
+            "purpose": "Successful source range recorded by the runner's Read audit.",
+        })
+
+    file_entries = []
+    for path in allowed:
+        spans = ranges_by_path.get(path, [])
+        if not spans:
+            continue
+        file_entries.append({"path": path, "symbols": [], "ranges": spans[:6]})
+        if len(file_entries) >= 12:
+            break
+    mapped_paths = {item["path"] for item in file_entries}
+    required = set(large_source_targets(workspace, step.get("files") or []))
+    if required - mapped_paths:
+        raise ValueError("audited source map is missing required large source reads: "
+                         + ", ".join(sorted(required - mapped_paths)))
+    if not file_entries:
+        raise ValueError("audited source map has no successful in-scope Read ranges")
+    task = step.get("task") if isinstance(step.get("task"), str) else ""
+    return {
+        "summary": f"Audited source context for {step.get('title', step.get('id', 'step'))}.",
+        "implementation_plan": task[:2_200],
+        "files": file_entries,
+        "risks": ["Model handoff shape was normalized from successful, in-scope Read audit entries."],
+    }
+
+
 def needs_source_scout(workspace: Path, step: dict) -> bool:
     """Scout only when a large assigned source has no bounded planner hint."""
     hinted = {relative_target(workspace, item["path"])
@@ -802,6 +1403,15 @@ def verified_read_ranges(workspace: Path, step: dict, phase: str,
     return ranges_by_path
 
 
+def implementation_reference_ranges(workspace: Path, step: dict,
+                                    inspection_context: dict | None) -> dict[str, list[dict]]:
+    """Keep references pinned to inspected ranges while allowing scoped source follow-up."""
+    assigned = {relative_target(workspace, path) for path in step.get("files", [])}
+    return {path: ranges for path, ranges in
+            verified_read_ranges(workspace, step, "implementation", inspection_context).items()
+            if path not in assigned}
+
+
 def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[str], audit: dict,
                                 required_source_paths: list[str] | None = None,
                                 caller_source_ranges: list[dict] | None = None) -> dict:
@@ -812,22 +1422,62 @@ def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[
     completion = re.search(r"QWEN_AUTONOMOUS_COMPLETE_[A-Za-z0-9_-]+?(?=agentId:|\s|$)", payload)
     if completion:
         trailer = payload[completion.end():].strip()
-        if trailer and not (trailer.startswith("agentId:") or trailer.startswith("<usage>")):
+        # Claude's Agent tool may put the child's closing Markdown fence before
+        # its CLI metadata. Strip only that known wrapper; arbitrary trailing
+        # prose remains an error.
+        closing_fence = trailer.startswith("```")
+        trailer = re.sub(r"^```\s*", "", trailer, count=1)
+        known_cli_trailer = re.fullmatch(
+            r"(?:agentId: [A-Za-z0-9_-]+(?: \([^\r\n]*\))?\s*)?"
+            r"(?:<usage>[\s\S]*?</usage>)?", trailer)
+        if trailer and (known_cli_trailer is None or not trailer.strip()):
             raise ValueError("inspection handoff has unexpected text after its completion marker")
         payload = payload[:completion.start()].rstrip()
-    if len(payload) > 6_000:
-        raise ValueError(f"inspection handoff is {len(payload)} characters; maximum is 6000. Remove prose, use relative workspace paths, group nearby ranges, and keep only implementation-critical evidence.")
+        if closing_fence and payload.count("```") == 1:
+            payload += "\n```"
+    if len(payload) > SOURCE_SCOUT_HANDOFF_CHAR_LIMIT:
+        raise ValueError(
+            f"inspection handoff is {len(payload)} characters; maximum is "
+            f"{SOURCE_SCOUT_HANDOFF_CHAR_LIMIT}. Remove prose, use relative workspace paths, "
+            "group nearby ranges, and keep only implementation-critical evidence.")
     try:
         report = json.loads(payload)
     except json.JSONDecodeError as exc:
-        raise ValueError("inspection handoff must contain exactly one JSON object followed by its completion marker, with no prose or fences") from exc
+        # Qwen sometimes wraps its otherwise valid handoff in a single JSON fence
+        # and a short preface. Normalize only that unambiguous shape; the parsed
+        # report still goes through every path, range, and audit check below.
+        fences = list(re.finditer(r"```(?:json)?\s*\n?(.*?)\n?```", payload,
+                                  flags=re.IGNORECASE | re.DOTALL))
+        if len(fences) == 1 and payload.count("```") == 2:
+            try:
+                report = json.loads(fences[0].group(1).strip())
+            except json.JSONDecodeError as fenced_exc:
+                raise ValueError("inspection handoff must contain exactly one valid JSON object") from fenced_exc
+        elif len(fences) == 0 and payload.count("```") == 0:
+            # A single complete object may follow a short preface. Parse only
+            # the first object and reject any trailing content or second object.
+            start = payload.find("{")
+            try:
+                report, end = json.JSONDecoder().raw_decode(payload, start) if start >= 0 else (None, 0)
+            except json.JSONDecodeError as wrapped_exc:
+                raise ValueError("inspection handoff must contain exactly one valid JSON object") from wrapped_exc
+            if start < 0 or payload[end:].strip():
+                raise ValueError("inspection handoff must contain exactly one JSON object followed by its completion marker") from exc
+        else:
+            raise ValueError("inspection handoff must contain exactly one JSON object followed by its completion marker") from exc
     summary = report.get("summary")
     plan = report.get("implementation_plan")
     files = report.get("files")
-    if not isinstance(summary, str) or not summary.strip() or len(summary) > 1_200:
-        raise ValueError("inspection handoff needs a concise summary under 1200 characters")
-    if not isinstance(plan, str) or not plan.strip() or len(plan) > 2_200:
+    if not isinstance(summary, str) or not summary.strip():
+        raise ValueError(
+            f"inspection handoff needs a concise summary under "
+            f"{SOURCE_SCOUT_SUMMARY_CHAR_LIMIT} characters")
+    if len(summary) > SOURCE_SCOUT_SUMMARY_CHAR_LIMIT:
+        summary = summary[:SOURCE_SCOUT_SUMMARY_CHAR_LIMIT - 3].rsplit(" ", 1)[0].rstrip() + "..."
+    if not isinstance(plan, str) or not plan.strip():
         raise ValueError("inspection handoff needs a concise implementation plan under 2200 characters")
+    if len(plan) > 2_200:
+        plan = plan[:2_197].rsplit(" ", 1)[0].rstrip() + "..."
     if not isinstance(files, list) or not files or len(files) > 12:
         raise ValueError("inspection handoff must identify source files and relevant ranges")
     allowed = {relative_target(workspace, path) for path in allowed_paths}
@@ -868,8 +1518,14 @@ def validate_inspection_handoff(text: str, workspace: Path, allowed_paths: list[
                     source_line_count = sum(1 for _ in source)
             except OSError as exc:
                 raise ValueError(f"inspection handoff source file is unreadable: {path}") from exc
+            if span["offset"] > source_line_count:
+                raise ValueError(f"inspection handoff range starts beyond end of file: {path}")
             if span["offset"] + span["limit"] - 1 > source_line_count:
-                raise ValueError(f"inspection handoff range extends beyond end of file: {path}")
+                # A ranged Read naturally returns fewer lines when its requested
+                # limit reaches past EOF. Clamp to the lines that actually exist;
+                # the subsequent audit check still requires this to be a subset
+                # of a successful read.
+                span["limit"] = source_line_count - span["offset"] + 1
             caller_ranges = caller_ranges_by_path.get(path)
             if caller_ranges and not any(
                     span["offset"] >= hint["offset"]
@@ -943,11 +1599,17 @@ def validate_preverified_inspection(report: dict, step: dict, workspace: Path,
 
 
 def run_validators(workspace: Path, validators: list[list[str]], *, timeout: int,
-                   deadline: float | None = None) -> list[dict]:
+                   deadline: float | None = None, env: dict[str, str] | None = None) -> list[dict]:
     results = []
     for argv in validators:
         if not isinstance(argv, list) or not argv or any(not isinstance(part, str) for part in argv):
             raise ValueError("each validator must be a non-empty argv array")
+        missing_tests = missing_node_test_targets(workspace, argv)
+        if missing_tests:
+            results.append({"argv": argv, "exit": 2, "stdout": "",
+                            "stderr": "validator references missing Node test target(s): "
+                                      + ", ".join(missing_tests)})
+            break
         available = timeout if deadline is None else min(timeout, int(deadline - time.monotonic()))
         if available <= 0:
             results.append({"argv": argv, "exit": 124, "stdout": "",
@@ -955,7 +1617,8 @@ def run_validators(workspace: Path, validators: list[list[str]], *, timeout: int
             break
         try:
             proc = subprocess.run(argv, cwd=workspace, capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", timeout=available, shell=False)
+                                  encoding="utf-8", errors="replace", timeout=available, shell=False,
+                                  env=env)
             results.append({"argv": argv, "exit": proc.returncode,
                             "stdout": (proc.stdout or "")[-4000:], "stderr": (proc.stderr or "")[-4000:]})
         except subprocess.TimeoutExpired as exc:
@@ -963,6 +1626,46 @@ def run_validators(workspace: Path, validators: list[list[str]], *, timeout: int
                             "stderr": f"validator timed out after {available}s"})
             break
     return results
+
+
+def missing_node_test_targets(workspace: Path, argv: list[str]) -> list[str]:
+    """Return explicit missing targets for a Node --test validator.
+
+    Node may exit successfully when a positional test path is absent, so check
+    those paths before treating its exit code as acceptance evidence.
+    """
+    if Path(argv[0]).name.lower() not in {"node", "node.exe"} or "--test" not in argv:
+        return []
+    test_index = argv.index("--test")
+    value_options = {"--test-reporter", "--test-reporter-destination", "--test-name-pattern",
+                     "--test-timeout", "--test-concurrency"}
+    targets = []
+    index = test_index + 1
+    while index < len(argv):
+        argument = argv[index]
+        if argument == "--":
+            targets.extend(argv[index + 1:])
+            break
+        if argument in value_options:
+            index += 2
+            continue
+        if argument.startswith("-"):
+            index += 1
+            continue
+        targets.append(argument)
+        index += 1
+    missing = []
+    for target in targets:
+        if glob.has_magic(target):
+            found = glob.glob(target.replace("\\", "/"), root_dir=workspace, recursive=True)
+            if not found:
+                missing.append(target)
+            continue
+        path = Path(target)
+        resolved = path if path.is_absolute() else workspace / path
+        if not resolved.exists():
+            missing.append(target)
+    return missing
 
 
 def step_agent_spec(step: dict, request: str, requirements: list[dict], workspace: Path, marker: str,
@@ -977,14 +1680,26 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
                                  for path in [*source_read_only_paths, *(step.get("reference_paths") or [])]})
     repair = ""
     if repair_feedback:
-        repair = ("\n\nOne repair round only. Fix the visible validator failures below, finish the "
-                 "original step contract, and edit only the listed files. Do not weaken tests.\n"
-                 + repair_feedback[:5000])
+        if phase in {"scout", "inspection"}:
+            repair = ("\n\nOne bounded read-only handoff repair only. Correct the reported handoff failure and return "
+                     "the exact compact JSON schema required above followed by the marker. Do not edit or write files. "
+                     "Read only the assigned files and declared references, and cite ranges you read during this repair.\n"
+                     + repair_feedback[:7_500])
+        else:
+            repair = ("\n\nOne repair round only. Fix the visible failure below, finish the "
+                     "original step contract, and edit only the listed files. Do not weaken tests.\n"
+                     "The repair capsule below contains the needed checkpoint context; do not read runner artifacts "
+                     "or any file outside the disposable workspace.\n"
+                     + repair_feedback[:7_500])
     if phase not in {"scout", "inspection", "implementation"}:
         raise ValueError("phase must be scout, inspection, or implementation")
     step_requirements = [item for item in requirements if item["id"] in step.get("covers", [])]
     budget = inspection_limits or (INSPECTION_PHASE_LIMITS if phase == "inspection"
                                    else IMPLEMENTATION_INITIAL_LIMITS)
+    if phase == "implementation":
+        budget = {"reads": min(budget["reads"], IMPLEMENTATION_TOOL_LIMITS["reads"]),
+                  "searches": min(budget["searches"], IMPLEMENTATION_TOOL_LIMITS["searches"]),
+                  "inspections": min(budget["inspections"], sum(IMPLEMENTATION_TOOL_LIMITS.values()))}
     budget_text = (
         f"{phase.capitalize()} budget for this phase: at most {budget['reads']} Read calls, "
         f"{budget['searches']} combined Grep/Glob calls, and {budget['inspections']} combined inspection calls. "
@@ -1030,12 +1745,20 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
             "exact file; set head_limit to 100 or less and context lines (-A/-B/-C) to 5 or less, then confirm "
             "every reported range with Read. Each Read must include offset and limit <=80, and should cover only "
             "the specific relevant section; do not read from offset 1 unless the relevant section starts there. Do not read "
-            "sequential chunks, write files, or explore unrelated paths. You have at most ten tool attempts "
-            "(up to four successful Reads, three successful Greps, and six total successful inspections) and 180 seconds. "
+            "sequential chunks, write files, or explore unrelated paths. The runner caps each delivered Read or Grep result "
+            f"at {SOURCE_READ_HOOK_OUTPUT_CHAR_LIMIT} serialized characters. If you see [QWEN_RESULT_TRUNCATED], "
+            "the excerpt is incomplete: narrow the range or search and retry before relying on a missing match. "
+            f"You have at most {SOURCE_SCOUT_LIMITS['inspections']} permitted Read/Grep operations "
+            f"within {SOURCE_SCOUT_TIMEOUT} seconds (no more than {SOURCE_SCOUT_LIMITS['reads']} Reads and "
+            f"{SOURCE_SCOUT_LIMITS['searches']} Greps). Batch only distinct, necessary source lookups; "
+            f"A maximum of {SOURCE_SCOUT_DENIED_ATTEMPT_LIMIT} guard-denied attempts is tolerated; "
+            "denied calls do not access files, but stop calling tools after any denial and return the source map. "
+            "Do not spend attempts repeating a denied range. "
             "Return exactly one JSON object followed by the completion marker, with no prose, fences, or source dumps. "
             "This scout schema overrides any handoff or output format mentioned in the original request or step task. "
-            "Use this exact compact schema, with the entire JSON under 6000 characters: "
-            "{\"summary\": string (<=1200 chars), \"implementation_plan\": string (<=2200 chars), "
+            f"Use this exact compact schema, with the entire JSON under {SOURCE_SCOUT_HANDOFF_CHAR_LIMIT} characters: "
+            f"{{\"summary\": string (<={SOURCE_SCOUT_SUMMARY_CHAR_LIMIT} chars), "
+            "\"implementation_plan\": string (<=2200 chars), "
             "\"files\": [{\"path\": workspace-relative POSIX path, \"symbols\": [up to 12 strings], "
             "\"ranges\": [{\"offset\": integer, \"limit\": integer <=80, \"purpose\": string <=120 chars}]}], "
             "\"risks\": [up to 5 strings <=200 chars]}. Include only files and ranges you successfully read. "
@@ -1052,9 +1775,10 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
             "assigned step files, declared references, and caller-supplied acceptance files. "
             "Use ranged Read calls of at most 200 lines for files over 200 lines; small files may be read in full. "
             "Do not read sequential chunks or reread source ranges. "
-            "Return one compact JSON object and then the required completion marker; JSON must be at most 5900 characters "
-            "so the whole response stays within the controller's 6000-character cap. "
-            "Use summary <=800 chars, implementation_plan <=1800 chars, at most 5 risk strings <=200 chars each, "
+            f"Return one compact JSON object and then the required completion marker; JSON must be at most "
+            f"{SOURCE_SCOUT_HANDOFF_CHAR_LIMIT} characters. "
+            f"Use summary <={SOURCE_SCOUT_SUMMARY_CHAR_LIMIT} chars, implementation_plan <=2200 chars, "
+            "at most 5 risk strings <=200 chars each, "
             "and at most 12 file entries with at most 6 ranges per file. Every path must be workspace-relative POSIX "
             "(for example src/server.js), never absolute. Each file entry has path, concise symbols (<=12 strings), "
             "and ranges [{offset,limit,purpose}] with purpose <=120 chars. Group adjacent ranges and include only "
@@ -1071,6 +1795,9 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
             "Use Grep only on an exact assigned or declared-reference file when needed. ")
         phase_instruction = (
             "Complete this step autonomously. Use the verified source map as the handoff and do not repeat its reads. "
+            "Begin editing after at most four targeted Read calls; the controller hard-stops additional reading at the phase cap. "
+            "Do not wait until every assigned file has been inspected: make the smallest coherent implementation change, "
+            "then continue from the resulting compiler or acceptance feedback. "
             + source_map_instruction + "Read only assigned files, declared references, and "
             "caller-supplied acceptance files. Use ranges for files over 200 lines. "
             "Edit only the exact assigned paths; do not scan sequential chunks or reread ranges. "
@@ -1080,9 +1807,20 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
                               "or reread its cited ranges unless an implementation blocker remains.\n"
                               if inspection_context and inspection_context.get("source") == "orchestrator_preverified_source_map"
                               else "")
+    if inspection_context and inspection_context.get("runner_verified_result_caps"):
+        inspection_source_note += (
+            "Runner-verified tool-result cap receipts follow. Their tool-to-marker mapping comes from the CLI "
+            "transcript and hook audit; treat it as authoritative if worker prose disagrees. A truncated excerpt "
+            "does not establish that absent source matches do not exist.\n")
     inspection_block = ((inspection_source_note + "Verified inspection checkpoint (source-backed; reuse this context):\n" +
                          json.dumps(inspection_context, ensure_ascii=False) + "\n\n")
                         if inspection_context else "")
+    handoff_instruction = (
+        f"After completing this read-only {phase} handoff, append the exact marker {marker} on its own final line. "
+        "This marker completes the inspection handoff; it does not claim that implementation is complete.\n"
+        if phase in {"scout", "inspection"} else
+        f"End with {marker} only after the implementation step is complete.\n"
+    )
     definition = {
         "description": f"Qwen {phase} worker for {step['title']}.",
         "prompt": (
@@ -1092,7 +1830,7 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
             "Do not read unrelated app files. Do not use shell commands, do not delegate, and do not claim validator results. "
             "The runner executes independent validators after you return. Preserve prior "
             "accepted steps. Report changed paths, actual decisions, and any remaining gap. "
-            f"End with {marker} only after the step is complete.\n\n"
+            + handoff_instruction + "\n"
             f"Original request:\n{request}\n\nCompleted steps:\n" +
             ("\n".join(previous) if previous else "None") +
             f"\n\nCurrent step {step['id']}: {step['title']}\n{step['task']}\n"
@@ -1111,7 +1849,8 @@ def step_agent_spec(step: dict, request: str, requirements: list[dict], workspac
 
 
 def coordinator_prompt(step: dict, workspace: Path, marker: str, repair: bool, *,
-                       phase: str = "implementation") -> str:
+                       phase: str = "implementation",
+                       inspection_context: dict | None = None) -> str:
     allowed = "\n".join(f"- {(workspace / path).resolve()}" for path in step["files"])
     references = "\n".join(f"- {(workspace / path).resolve()}"
                             for path in step.get("reference_paths", [])) or "(none)"
@@ -1123,7 +1862,15 @@ def coordinator_prompt(step: dict, workspace: Path, marker: str, repair: bool, *
         )
     else:
         action = "repair" if repair else "complete"
-        phase_guard = ""
+        phase_guard = (
+            "The implementation child must receive the complete verified source map below in its Agent prompt. "
+            "Tell it to reuse these findings, read no more than four targeted ranges before its first edit, "
+            "and stop reading after any scope denial. Include the per-child hard ceiling of 10 Read calls and "
+            "3 Grep calls. Do not omit or paraphrase away the source ranges. "
+            if inspection_context else ""
+        )
+    handoff = ("\n\nVerified implementation source map (copy verbatim into the Agent prompt):\n" +
+               json.dumps(inspection_context, ensure_ascii=False) + "\n") if inspection_context else ""
     return (
         f"Delegate exactly one foreground {action} task to {AUTONOMOUS_CHILD}. " + phase_guard +
         "Do not inspect or edit files yourself, do not launch other agents, and wait for the "
@@ -1134,6 +1881,7 @@ def coordinator_prompt(step: dict, workspace: Path, marker: str, repair: bool, *
         ("The scout may read and search only the exact assigned files and declared references; it may not edit.\n\n"
          if phase == "scout" else
          "The worker may read declared references and search within the workspace, but may edit only the allowed edit files.\n\n") +
+        handoff +
         f"Marker: {marker}"
     )
 
@@ -1141,7 +1889,8 @@ def coordinator_prompt(step: dict, workspace: Path, marker: str, repair: bool, *
 def worker_tool_settings(workspace: Path, step: dict, read_only_paths: list[str] | None,
                          phase: str, transcript_path: Path,
                          checkpoint_validators: list[list[str]] | None = None,
-                         inspection_context: dict | None = None) -> Path:
+                         inspection_context: dict | None = None,
+                         checkpoint_temp_dir: str | Path | None = None) -> Path:
     """Create child scope guards and optional post-edit diagnostics."""
     allowed_reads = sorted(set([*(step.get("files") or []), *(step.get("reference_paths") or []),
                                 *([] if phase == "scout" else (read_only_paths or []))]))
@@ -1149,9 +1898,16 @@ def worker_tool_settings(workspace: Path, step: dict, read_only_paths: list[str]
     scope_path = transcript_path.with_suffix(".scope.json")
     settings_path = transcript_path.with_suffix(".settings.json")
     scout_call_counter_dir = transcript_path.with_suffix(".scout-calls")
+    implementation_call_counter_dir = transcript_path.with_suffix(".implementation-calls")
     if phase == "scout":
         scout_call_counter_dir.mkdir(parents=True, exist_ok=True)
-    relative_ranges = {} if phase == "scout" else verified_read_ranges(workspace, step, phase, inspection_context)
+    if phase == "implementation":
+        implementation_call_counter_dir.mkdir(parents=True, exist_ok=True)
+    result_audit_path = transcript_path.with_suffix(".tool-results.jsonl")
+    relative_ranges = ({} if phase == "scout" else
+                       implementation_reference_ranges(workspace, step, inspection_context)
+                       if phase == "implementation" else
+                       verified_read_ranges(workspace, step, phase, inspection_context))
     read_ranges = {str((workspace / path).resolve()): ranges
                    for path, ranges in relative_ranges.items()}
     atomic_json(scope_path, {"root": str(workspace.resolve()),
@@ -1160,9 +1916,20 @@ def worker_tool_settings(workspace: Path, step: dict, read_only_paths: list[str]
                              "scout_mode": phase == "scout",
                              "scout_call_counter_dir": str(scout_call_counter_dir),
                              "scout_tool_call_limit": SOURCE_SCOUT_LIMITS["inspections"],
+                             "scout_denied_attempt_limit": SOURCE_SCOUT_DENIED_ATTEMPT_LIMIT,
                              "scout_tool_limits": {"Read": SOURCE_SCOUT_LIMITS["reads"],
                                                    "Grep": SOURCE_SCOUT_LIMITS["searches"],
                                                    "Glob": SOURCE_SCOUT_LIMITS["searches"]},
+                             "implementation_mode": phase == "implementation",
+                             "implementation_call_counter_dir": str(implementation_call_counter_dir),
+                             "implementation_tool_limits": {
+                                 "Read": IMPLEMENTATION_TOOL_LIMITS["reads"],
+                                 "Grep": IMPLEMENTATION_TOOL_LIMITS["searches"]},
+                             "implementation_pre_edit_read_limit": 4,
+                             "implementation_denied_attempt_limit": IMPLEMENTATION_DENIED_ATTEMPT_LIMIT,
+                             "result_cap_enabled": phase in {"scout", "inspection"},
+                             "result_char_limit": SOURCE_READ_HOOK_OUTPUT_CHAR_LIMIT,
+                             "result_audit_path": str(result_audit_path),
                              "range_restricted": sorted(read_ranges),
                              "read_ranges": read_ranges})
     hook_script = Path(__file__).with_name("tool_scope_guard.py").resolve()
@@ -1171,6 +1938,13 @@ def worker_tool_settings(workspace: Path, step: dict, read_only_paths: list[str]
         "hooks": [{"type": "command", "command": sys.executable,
                    "args": [str(hook_script), str(scope_path)], "timeout": 30}],
     }]}
+    if phase in {"scout", "inspection"}:
+        result_hook_script = Path(__file__).with_name("tool_result_guard.py").resolve()
+        hooks["PostToolUse"] = [{
+            "matcher": "Read|Grep",
+            "hooks": [{"type": "command", "command": sys.executable,
+                       "args": [str(result_hook_script), str(scope_path)], "timeout": 30}],
+        }]
     if phase == "implementation" and checkpoint_validators:
         if (not isinstance(checkpoint_validators, list) or not 1 <= len(checkpoint_validators) <= 4 or
                 any(not isinstance(argv, list) or not argv or
@@ -1178,13 +1952,16 @@ def worker_tool_settings(workspace: Path, step: dict, read_only_paths: list[str]
                     for argv in checkpoint_validators)):
             raise ValueError("checkpoint validators must be one to four caller-supplied argv arrays")
         checkpoint_scope = transcript_path.with_suffix(".checkpoint.json")
-        atomic_json(checkpoint_scope, {
+        checkpoint_config: dict = {
             "root": str(workspace.resolve()),
             "write_allowed": allowed_writes,
             "validators": checkpoint_validators,
             "hook_timeout_seconds": 30,
             "max_context_chars": 4000,
-        })
+        }
+        if checkpoint_temp_dir is not None:
+            checkpoint_config["checkpoint_temp_dir"] = str(checkpoint_temp_dir)
+        atomic_json(checkpoint_scope, checkpoint_config)
         checkpoint_script = Path(__file__).with_name("template_checkpoint.py").resolve()
         hooks["PostToolBatch"] = [{
             "hooks": [{"type": "command", "command": sys.executable,
@@ -1201,7 +1978,8 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
               phase: str = "implementation", inspection_context: dict | None = None,
               inspection_limits: dict | None = None,
               checkpoint_validators: list[list[str]] | None = None,
-              allow_noop_handoff: bool = False) -> dict:
+              allow_noop_handoff: bool = False,
+              checkpoint_temp_dir: str | Path | None = None) -> dict:
     timeout = max(1, min(int(timeout), CHILD_STEP_TIMEOUT))
     marker = f"{MARKER_PREFIX}{uuid.uuid4().hex[:12]}"
     spec = step_agent_spec(step, request, requirements, workspace, marker, previous, repair_feedback,
@@ -1214,11 +1992,13 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
                    "Read,Edit,Write" if inspection_context else "Read,Grep,Edit,Write")
     settings_path = worker_tool_settings(workspace, step, read_only_paths, phase, transcript_path,
                                          checkpoint_validators=checkpoint_validators,
-                                         inspection_context=inspection_context)
+                                         inspection_context=inspection_context,
+                                         checkpoint_temp_dir=checkpoint_temp_dir)
     command = dispatch.claude_command(dispatch_mode=dispatch.CHILD_MODE, agents=spec,
                                      max_turns=CHILD_STEP_TURNS,
                                      child_tools=child_tools, settings=str(settings_path))
-    prompt = coordinator_prompt(step, workspace, marker, bool(repair_feedback), phase=phase)
+    prompt = coordinator_prompt(step, workspace, marker, bool(repair_feedback), phase=phase,
+                                inspection_context=inspection_context)
     start_utc = datetime.now(timezone.utc).isoformat()
     start = time.perf_counter()
     checkpoint_receipt_path = (
@@ -1228,7 +2008,7 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
         else None)
     output, stderr, code, stop_reason, cleanup = dispatch.run_cli_bounded(
         command, task_input=prompt, cwd=workspace,
-        env=dispatch.cli_env(key, client_context_tokens=65_536),
+        env=dispatch.cli_env(key),
         timeout=timeout, idle_timeout=min(timeout, CHILD_IDLE_TIMEOUT),
         transcript_path=transcript_path, redact_values=(key,),
         checkpoint_receipt_path=checkpoint_receipt_path,
@@ -1261,7 +2041,11 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
                               if event.get("type") == "assistant" and not event.get("parent_tool_use_id")
                               for block in message_blocks(event)
                               if isinstance(block, dict) and block.get("type") == "tool_use"]
-    coordinator_scope_clean = all(name == "Agent" for name in coordinator_tool_calls)
+    coordinator_scope_clean = (
+        len(agent_calls) == 1
+        and all(name in ({"Agent", "Read", "Grep"} if phase in {"scout", "inspection"}
+                         else {"Agent"}) for name in coordinator_tool_calls)
+    )
     child_id = agent_calls[0].get("id") if len(agent_calls) == 1 else None
     child_result = None
     if child_id:
@@ -1299,26 +2083,40 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
             raise RuntimeError("docker logs returned a nonzero exit code")
         log_text = route_logs.stdout + route_logs.stderr
         qwen_calls = len(re.findall(r"completion\(\) model=\s*qwen3\.8-27b", log_text))
-        sift_lines = re.findall(r"sift_request protocol=(\w+) compacted=(true|false) input_tokens=(\d+) "
+        sift_lines = re.findall(r"sift_request protocol=(\w+) compacted=(true|false) [^\r\n]*?input_tokens=(\d+) "
                                 r"forwarded_tokens=(\d+) target=(\d+) output_limit=(-?\d+)", log_text)
         sift = [{"protocol": p, "compacted": c == "true", "input_tokens": int(i),
                  "forwarded_tokens": int(f), "target": int(t), "output_limit": int(o)}
-                for p, c, i, f, t, o in sift_lines if int(t) == 65_536]
+                for p, c, i, f, t, o in sift_lines if int(t) == dispatch.QWEN_INPUT_TARGET]
         telemetry = {"status": "available", "error": None}
     except Exception as exc:
         telemetry = {"status": "unavailable", "error": type(exc).__name__}
     scout_allowed_paths = [*(step.get("files") or []), *(step.get("reference_paths") or [])]
+    context_allowed_paths = [*scout_allowed_paths, *(read_only_paths or [])]
+    context_ranges = ({} if phase == "scout" else
+                      verified_read_ranges(workspace, step, phase, inspection_context))
+    audit_ranges = (implementation_reference_ranges(workspace, step, inspection_context)
+                    if phase == "implementation" else context_ranges)
     read_audit = audit_worker_reads(
         workspace, events,
         allowed_paths=(scout_allowed_paths if phase == "scout" else
                        [*scout_allowed_paths, *(read_only_paths or [])]),
-        allowed_ranges=({} if phase == "scout" else
-                        verified_read_ranges(workspace, step, phase, inspection_context)),
+        allowed_ranges=audit_ranges,
         require_ranged_reads=True,
         limits=inspection_limits or (SOURCE_SCOUT_LIMITS if phase == "scout" else
                                      INSPECTION_PHASE_LIMITS if phase == "inspection"
                                      else IMPLEMENTATION_INITIAL_LIMITS))
-    scout_tool_calls = sum(read_audit["counts_by_tool"].get(name, 0) for name in ("Read", "Grep", "Glob"))
+    result_cap_audit = None
+    if phase in {"scout", "inspection"}:
+        result_cap_audit = audit_tool_result_caps(
+            events, transcript_path.with_suffix(".tool-results.jsonl"),
+              SOURCE_READ_RESULT_CHAR_LIMIT, workspace)
+        read_audit["result_cap_audit"] = result_cap_audit
+        read_audit["violations"].extend(result_cap_audit["violations"])
+        read_audit["within_budget"] = not read_audit["violations"]
+    scout_attempt_counts = scout_tool_attempt_counts(events) if phase == "scout" else {}
+    scout_emitted_counts = scout_tool_emitted_attempt_counts(events) if phase == "scout" else {}
+    scout_tool_calls = sum(scout_attempt_counts.values())
     scout_tool_result_chars = 0
     if phase == "scout":
         tool_ids = {block.get("id") for event in events if event.get("type") == "assistant"
@@ -1333,10 +2131,10 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
         scout_tool_result_chars += len(child_text)
         denied_scout_calls = sum(1 for item in read_audit["reads"] if item.get("denied_before_execution"))
         read_audit["denied_attempt_count"] = denied_scout_calls
-        if scout_tool_calls > SOURCE_SCOUT_LIMITS["inspections"]:
-            read_audit["violations"].append({"reason": "source_scout_tool_call_budget_exceeded",
-                                             "count": scout_tool_calls,
-                                             "limit": SOURCE_SCOUT_LIMITS["inspections"]})
+        read_audit["emitted_attempt_counts"] = scout_emitted_counts
+        read_audit["permitted_attempt_counts"] = scout_attempt_counts
+        read_audit["violations"].extend(source_scout_budget_violations(
+            scout_attempt_counts, scout_emitted_counts))
         if scout_tool_result_chars > SOURCE_SCOUT_OUTPUT_CHAR_LIMIT:
             read_audit["violations"].append({"reason": "source_scout_returned_text_budget_exceeded",
                                              "characters": scout_tool_result_chars,
@@ -1344,6 +2142,7 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
         read_audit["within_budget"] = not read_audit["violations"]
     inspection_report = None
     inspection_error = None
+    inspection_report_source = "model_handoff"
     if phase in {"scout", "inspection"} and marker in child_text:
         try:
             inspection_report = validate_inspection_handoff(
@@ -1355,22 +2154,54 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
                 caller_source_ranges=(step.get("source_ranges", []) if phase == "inspection" else None))
         except (ValueError, json.JSONDecodeError) as exc:
             inspection_error = str(exc)
+            # Keep a strict, deterministic recovery for shape failures. It uses
+            # only successful paths/ranges from the independent scope audit;
+            # model-proposed paths, symbols, and ranges are ignored. Any audit
+            # violation, missing large-file range, or workspace mutation still
+            # blocks this fallback and prevents implementation from starting.
+            if not changed_targets and read_audit.get("within_budget") is True:
+                try:
+                    audited_map = audited_read_source_map(step, workspace, read_audit)
+                    inspection_report = validate_inspection_handoff(
+                        json.dumps(audited_map, ensure_ascii=False), workspace,
+                        (scout_allowed_paths if phase == "scout" else
+                         [*scout_allowed_paths, *(read_only_paths or [])]),
+                        read_audit,
+                        required_source_paths=large_source_targets(workspace, step.get("files", [])),
+                        caller_source_ranges=(step.get("source_ranges", []) if phase == "inspection" else None))
+                    inspection_report_source = "audited_read_fallback"
+                except (ValueError, json.JSONDecodeError) as fallback_exc:
+                    inspection_error += f"; audited-read fallback failed: {fallback_exc}"
+    inspection_report = attach_verified_result_caps(inspection_report, read_audit)
     parent_success = (code == 0 and final.get("subtype") == "success" and not final.get("is_error"))
     # The read-only child's handoff is independently usable if the coordinator
     # times out after receiving it. Never apply this recovery to implementation:
     # all child, scope, marker, report, workspace, and audit checks still apply.
     parent_handoff_ok = parent_success or (
-        phase == "scout" and child_id is not None and bool(child_result)
+        phase in {"scout", "inspection"} and child_id is not None and bool(child_result)
         and not child_result.get("is_error") and marker in child_text
         and len(agent_calls) == 1 and coordinator_scope_clean
         and not changed_targets and inspection_report is not None
         and read_audit["within_budget"]
     )
+    transcript_qwen = any(
+        event.get("type") == "assistant"
+        and event.get("parent_tool_use_id") == child_id
+        and isinstance(event.get("message"), dict)
+        and event["message"].get("model") == dispatch.MODEL
+        for event in events)
+    sift_hook_configured = configured_qwen_sift_hook()
+    route_verified = qwen_route_verification(
+        telemetry.get("status", "unavailable"), qwen_calls, len(sift),
+        transcript_qwen=transcript_qwen, gateway_base_url=dispatch.BASE_URL,
+        sift_hook_configured=sift_hook_configured)
+    qwen_route_ok = route_verified
     succeeded = (parent_handoff_ok
                  and child_id is not None and bool(child_result) and not child_result.get("is_error")
                  and marker in child_text and len(agent_calls) == 1
                  and coordinator_scope_clean
                  and read_audit["within_budget"]
+                 and qwen_route_ok
                  and set(changed_targets).issubset(set(requested_paths))
                  and ((phase in {"scout", "inspection"} and not changed_targets and inspection_report is not None)
                       or (phase == "implementation" and (bool(changed_targets) or allow_noop_handoff))))
@@ -1384,6 +2215,10 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
                    for block in message_blocks(event)
                    if isinstance(block, dict) and block.get("type") == "tool_use"
                    and event.get("parent_tool_use_id") == child_id]
+    read_context = (read_context_from_events(
+        events, workspace, allowed_paths=context_allowed_paths,
+        allowed_ranges=audit_ranges, max_chars=2_200)
+        if phase == "implementation" else "")
     return {"phase": phase, "marker": marker, "seconds": round(time.perf_counter() - start, 2),
             "exit": code, "stop_reason": stop_reason, "process_tree_cleanup_verified": cleanup,
             "transcript_path": str(transcript_path), "event_counts": event_counts,
@@ -1393,13 +2228,21 @@ def run_child(workspace: Path, step: dict, request: str, requirements: list[dict
             "agent_call_count": len(agent_calls),
             "final_success": final_success,
             "child_result_is_error": child_result_is_error,
+            "qwen_route_verified": route_verified,
+            "qwen_route_evidence": ("docker_gateway_logs" if telemetry.get("status") == "available"
+                                    else "worker_model_and_local_gateway_sift_config"
+                                    if route_verified else "unverified"),
             "child_result": dispatch.redact_text(child_text, (key,))[:1500],
             "final": dispatch.redact_text(str(final.get("result", "")), (key,))[:1500],
             "child_handoff": bool(child_result) and marker in child_text,
             "read_audit": read_audit,
+            "read_context": read_context,
             "inspection_report": inspection_report,
+            "inspection_report_source": inspection_report_source if inspection_report is not None else None,
             "inspection_error": inspection_error,
             "scout_tool_calls": scout_tool_calls if phase == "scout" else None,
+            "scout_tool_attempt_counts": scout_attempt_counts if phase == "scout" else None,
+            "scout_tool_emitted_attempt_counts": scout_emitted_counts if phase == "scout" else None,
             "scout_tool_result_chars": scout_tool_result_chars if phase == "scout" else None,
             "early_template_checkpoint": checkpoint_receipt,
             "changed_tool_paths": sorted(set(changed_targets)), "allowed_paths": requested_paths,
@@ -1414,6 +2257,76 @@ def atomic_json(path: Path, data: dict) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(temporary, path)
+
+
+@contextmanager
+def workspace_run_lock(workspace: Path):
+    """Hold one process-safe lock per disposable workspace across the full run."""
+    workspace = workspace.resolve()
+    identity = str(workspace).casefold() if os.name == "nt" else str(workspace)
+    lock_root = Path(tempfile.gettempdir()) / "subroute-qwen-workspace-locks"
+    lock_root.mkdir(parents=True, exist_ok=True)
+    lock_path = lock_root / (hashlib.sha256(identity.encode("utf-8")).hexdigest() + ".lock")
+    with lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, BlockingIOError) as exc:
+            raise RuntimeError("another Qwen run already holds this disposable workspace") from exc
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                import msvcrt
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def serialize_workspace_run(function):
+    @wraps(function)
+    def wrapped(workspace, *args, **kwargs):
+        with workspace_run_lock(Path(workspace)):
+            return function(workspace, *args, **kwargs)
+    return wrapped
+
+
+def persist_preflight_failure(state_file: Path, state: dict, workspace: Path,
+                              initial_hashes: dict, exc: Exception) -> None:
+    if state.get("status") not in {"planning", "executing"}:
+        return
+    state.update({"status": "failed_exception", "error": f"{type(exc).__name__}: {exc}",
+                  "workspace_dirty": file_hashes(workspace) != initial_hashes,
+                  "finished_at": datetime.now(timezone.utc).isoformat()})
+    atomic_json(state_file, state)
+
+
+@contextmanager
+def ready_gateway_session(state_file: Path, state: dict, workspace: Path,
+                          initial_hashes: dict, deadline: float):
+    """Connect and read route policy, recording failures before planning starts."""
+    try:
+        key = dispatch.gateway_key()
+        headers = {"Authorization": "Bearer " + key}
+        with httpx.Client(base_url=dispatch.BASE_URL, headers=headers,
+                          timeout=max(1, min(30, int(deadline - time.monotonic())))) as client:
+            client.get("/health/readiness").raise_for_status()
+            before = client.get("/api/active-model").json()
+            yield client, key, before
+    except Exception as exc:
+        persist_preflight_failure(state_file, state, workspace, initial_hashes, exc)
+        raise
 
 
 def reconcile_interrupted_state(state_path: Path, workspace: Path) -> dict:
@@ -1443,12 +2356,14 @@ def reconcile_interrupted_state(state_path: Path, workspace: Path) -> dict:
     return state
 
 
+@serialize_workspace_run
 def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                 runs_root: Path, total_timeout: int = 3600, step_timeout: int = CHILD_STEP_TIMEOUT,
                 validator_timeout: int = 300, max_files_per_step: int = DEFAULT_MAX_FILES_PER_STEP,
                 baseline_validators: list[list[str]] | None = None,
                 requirements: list[dict] | None = None,
                 read_only_paths: list[str] | None = None,
+                test_only_paths: list[str] | None = None,
                 plan_override: dict | None = None,
                 plan_source: str | None = None,
                 preverified_inspections: dict[str, dict] | None = None,
@@ -1456,6 +2371,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
     workspace = workspace.resolve()
     if not workspace.is_dir():
         raise ValueError("workspace must be an existing directory")
+    authorized_test_paths = normalize_test_only_paths(workspace, test_only_paths)
     runs_root = runs_root.resolve()
     runs_root.mkdir(parents=True, exist_ok=True)
     assert_disposable_workspace(workspace, runs_root)
@@ -1484,6 +2400,11 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
     if preverified_inspections and plan_override is None:
         raise ValueError("preverified inspections require a caller-supplied validated plan file with explicit source_ranges")
     run_dir = Path(tempfile.mkdtemp(prefix="qwen-autonomous-", dir=runs_root))
+    run_validator_temp_dir = run_dir / "validator-temp"
+    run_validator_temp_dir.mkdir(parents=True, exist_ok=True)
+    run_validator_env = dict(os.environ)
+    run_validator_env["TEMP"] = str(run_validator_temp_dir)
+    run_validator_env["TMP"] = str(run_validator_temp_dir)
     state_file = run_dir / "state.json"
     initial = file_hashes(workspace)
     state = {"workspace": str(workspace), "state_file": str(state_file),
@@ -1494,26 +2415,27 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
     started = time.monotonic()
     deadline = started + total_timeout
     child_budget = min(step_timeout, CHILD_STEP_TIMEOUT)
-    baseline = run_validators(workspace, baseline_validators or validators, timeout=validator_timeout,
-                              deadline=deadline)
+    try:
+        baseline = run_validators(workspace, baseline_validators or validators, timeout=validator_timeout,
+                                  deadline=deadline, env=run_validator_env)
+    except Exception as exc:
+        persist_preflight_failure(state_file, state, workspace, initial, exc)
+        raise
     if not baseline or any(result["exit"] != 0 for result in baseline):
         state.update({"status": "stopped_failing_baseline", "baseline_validation": baseline,
                       "stop_reason": "workspace validators must pass before Qwen edits"})
         state["finished_at"] = datetime.now(timezone.utc).isoformat()
         atomic_json(state_file, state)
         return state
+    state["baseline_validation"] = baseline
+    atomic_json(state_file, state)
     if deadline - time.monotonic() <= 1:
         state.update({"status": "stopped_total_budget", "baseline_validation": baseline,
                       "stop_reason": "total task budget exhausted before planning",
                       "finished_at": datetime.now(timezone.utc).isoformat()})
         atomic_json(state_file, state)
         return state
-    key = dispatch.gateway_key()
-    headers = {"Authorization": "Bearer " + key}
-    with httpx.Client(base_url=dispatch.BASE_URL, headers=headers,
-                      timeout=max(1, min(30, int(deadline - time.monotonic())))) as client:
-        client.get("/health/readiness").raise_for_status()
-        before = client.get("/api/active-model").json()
+    with ready_gateway_session(state_file, state, workspace, initial, deadline) as (client, key, before):
         try:
             dispatch.set_policy(client, before, test=True)
             if plan_override is None:
@@ -1523,13 +2445,15 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                                                 max_files_per_step=max_files_per_step,
                                                 validators=validators,
                                                 read_only_paths=read_only_paths or [],
-                                                transcript_dir=run_dir)
+                                                transcript_dir=run_dir,
+                                                test_only_paths=authorized_test_paths)
             else:
                 plan = validate_plan(plan_override, workspace,
                                      max_files_per_step=max_files_per_step,
                                      requirements=requirements,
                                      read_only_paths=read_only_paths or [],
-                                     validator_count=len(validators))
+                                     validator_count=len(validators),
+                                     test_only_paths=authorized_test_paths)
                 planning = {"source": "validated_plan_file", "plan_source": plan_source}
             supplied_maps = preverified_inspections or {}
             if not isinstance(supplied_maps, dict):
@@ -1554,6 +2478,13 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                     state.update({"status": "stopped_total_budget", "stop_reason": "total task budget exhausted"})
                     break
                 before_step = file_hashes(workspace)
+                before_contents = {}
+                for path in step["files"]:
+                    try:
+                        before_contents[path] = (workspace / path).read_text(
+                            encoding="utf-8", errors="replace")
+                    except OSError:
+                        before_contents[path] = ""
                 record = {"id": step["id"], "title": step["title"], "status": "running",
                           "handoff": {"status": "pending", "marker": False},
                           "worker_protocol": {"status": "pending"},
@@ -1565,6 +2496,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                 remaining = total_timeout - (time.monotonic() - started)
                 worker_timeout = max(1, int(min(child_budget, remaining)))
                 preverified = verified_maps.get(step["id"])
+                scout_receipt = None
                 if preverified is not None:
                     inspection_receipt = {
                         "phase": "inspection", "source": "orchestrator_preverified_source_map",
@@ -1576,10 +2508,9 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                                        "reads": [], "violations": [], "within_budget": True},
                     }
                 else:
-                    scout_receipt = None
                     if needs_source_scout(workspace, step):
                         remaining = total_timeout - (time.monotonic() - started)
-                        scout_timeout = max(1, int(min(SOURCE_SCOUT_TIMEOUT, remaining)))
+                        scout_timeout = max(1, int(min(step_timeout, SOURCE_SCOUT_TIMEOUT, remaining)))
                         scout_before = file_hashes(workspace)
                         scout_receipt = run_child(
                             workspace, step, request, requirements, key, previous,
@@ -1616,10 +2547,72 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                             transcript_path=run_dir / f"{step['id']}-inspection.jsonl",
                             read_only_paths=read_only_paths or [], phase="inspection",
                         )
+                # A read-only handoff can fail on output shape even when the
+                # source audit is clean. Give it exactly one fresh, bounded
+                # inspection child to return the required schema. Never repair
+                # after a scope/audit violation or any workspace mutation.
+                scout_audit = (inspection_receipt.get("read_audit", {})
+                               if inspection_receipt.get("phase") in {"scout", "inspection"}
+                               and inspection_receipt.get("source") != "orchestrator_preverified_source_map"
+                               else {})
+                scout_before = (scout_receipt or {}).get("workspace_unchanged", True)
+                if (not inspection_receipt.get("success")
+                        and inspection_receipt.get("phase") in {"scout", "inspection"}
+                        and scout_before
+                        and file_hashes(workspace) == before_step
+                        and scout_audit.get("within_budget") is True):
+                    bounded_audit = combine_read_audits(scout_audit, limits=STEP_INSPECTION_LIMITS)
+                    repair_limits = remaining_inspection_budget(
+                        bounded_audit, limits=STEP_INSPECTION_LIMITS,
+                        phase_cap=INSPECTION_PHASE_LIMITS)
+                    remaining = total_timeout - (time.monotonic() - started)
+                    if (remaining > 1 and repair_limits["reads"] > 0
+                            and repair_limits["inspections"] > 0):
+                        failed_handoff = inspection_receipt.get("child_result", "")
+                        repair_note = (
+                            "The previous read-only handoff failed independent validation: "
+                            f"{inspection_receipt.get('inspection_error') or 'required source-map schema was missing'}. "
+                            "Return the exact summary/implementation_plan/files/ranges/risks JSON schema from your role. "
+                            "Reuse no range unless you read it in this repair; no files may be changed.\n"
+                            "Prior handoff excerpt (untrusted; use only to identify which scoped source still needs reading):\n"
+                            + str(failed_handoff)[:3_000]
+                        )
+                        repair_timeout = max(1, int(min(worker_timeout, remaining)))
+                        repaired_inspection = run_child(
+                            workspace, step, request, requirements, key, previous,
+                            timeout=repair_timeout,
+                            transcript_path=run_dir / f"{step['id']}-inspection-repair.jsonl",
+                            repair_feedback=repair_note,
+                            read_only_paths=read_only_paths or [], phase="inspection",
+                            inspection_limits=repair_limits,
+                        )
+                        after_handoff_repair = file_hashes(workspace)
+                        repaired_inspection["workspace_unchanged"] = after_handoff_repair == before_step
+                        combined_audit = combine_read_audits(
+                            bounded_audit, repaired_inspection.get("read_audit", {}),
+                            limits=STEP_INSPECTION_LIMITS)
+                        repaired_inspection["read_audit"] = combined_audit
+                        repaired_inspection["source"] = "qwen_bounded_inspection_repair"
+                        repaired_inspection["initial_handoff"] = {
+                            "phase": inspection_receipt.get("phase"),
+                            "seconds": inspection_receipt.get("seconds"),
+                            "inspection_error": inspection_receipt.get("inspection_error"),
+                            "child_handoff": inspection_receipt.get("child_handoff"),
+                        }
+                        if not repaired_inspection["workspace_unchanged"]:
+                            repaired_inspection["success"] = False
+                            repaired_inspection["inspection_error"] = "inspection repair changed workspace files"
+                        if not combined_audit.get("within_budget"):
+                            repaired_inspection["success"] = False
+                            repaired_inspection["inspection_error"] = combined_audit.get("violations")
+                        inspection_receipt = repaired_inspection
                 after_inspection = file_hashes(workspace)
                 inspection_scope_clean = after_inspection == before_step
                 inspection_audit = combine_read_audits(
-                    inspection_receipt.get("read_audit", {}), limits=INSPECTION_PHASE_LIMITS)
+                    inspection_receipt.get("read_audit", {}),
+                    limits=(STEP_INSPECTION_LIMITS
+                            if inspection_receipt.get("source") == "qwen_bounded_inspection_repair"
+                            else INSPECTION_PHASE_LIMITS))
                 inspection_checkpoint = run_dir / f"{step['id']}-inspection-checkpoint.json"
                 inspected_source_map = preverified if preverified is not None else inspection_receipt.get("inspection_report")
                 atomic_json(inspection_checkpoint, {
@@ -1680,7 +2673,8 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                                     checkpoint_validators=(checkpoint_validators
                                                            if any(path.lower().endswith(".ejs")
                                                                   for path in step["files"])
-                                                           else None))
+                                                           else None),
+                                    checkpoint_temp_dir=str(run_validator_temp_dir))
                 implementation_audit = combine_read_audits(
                     receipt.get("read_audit", {}), limits=IMPLEMENTATION_PHASE_LIMITS)
                 step_read_audit = combine_read_audits(
@@ -1689,6 +2683,9 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                 changed = changed_paths(before_step, after_step)
                 allowed = set(step["files"])
                 path_ok = set(changed).issubset(allowed)
+                change_mode_ok = step_changes_match_mode(changed, authorized_test_paths)
+                if authorized_test_paths:
+                    path_ok = path_ok and set(changed).issubset(set(authorized_test_paths))
                 checkpoint_path = save_step_checkpoint(
                     run_dir, step, 1, receipt, before_step, after_step, changed, path_ok,
                     read_only_paths or [], read_audit=step_read_audit,
@@ -1699,6 +2696,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                            "checkpoint_path": str(checkpoint_path),
                            "ended_at": datetime.now(timezone.utc).isoformat(), "after_hashes": after_step}
                 record["attempts"][0].update(attempt)
+                record["attempts"][0]["change_mode_ok"] = change_mode_ok
                 record["handoff"] = {"status": "received" if receipt.get("child_handoff") else "incomplete",
                                       "marker": bool(receipt.get("child_handoff")),
                                       "scope_clean": path_ok}
@@ -1706,7 +2704,8 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                                               "read_audit": step_read_audit}
                 step_validators = [validators[index] for index in step["step_validator_indices"]]
                 step_validation = run_validators(
-                    workspace, step_validators, timeout=min(30, validator_timeout), deadline=deadline)
+                    workspace, step_validators, timeout=min(30, validator_timeout), deadline=deadline,
+                    env=run_validator_env)
                 record["attempts"][0]["step_validation"] = step_validation
                 record["verification"] = {
                     "status": "passed" if step_validation and all(item["exit"] == 0 for item in step_validation) else "failed",
@@ -1719,7 +2718,8 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                 # when its caller-mapped step validators fail. Give any such failure one
                 # bounded continuation, but never recover after a scope breach.
                 checks_passed = bool(step_validation) and all(item["exit"] == 0 for item in step_validation)
-                needs_continuation = not receipt["success"] or not changed or not checks_passed
+                needs_continuation = (not receipt["success"] or not changed or not checks_passed
+                                      or not change_mode_ok)
                 checkpoint_required = bool(checkpoint_validators) and any(
                     path.lower().endswith(".ejs") for path in step["files"])
                 checkpoint_missing = (checkpoint_required
@@ -1783,24 +2783,46 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                         initial_tool_paths = set()
                     recovery_reason = ("the previous attempt did not return a valid completion marker or scoped edit"
                                        if not receipt["success"] or not changed
+                                       else "the caller-authorized test-only path set was exceeded"
+                                       if authorized_test_paths and not set(changed).issubset(set(authorized_test_paths))
+                                       else "the step changed only test files without a caller-authorized test-only path set"
+                                       if not change_mode_ok
                                        else "caller-mapped step validators failed")
-                    feedback = (
-                        f"The {recovery_reason}. Resume from the persisted "
-                        "controller checkpoint and the same current workspace; do not repeat edits already made. "
-                        "Use the supplied acceptance criteria and the checkpoint's audited-path list and "
-                        "remaining step and implementation-phase inspection budgets. Do not reread previously audited paths automatically; inspect only "
-                        "a specific unresolved detail if needed, and never read outside the workspace. Finish the "
-                        "original acceptance criteria and return the required marker only when complete.\n"
-                        f"Checkpoint: {checkpoint_path}\n"
-                        f"Resume instructions: {json.loads(checkpoint_path.read_text(encoding='utf-8')).get('resume_instruction')}\n"
+                    current_diff = scoped_workspace_diff(before_contents, workspace, changed)
+                    read_context = str(receipt.get("read_context") or "")
+                    validator_failures = diagnostic_text or "[no validator failure; the child handoff or scope check failed]"
+                    repair_instruction = (
+                        "This is a targeted repair of the current workspace. Preserve the existing scoped diff and all "
+                        "passing behavior. Fix the concrete failure below first; do not rewrite the whole test or "
+                        "replan completed portions. The transcript excerpts are from before the first edit; reconcile "
+                        "them with the current diff. Re-read only if one specific missing fact prevents the smallest fix. "
+                        "After the repair, report and return the marker immediately.\n"
+                    )
+                    resume_instruction = json.loads(checkpoint_path.read_text(encoding="utf-8")).get("resume_instruction")
+                    feedback = repair_instruction + (
+                        f"Failure: {recovery_reason}.\n"
+                        f"Resume instructions from the saved checkpoint: {resume_instruction}\n"
                         f"Attempt outcome: exit={receipt['exit']}, stop_reason={receipt['stop_reason']}, "
                         f"elapsed_seconds={receipt['seconds']}, child_tool_calls={receipt['child_tool_calls']}, "
                         f"changed_files={changed}.\n"
-                        f"Last child response: {receipt['child_result'] or receipt['final'] or '[none]'}.\n"
-                        "Independent step probes (diagnostic, not permission to change tests):\n"
-                        f"{diagnostic_text or '[step validators passed; worker handoff or read audit still failed]'}\n"
-                        f"Read audit: {json.dumps(receipt.get('read_audit', {}), ensure_ascii=False)[:1500]}"
+                        "Exact validator failures (diagnostic, not permission to weaken acceptance):\n"
+                        f"{validator_failures[:1_600]}\n"
+                        "Current step-owned diff relative to the pre-worker files:\n"
+                        f"{current_diff or '[no scoped file changes]'}\n"
+                        "Successful source excerpts captured from the first child before its edits:\n"
+                        f"{read_context or '[no successful source excerpts captured]'}\n"
+                        "This repair capsule is the complete context needed for the repair. Do not read runner checkpoints, "
+                        "transcripts, or any file outside the disposable workspace. Its aggregate read counts are "
+                        f"{step_read_audit.get('read_count', 0)} reads / {step_read_audit.get('search_count', 0)} searches."
                     )
+                    checkpoint_data = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                    checkpoint_data["repair_capsule"] = {
+                        "validator_failures": validator_failures[:1_600],
+                        "current_scoped_diff": current_diff,
+                        "first_attempt_source_excerpts": read_context,
+                        "source_excerpts_are_pre_edit": True,
+                    }
+                    atomic_json(checkpoint_path, checkpoint_data)
                     allow_noop_handoff = (
                         bool(changed) and checks_passed and path_ok
                         and initial_tool_paths == set(changed)
@@ -1858,7 +2880,8 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                             repair["success"] = False
                             repair["noop_handoff_rejected"] = True
                     repair_validation = run_validators(
-                        workspace, step_validators, timeout=min(30, validator_timeout), deadline=deadline)
+                        workspace, step_validators, timeout=min(30, validator_timeout), deadline=deadline,
+                        env=run_validator_env)
                     repair_checkpoint_path = save_step_checkpoint(
                         run_dir, step, 2, repair, recovery_before, repair_after, repair_changed,
                         repair_scope, read_only_paths or [], read_audit=step_read_audit,
@@ -1874,6 +2897,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                     receipt = repair
                     path_ok = path_ok and repair_scope
                     changed = changed_paths(before_step, repair_after)
+                    change_mode_ok = step_changes_match_mode(changed, authorized_test_paths)
                     step_validation = repair_validation
                     record["handoff"] = {"status": "received" if receipt.get("child_handoff") else "incomplete",
                                           "marker": bool(receipt.get("child_handoff")),
@@ -1890,6 +2914,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                 if receipt["success"] and path_ok and not changed:
                     path_ok = False
                 step_ok = (receipt["success"] and path_ok and bool(changed)
+                           and change_mode_ok
                            and step_read_audit["within_budget"]
                            and bool(step_validation) and all(item["exit"] == 0 for item in step_validation))
                 record["accepted"] = step_ok
@@ -1900,6 +2925,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                     "unverified" if any(item["exit"] == 124 for item in step_validation) else "failed")
                 record["status"] = "verified" if step_ok else "failed"
                 record["changed_files"] = changed
+                record["change_mode_ok"] = change_mode_ok
                 atomic_json(state_file, state)
                 if not step_ok:
                     state.update({"status": "stopped_acceptance_failure", "stop_reason": step["id"]})
@@ -1908,7 +2934,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
             if len(state["steps"]) == len(plan["steps"]) and all(step.get("accepted") for step in state["steps"]):
                 deadline = started + total_timeout
                 final_validation = run_validators(workspace, validators, timeout=validator_timeout,
-                                                  deadline=deadline)
+                                                  deadline=deadline, env=run_validator_env)
                 if time.monotonic() >= deadline and any(item["exit"] == 124 for item in final_validation):
                     state.update({"status": "stopped_total_budget",
                                   "stop_reason": "total task budget exhausted during final validation"})
@@ -1944,13 +2970,14 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
                                            inspection_context={"accepted_step_inspections": previous_inspections},
                                            inspection_limits={"reads": MAX_READ_CALLS_PER_STEP,
                                                               "searches": MAX_SEARCH_CALLS_PER_STEP,
-                                                              "inspections": MAX_INSPECTION_CALLS_PER_STEP})
+                                                              "inspections": MAX_INSPECTION_CALLS_PER_STEP},
+                                           checkpoint_temp_dir=str(run_validator_temp_dir))
                         after_repair = file_hashes(workspace)
                         repair_changed = changed_paths(before_repair, after_repair)
                         repair_scope = set(repair_changed).issubset(set(repair_step["files"]))
                         if repair["success"] and repair_scope and repair_changed:
                             final_validation = run_validators(workspace, validators, timeout=validator_timeout,
-                                                              deadline=deadline)
+                                                              deadline=deadline, env=run_validator_env)
                         repair_attempt.update({"worker": repair, "changed_files": repair_changed,
                                                "path_scope_clean": repair_scope,
                                                "ended_at": datetime.now(timezone.utc).isoformat(),
@@ -2030,6 +3057,8 @@ def main() -> int:
     request = request_spec["request"]
     requirements = request_spec.get("requirements")
     read_only_paths = request_spec.get("read_only_paths", [])
+    test_only_paths = request_spec.get("test_only_paths", [])
+    normalize_test_only_paths(args.workspace, test_only_paths)
     plan_override = load_plan_file(args.plan_file) if args.plan_file else None
     preverified_inspections = (json.loads(args.preverified_inspection_file.read_text(encoding="utf-8"))
                                if args.preverified_inspection_file else None)
@@ -2047,7 +3076,8 @@ def main() -> int:
                          validator_timeout=args.validator_timeout,
                          max_files_per_step=args.max_files_per_step,
                          baseline_validators=baseline_validators, requirements=requirements,
-                         read_only_paths=read_only_paths, plan_override=plan_override,
+                         read_only_paths=read_only_paths, test_only_paths=test_only_paths,
+                         plan_override=plan_override,
                          plan_source=str(args.plan_file.resolve()) if args.plan_file else None,
                          preverified_inspections=preverified_inspections,
                          checkpoint_validators=checkpoint_validators)

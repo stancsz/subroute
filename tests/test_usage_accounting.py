@@ -102,6 +102,36 @@ def test_protocol_translation_classification_uses_framework_dispatch_rules():
     assert accounting.deployment_kind({"model": "openai/gpt-4o-mini", "_skip_responses_api_bridge": True}, "acompletion") == "provider"
 
 
+def test_litellm_internal_search_skips_model_usage_receipt_but_inference_is_accounted(store):
+    from litellm.types.utils import CallTypes
+
+    async def scenario():
+        plugin = accounting.UsageAccounting(store)
+        for call_type in (CallTypes.search, CallTypes.asearch):
+            search_kwargs = {"query": "current weather", "litellm_metadata": {"marker": "preserved"}}
+            result = await plugin.async_pre_call_deployment_hook(search_kwargs, call_type)
+            assert result is search_kwargs
+            assert result == {"query": "current weather", "litellm_metadata": {"marker": "preserved"}}
+            assert accounting.attempt_id(result) is None
+            await plugin.async_post_call_success_deployment_hook(result, {"results": []}, call_type)
+            await plugin.async_post_call_failure_deployment_hook(result, RuntimeError("search failure"), call_type)
+            assert store.rows == {}
+
+        kwargs = {"model": "openai/fixture", "litellm_metadata": {"marker": "preserved"}}
+        await plugin.async_pre_call_deployment_hook(kwargs, "acompletion")
+        ident = accounting.attempt_id(kwargs)
+        assert ident and store.rows[ident]["outcome"] == "pending"
+        await plugin.async_post_call_success_deployment_hook(
+            kwargs,
+            {"usage": {"prompt_tokens": 7, "completion_tokens": 2, "total_tokens": 9}},
+            "acompletion",
+        )
+        assert store.rows[ident]["outcome"] == "complete"
+        assert store.rows[ident]["facts"]["input_tokens"] == 7
+
+    asyncio.run(scenario())
+
+
 def test_caller_metadata_cannot_attribute_a_local_request(store):
     async def scenario():
         plugin = accounting.UsageAccounting(store)
@@ -128,7 +158,8 @@ def test_direct_local_inference_aliases_are_canonical_and_management_is_not_a_re
     asyncio.run(scenario())
 
 
-def test_direct_advisor_compaction_failure_and_cancellation_keep_observed_usage(store, monkeypatch):
+def test_advisor_and_compaction_roles_keep_observed_usage(store, monkeypatch):
+    from types import SimpleNamespace
     from subroute.plugins import advisor_plugin
     async def scenario():
         trace = accounting.Trace(str(uuid.uuid4()), "production", "key-1", "customer-1")
@@ -138,7 +169,17 @@ def test_direct_advisor_compaction_failure_and_cancellation_keep_observed_usage(
             return "advice", Usage(prompt_tokens=7, completion_tokens=2, total_tokens=9)
         monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", complete)
         await advisor_plugin.AdvisorPlugin._invoke_advisor("codex-luna-advisor", [{"role": "user", "content": "private prompt"}], "low")
-        await advisor_plugin.AdvisorPlugin._luna_compaction([{"role": "user", "content": "private prior context"}])
+        compaction_roles = []
+        async def compact(**kwargs):
+            compaction_roles.append(accounting.role_context.get())
+            return SimpleNamespace(
+                choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="briefing"))],
+                usage=Usage(prompt_tokens=5, completion_tokens=2, total_tokens=7),
+            )
+        await advisor_plugin.AdvisorPlugin._mimo_compaction(
+            SimpleNamespace(acompletion=compact), [{"role": "user", "content": "private prior context"}],
+        )
+        assert compaction_roles == ["compaction"]
         async def fail(*args, **kwargs):
             await accounting.observe_direct({"response": {"usage": {"input_tokens": 11, "output_tokens": 3}}})
             raise RuntimeError("private provider error with sk-secret")
@@ -150,9 +191,9 @@ def test_direct_advisor_compaction_failure_and_cancellation_keep_observed_usage(
                 await accounting.observe_direct({"usage": {"input_tokens": 5}})
                 raise asyncio.CancelledError()
         rows = list(store.rows.values())
-        assert [row["role"] for row in rows] == ["advisor", "compaction", "advisor", "advisor"]
-        assert [row["outcome"] for row in rows] == ["complete", "complete", "failed", "cancelled"]
-        assert rows[2]["facts"]["input_tokens"] == 11 and rows[2]["facts"]["usage_complete"] is False
+        assert [row["role"] for row in rows] == ["advisor", "advisor", "advisor"]
+        assert [row["outcome"] for row in rows] == ["complete", "failed", "cancelled"]
+        assert rows[1]["facts"]["input_tokens"] == 11 and rows[1]["facts"]["usage_complete"] is False
         assert rows[3]["facts"] == {"input_tokens": 5, "usage_complete": False}
         assert store.mirrors == [next(ident for ident, row in store.rows.items() if row is rows[0])]
         assert all(row["trace"] == trace for row in rows)

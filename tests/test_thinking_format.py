@@ -392,8 +392,16 @@ def test_native_provider_adapters_through_messages_http(tmp_path, model, native,
     # Real LiteLLM router, HTTP transports and provider adapters. Only the
     # external provider is replaced with a local deterministic wire fixture.
     config = tmp_path / "providers.yaml"
-    config.write_text(f"model_list:\n  - model_name: codex-luna\n    litellm_params: {{model: {model}}}\n")
-    (tmp_path / "state.json").write_text(json.dumps({"active_model": "codex-luna", "mode": "off", "advisor_model": None}))
+    config.write_text(
+        f"model_list:\n  - model_name: codex-luna\n    litellm_params: {{model: {model}}}\n"
+        "  - model_name: codex-gpt-6.1-sol-advisor\n"
+        "    model_info: {selectable: false, advisor_selectable: true}\n"
+        "    litellm_params: {model: codex-advisor/gpt-6.1-sol}\n"
+    )
+    (tmp_path / "state.json").write_text(json.dumps({
+        "active_model": "codex-luna", "mode": "off",
+        "advisor_model": "codex-gpt-6.1-sol-advisor",
+    }))
     control = RoutingControlPlane(config, tmp_path / "state.json")
     control.update("codex-luna", "off")
     plugin = DynamicRoutingPlugin(control)

@@ -163,7 +163,11 @@ def test_default_resolves_to_saved_target_even_when_alias_mode_is_off(tmp_path: 
 
     assert run(DynamicRoutingPlugin(control), data) is data
     assert data["model"] == "desktop"
-    assert data["metadata"]["routing"]["resolved_model"] == "desktop"
+    assert data["metadata"]["routing"] == {
+        "requested_model": "default", "resolved_model": "desktop",
+        "mode": "off", "policy_version": control.snapshot().policy_version,
+    }
+    assert data["metadata"]["gateway_reasoning_effort"] is None
     assert data["metadata"]["gateway_policy"]["active_model"] == "desktop"
 
 
@@ -312,21 +316,17 @@ def test_gpt_6_1_sol_target_is_selectable_and_preserves_effort_after_restart(tmp
     assert "codex-gpt-6.1-sol" not in restarted.advisor_models
 
 
-def test_advisor_is_optional_and_requests_skip_injection(tmp_path: Path):
+def test_advisor_cannot_be_cleared(tmp_path: Path):
     control = make_control_plane(tmp_path)
-    disabled = control.update_advisor(None)
+    original = control.snapshot()
 
-    assert disabled.advisor_model is None
-    assert json.loads(control.state_path.read_text(encoding="utf-8"))["advisor_model"] is None
+    with pytest.raises(ValueError, match="an advisor model must remain selected"):
+        control.update_advisor(None)
 
-    router = DynamicRoutingPlugin(control)
-    advisor = AdvisorPlugin()
-    data = {"model": "minimax", "messages": [{"role": "user", "content": "help"}]}
-    asyncio.run(router.async_pre_call_hook({}, None, data, "anthropic_messages"))
-    asyncio.run(advisor.async_pre_call_hook({}, None, data, "anthropic_messages"))
-
-    assert data["metadata"]["gateway_policy"]["advisor_model"] is None
-    assert "tools" not in data
+    assert control.snapshot() == original
+    assert json.loads(control.state_path.read_text(encoding="utf-8"))["advisor_model"] == (
+        original.advisor_model
+    )
 
 
 def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
@@ -454,8 +454,8 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         json={"advisor_model": None},
         headers={"origin": "http://testserver"},
     )
-    assert no_advisor.status_code == 200
-    assert no_advisor.json()["advisor_model"] is None
+    assert no_advisor.status_code == 422
+    assert control.snapshot().advisor_model == "codex-luna-advisor"
 
 
 def test_control_api_rejects_cross_origin_non_json_and_unknown_models(

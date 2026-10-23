@@ -135,7 +135,7 @@ def test_small_request_retains_exact_message_objects_and_output_limit(monkeypatc
 
 
 @pytest.mark.parametrize("changes", [
-    {"model": "codex-luna"}, {"model": "qwen3.8-27b"}, {"model": "auto-gemini-subscription"},
+    {"model": "codex-luna"}, {"model": "qwen3.8-27b"}, {"model": "openrouter"},
 ])
 def test_explicit_routes_are_not_compacted(monkeypatch, changes):
     assert run(monkeypatch, {"model": "auto", **changes}) is None
