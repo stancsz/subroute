@@ -6,6 +6,8 @@ Write in a natural tone. Do not use em dashes.
 
 Avoid bloat. Choose the smallest clear design that satisfies the current requirements in GOAL.md. Maintainability means clear ownership, predictable behavior, and few moving parts, not the lowest line count. Do not remove required features merely to make the code smaller.
 
+Favor simplicity and robustness: less code that works reliably is better, but simplicity does not mean minimizing line count or removing required behavior.
+
 Docker Compose is the intended deployment model. Keep it simple and maintainable. Container count alone is not evidence of bloat; preserve the gateway, PostgreSQL, and staging roles where they serve current requirements. Do not replace Docker with host processes as a debloating measure.
 
 Prioritize debloating by fragility and impact: duplicated protocol implementations, silent request mutations, competing policy owners, shared mutable state, unbounded provider work, and dependency drift come before cosmetic cleanup. For each proposed simplification, identify the failure mechanism it removes and the behavior it must preserve. Prefer small changes with targeted regression evidence over broad rewrites. Extra validation or cleanup code is justified when it prevents a concrete failure.
