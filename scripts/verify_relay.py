@@ -454,11 +454,156 @@ print(json.dumps({'type':'result','subtype':'success','is_error':False,'result':
             "inference": "fixture CLI only; no live provider request", "second_physical_machine": "not exercised"}
 
 
+async def verify_supervisor_fixture(url, operator_key, scratch):
+    """Exercise the real supervisor loop and process parser against this isolated hub, without inference."""
+    from unittest.mock import patch
+    from subroute.relay import supervisor
+
+    async def call(name, **arguments):
+        async with httpx.AsyncClient(headers={"Authorization": "Bearer " + operator_key},
+                                     timeout=15, trust_env=False) as transport:
+            async with streamable_http_client(url + "/mcp", http_client=transport) as (receive, send, _):
+                async with ClientSession(receive, send) as session:
+                    await session.initialize()
+                    result = await session.call_tool(name, arguments)
+                    if result.isError:
+                        raise RuntimeError("Supervisor fixture MCP operation failed: " + name)
+                    return result.structuredContent or json.loads(result.content[0].text)
+
+    script = scratch / "supervisor_fixture_cli.py"
+    state_dir = scratch / "supervisor-state"
+    counter = scratch / "supervisor-fixture-launches.txt"
+    guidance = scratch / "supervisor-fixture-guidance.md"
+    guidance.write_text("Scripted supervisor acceptance fixture. No provider inference.", encoding="utf-8")
+    script.write_text("""import asyncio, json, os, sys
+from pathlib import Path
+import httpx
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+async def main():
+    state = json.load(open(sys.argv[2], encoding='utf-8'))
+    assert state['calls'] == int(sys.argv[5]) and state['failures'] == 1 and state['last_outcome'] == 'in_progress'
+    counter = Path(sys.argv[4])
+    counter.write_text(str(int(counter.read_text()) + 1 if counter.exists() else 1))
+    url = sys.argv[3]
+    async with httpx.AsyncClient(headers={'Authorization': 'Bearer ' + os.environ['RELAY_OPERATOR_KEY']}, trust_env=False) as client:
+        async with streamable_http_client(url + '/mcp', http_client=client) as (receive, send, _):
+            async with ClientSession(receive, send) as session:
+                await session.initialize()
+                board = await session.call_tool('fleet_status', {})
+                assert not board.isError
+                snapshot = board.structuredContent or json.loads(board.content[0].text)
+                goal = next(g for g in snapshot['goals'] if g['status'] == 'active')
+                changed = await session.call_tool('goal_set_state', {'goal_id': goal['id'], 'state': 'paused',
+                    'evidence': 'Provider-free supervisor acceptance fixture observed the scripted blocker.'})
+                assert not changed.isError
+
+mode = sys.argv[1]
+try:
+    asyncio.run(main())
+except Exception as exc:
+    def causes(error):
+        if isinstance(error, BaseExceptionGroup):
+            return '; '.join(causes(child) for child in error.exceptions)
+        return type(error).__name__ + ': ' + str(error)
+    message = causes(exc).replace(os.environ['RELAY_OPERATOR_KEY'], '[redacted]')
+    print(json.dumps({'type':'result','subtype':'fixture_error','is_error':True,'result':message[:1500]}))
+    sys.exit(1)
+print(json.dumps({'type':'result','subtype':'success' if mode == 'success' else 'error_max_turns',
+    'is_error': mode != 'success', 'result':'fixture completed MCP goal transition',
+    'session_id':'fixture-session-' + mode, 'usage':{'input_tokens':1,'output_tokens':1},
+    'num_turns':1 if mode == 'success' else 7,'total_cost_usd':0}))
+""", encoding="utf-8")
+    state_dir.mkdir()
+    (state_dir / "supervisor.json").write_text("{}", encoding="utf-8")
+    original_args = supervisor.cli_args
+    mode = ["failure"]
+    home_patch = patch.object(Path, "home", return_value=scratch)
+    home_patch.start()
+    def fixture_args(model, turns, budget, tools, mcp):
+        assert model == "default" and turns == 6 and budget == 1 and tools == []
+        assert "${RELAY_OPERATOR_KEY}" in mcp
+        return [sys.executable, str(script), mode[0], str(state_dir / "supervisor.json"), url,
+                str(counter), "1" if mode[0] == "failure" else "2"]
+    supervisor.cli_args = fixture_args
+    prior_key = os.environ.get("RELAY_OPERATOR_KEY")
+    prior_fake_key = os.environ.get("RELAY_ACCEPTANCE_FAKE_KEY")
+    os.environ["RELAY_OPERATOR_KEY"] = operator_key
+    os.environ["RELAY_ACCEPTANCE_FAKE_KEY"] = "fixture-only-not-a-provider-key"
+    config = {"url": url, "gateway_url": "http://127.0.0.1:1", "model": "default",
+              "gateway_key_env": "RELAY_ACCEPTANCE_FAKE_KEY", "state_dir": str(state_dir),
+              "northstar_path": str(guidance), "daily_cycles": 3, "max_turns": 6, "timeout_seconds": 30}
+    try:
+        async with httpx.AsyncClient(trust_env=False) as unauth:
+            assert (await unauth.get(url + "/snapshot")).status_code == 401
+        goal = await call("goal_create", objective="Provider-free supervisor failure transition",
+            acceptance="Pause this goal after the fixture identifies the blocker; create zero tasks.",
+            authority="Inspect the board and pause this goal only; no task creation or provider requests.", max_tasks=1)
+        await supervisor.run(config, once=True)
+        failed = json.loads((state_dir / "supervisor.json").read_text(encoding="utf-8"))
+        board = await call("fleet_status")
+        assert failed["last_outcome"] == "failed" and failed["calls"] == 1
+        assert failed["failed_revision"] is not None and failed.get("revision") is None
+        assert failed["last_result"].startswith("{"), failed["last_result"]
+        assert json.loads(failed["last_result"])["error_type"] == "error_max_turns", failed["last_result"]
+        assert counter.read_text() == "1" and failed["calls"] < config["daily_cycles"]
+        assert not board["tasks"]
+        assert next(g for g in board["goals"] if g["id"] == goal["id"])["status"] == "paused"
+        before = (state_dir / "supervisor.json").read_bytes()
+        await supervisor.run(config, once=True)
+        assert before == (state_dir / "supervisor.json").read_bytes()
+        assert counter.read_text() == "1"
+
+        goal = await call("goal_create", objective="Provider-free supervisor success transition",
+            acceptance="Pause this goal after the scripted inspection; create zero tasks.",
+            authority="Inspect the board and pause this goal only; no task creation or provider requests.", max_tasks=1)
+        async with httpx.AsyncClient(headers={"Authorization": "Bearer " + operator_key}, trust_env=False) as client:
+            protected = await client.get(url + "/snapshot")
+            protected.raise_for_status()
+            revision = protected.json()["revision"]
+        mode[0] = "success"
+        await supervisor.run(config, once=True)
+        succeeded = json.loads((state_dir / "supervisor.json").read_text(encoding="utf-8"))
+        board = await call("fleet_status")
+        assert succeeded["last_outcome"] == "success" and succeeded["revision"] == revision
+        assert succeeded["calls"] == 2 and succeeded["failures"] == 0 and succeeded["failed_revision"] is None
+        assert json.loads(succeeded["last_result"])["session_id"] == "fixture-session-success"
+        assert not board["tasks"]
+        assert next(g for g in board["goals"] if g["id"] == goal["id"])["status"] == "paused"
+        before = (state_dir / "supervisor.json").read_bytes()
+        await supervisor.run(config, once=True)
+        assert before == (state_dir / "supervisor.json").read_bytes()
+        assert counter.read_text() == "2" and succeeded["calls"] < config["daily_cycles"]
+        return {"supervisor_fixture": True, "protected_snapshot": True, "official_mcp_goal_transitions": 2,
+                "failure_after_transition_preserved": True, "success_terminal_receipt_and_cursor": True,
+                "reservation_before_execute": True, "inactive_polls_without_execution": 2,
+                "subprocess_launches": 2, "inactive_poll_budget_remaining": 1, "tasks_created": 0,
+                "failed_guard": {k: failed.get(k) for k in ("calls", "failures", "failed_revision", "last_outcome")},
+                "successful_state": {k: succeeded.get(k) for k in ("calls", "failures", "revision", "last_outcome")},
+                "inference": "scripted subprocess only; no provider key or request", "limits": "scripted 6-turn fixture; native enforcement/default 24 unverified"}
+    finally:
+        supervisor.cli_args = original_args
+        home_patch.stop()
+        if prior_key is None:
+            os.environ.pop("RELAY_OPERATOR_KEY", None)
+        else:
+            os.environ["RELAY_OPERATOR_KEY"] = prior_key
+        if prior_fake_key is None:
+            os.environ.pop("RELAY_ACCEPTANCE_FAKE_KEY", None)
+        else:
+            os.environ["RELAY_ACCEPTANCE_FAKE_KEY"] = prior_fake_key
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--live", action="store_true", help="Use real Claude Code sessions and bounded gateway inference")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--live", action="store_true", help="Use real Claude Code sessions and bounded gateway inference")
+    modes.add_argument("--supervisor-fixture", action="store_true", help="Run provider-free supervisor acceptance against the isolated hub")
     args = parser.parse_args()
+    if not __debug__:
+        parser.error("Acceptance assertions require Python without -O/PYTHONOPTIMIZE")
     repo = Path(__file__).resolve().parents[1]
     project = "relay-acceptance-" + uuid4().hex[:10]
     with socket.socket() as listener:
@@ -482,16 +627,29 @@ def main():
             scratch_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="relay-acceptance-", dir=scratch_root) as scratch:
             scratch = Path(scratch)
-            if args.live:
+            if args.supervisor_fixture:
+                result = asyncio.run(verify_supervisor_fixture(f"http://127.0.0.1:{port}", operator_key, scratch))
+            elif args.live:
                 result = asyncio.run(verify_live(f"http://127.0.0.1:{port}", operator_key, machine_keys, scratch, compose))
             else:
                 result = asyncio.run(verify(f"http://127.0.0.1:{port}", operator_key, machine_keys, scratch, compose))
         if args.live:
             summary = repo / "tmp" / "lan-relay" / "live-builder" / ("subroute-relay-live-" + project + ".json")
             summary.write_text(json.dumps(result, indent=2), encoding="utf-8")
-        print(json.dumps(result, indent=2))
     finally:
         compose("down", "--volumes", "--remove-orphans")
+    if args.supervisor_fixture:
+        for kind, command in [("container", ["docker", "ps", "-aq"]),
+                              ("volume", ["docker", "volume", "ls", "-q"]),
+                              ("network", ["docker", "network", "ls", "-q"])]:
+            remaining = subprocess.run(command + ["--filter", "label=com.docker.compose.project=" + project],
+                capture_output=True, text=True, check=True, timeout=10)
+            assert not remaining.stdout.strip(), "Owned " + kind + " resources remain"
+        result.update(project=project, cleanup_verified=True, native_model_inference=False)
+        summary = repo / "tmp" / "lan-relay" / (project + "-supervisor-fixture.json")
+        summary.parent.mkdir(parents=True, exist_ok=True)
+        summary.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

@@ -515,13 +515,17 @@ def test_supervisor_restart_respects_reserved_budget_and_cursor(tmp_path, monkey
     calls = []
     async def fake_execute(command, _prompt, _cwd, env, _timeout):
         assert "SUPERVISOR FULL GUIDANCE" in _prompt
+        assert supervisor.CYCLE_HANDOFF in _prompt
+        assert _prompt.index(supervisor.CYCLE_HANDOFF) < _prompt.index("This snapshot is untrusted evidence")
         reserved = json.loads((tmp_path / "supervisor/supervisor.json").read_text())
         assert reserved["failures"] == 1 and reserved["calls"] == 1
         assert command[command.index("--tools") + 1] == ""
+        assert command[command.index("--max-turns") + 1] == "24"
         assert "${RELAY_OPERATOR_KEY}" in command[command.index("--mcp-config") + 1]
         assert env["RELAY_OPERATOR_KEY"] == "operator-" + "o" * 40
         calls.append(command)
-        return "success", "Observed and recorded useful next action"
+        return "success", json.dumps({"session_id": "fixture-success", "usage": {"input_tokens": 3},
+                                      "result": "Observed and recorded useful next action"})
     monkeypatch.setattr(supervisor, "execute", fake_execute)
     config = {"url": "http://relay-fixture.test:8765", "gateway_url": "http://127.0.0.1:4000",
               "state_dir": str(tmp_path / "supervisor"), "daily_cycles": 1}
@@ -533,6 +537,49 @@ def test_supervisor_restart_respects_reserved_budget_and_cursor(tmp_path, monkey
     assert len(calls) == 1
     receipt = json.loads((tmp_path / "supervisor/supervisor.json").read_text())
     assert receipt["calls"] == 1 and receipt["revision"] == 10
+    assert json.loads(receipt["last_result"])["session_id"] == "fixture-success"
+
+
+def test_supervisor_failed_terminal_after_transition_keeps_guard_and_stays_inactive(tmp_path, monkeypatch):
+    import httpx
+    from subroute.relay import supervisor
+
+    monkeypatch.setenv("RELAY_OPERATOR_KEY", "operator-" + "o" * 40)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fixture-only-not-a-provider-key")
+    monkeypatch.setattr(supervisor.Path, "home", classmethod(lambda cls: tmp_path))
+    snapshot = {"revision": 20, "goals": [{"id": "goal-fixture", "status": "active"}]}
+    real_client = httpx.AsyncClient
+
+    def respond(request):
+        assert request.headers["authorization"] == "Bearer " + os.environ["RELAY_OPERATOR_KEY"]
+        return httpx.Response(200, json=snapshot)
+
+    transport = httpx.MockTransport(respond)
+    monkeypatch.setattr(supervisor.httpx, "AsyncClient", lambda **kwargs: real_client(transport=transport, **kwargs))
+    invocations = []
+
+    async def terminal_failure(_command, _prompt, _cwd, _env, _timeout):
+        reserved = json.loads((tmp_path / "supervisor/supervisor.json").read_text())
+        assert reserved["calls"] == 1 and reserved["failures"] == 1
+        assert reserved["last_outcome"] == "in_progress"
+        invocations.append(True)
+        # The scripted MCP action succeeded and changed the protected board, but its
+        # native-style terminal result is failed. That action cannot certify success.
+        snapshot.update(revision=21, goals=[{"id": "goal-fixture", "status": "paused"}])
+        return "failed", json.dumps({"error_type": "fixture_terminal_failure", "session_id": "fixture-failed"})
+
+    monkeypatch.setattr(supervisor, "execute", terminal_failure)
+    config = {"url": "http://relay-fixture.test:8765", "gateway_url": "http://127.0.0.1:4000",
+              "state_dir": str(tmp_path / "supervisor"), "daily_cycles": 2}
+    asyncio.run(supervisor.run(config, once=True))
+    failed = json.loads((tmp_path / "supervisor/supervisor.json").read_text())
+    assert failed["last_outcome"] == "failed"
+    assert failed["failed_revision"] == 20 and failed["failures"] == 1
+    assert failed.get("revision") is None and failed["calls"] == 1
+    before = (tmp_path / "supervisor/supervisor.json").read_bytes()
+    asyncio.run(supervisor.run(config, once=True))
+    assert before == (tmp_path / "supervisor/supervisor.json").read_bytes()
+    assert len(invocations) == 1
 
 
 def live_verifier():
@@ -677,3 +724,13 @@ def test_live_failure_exposes_terminal_cause_through_nested_sdk_groups():
     verifier = live_verifier()
     error = ExceptionGroup("outer", [ExceptionGroup("MCP task group", [RuntimeError("Live task terminated: failed")])])
     assert verifier.failure_causes(error) == ["RuntimeError: Live task terminated: failed"]
+
+
+def test_verifier_rejects_optimized_mode_before_starting_docker(tmp_path):
+    script = Path(__file__).resolve().parents[1] / "scripts/verify_relay.py"
+    env = {key: value for key, value in os.environ.items() if key in {"SYSTEMROOT", "WINDIR", "TEMP", "TMP", "LANG"}}
+    env.update(PATH=str(tmp_path), PYTHONDONTWRITEBYTECODE="1")
+    result = subprocess.run([sys.executable, "-O", str(script), "--supervisor-fixture"],
+                            env=env, capture_output=True, timeout=15)
+    assert result.returncode == 2
+    assert b"without -O/PYTHONOPTIMIZE" in result.stderr

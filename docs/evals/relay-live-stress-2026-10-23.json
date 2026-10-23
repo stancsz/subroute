@@ -428,5 +428,126 @@
       "source": "direct native trace, independently identified"
     },
     "client_cost_scope": "Four follow-up trial sessions only; excludes management/setup/independent review, not a billing total or savings claim."
-  }
+  },
+  "headless_supervisor_followup": {
+    "prior_native_probe": {
+      "project": "relay-supervisor-check-852a3541",
+      "accepted": false,
+      "supervisor_outcome": "failed",
+      "goal_status": "paused",
+      "tasks": 0,
+      "reserved_daily_calls": 1,
+      "error_type": "error_max_turns"
+    },
+    "condition": "headless-only finite-cycle/checkpoint handoff suffix; shared interactive contract and all execution/state limits unchanged",
+    "provider_free": {
+      "supervisor_fixture": true,
+      "protected_snapshot": true,
+      "official_mcp_goal_transitions": 2,
+      "failure_after_transition_preserved": true,
+      "success_terminal_receipt_and_cursor": true,
+      "reservation_before_execute": true,
+      "inactive_polls_without_execution": 2,
+      "subprocess_launches": 2,
+      "inactive_poll_budget_remaining": 1,
+      "tasks_created": 0,
+      "failed_guard": {
+        "calls": 1,
+        "failures": 1,
+        "failed_revision": 1,
+        "last_outcome": "failed"
+      },
+      "successful_state": {
+        "calls": 2,
+        "failures": 0,
+        "revision": 3,
+        "last_outcome": "success"
+      },
+      "inference": "scripted subprocess only; no provider key or request",
+      "limits": "scripted 6-turn fixture; native enforcement/default 24 unverified",
+      "project": "relay-acceptance-645814c575",
+      "cleanup_verified": true,
+      "native_model_inference": false
+    },
+    "native": {
+      "supervisor_outcome": "success",
+      "goal_status": "paused",
+      "tasks": 0,
+      "reserved_daily_calls": 1,
+      "inactive_second_poll_no_inference": true,
+      "session_id": "d37f2e8a-051d-4c9b-9ab4-47a94acad7bd",
+      "usage": {
+        "input_tokens": 13788,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 33792,
+        "output_tokens": 1618,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [],
+        "speed": "standard"
+      },
+      "total_cost_usd_estimate": 0.126286,
+      "accepted": true,
+      "physical_devices": 1,
+      "sustained": false,
+      "error_type": null,
+      "num_turns": 5,
+      "cycle_elapsed_seconds": 15.67,
+      "execute_invocations": 1,
+      "reservation_before_execute": [
+        {
+          "calls": 1,
+          "failures": 1,
+          "last_outcome": "in_progress"
+        }
+      ],
+      "cursor": 1,
+      "failure_guard": 0,
+      "configured_limits": {
+        "max_turns": 6,
+        "timeout_seconds": 90,
+        "daily_cycles": 1,
+        "max_cost_usd_estimate": 1
+      },
+      "supervisor_source_sha256": "3e7aa12f93a0e4b8dd9557b3c60d596433366f32cbf4c60a05dd452804f1cd32",
+      "cleanup_verified": true
+    },
+    "audit": {
+      "cycle_contract_in_native_prompt": true,
+      "mcp_tool_names": [
+        "mcp__relay__fleet_status",
+        "mcp__relay__events_list",
+        "mcp__relay__events_list",
+        "mcp__relay__goal_set_state"
+      ],
+      "goal_state_writes": 1,
+      "post_pause_tool_calls": [],
+      "goal_uuid_task_get_calls": 0,
+      "distinct_assistant_response_ids": 4,
+      "final_handoff_stored_in_cycle_state": true,
+      "reservation_before_execute_verified": true,
+      "cleanup_rechecked_by_parent": true
+    },
+    "limits_note": "One native probe used unchanged six-turn/90-second/daily-one/USD1 estimated limits; default 24-turn native operation, productive multi-cycle orchestration, physical-device and sustained acceptance remain unverified. Inactive polls with unspent budget are proved by the scripted fixture; native second poll had both an inactive goal and spent daily-one budget.",
+    "independent_evidence_recheck": {
+      "code_and_provider_free": "READY; 55 tests independently passed",
+      "native_cycle": "UNVERIFIED by independent reviewer: sandbox denied private state/transcript access",
+      "public_receipt": "accessible; records parent-observed native success",
+      "private_audit": "parent observed only; no copied private transcript, ACL changes or paid retry used to bypass the denial",
+      "limits": "default-24 native, productive multi-cycle headless orchestration, physical-device and sustained acceptance remain unverified"
+    },
+    "unit_tests": 55
+  },
+  "current_test_scope": "Owner instruction: same machine only until further instructions; physical-device acceptance is deferred, not waived or blocked on another access request."
 }
