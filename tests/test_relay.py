@@ -399,7 +399,8 @@ def test_worker_does_not_inherit_operator_or_expert_credentials(tmp_path, monkey
 
 
 @pytest.mark.parametrize("explicit_guidance", [False, True])
-def test_runner_executes_bounded_assignment_with_optional_local_guidance(tmp_path, monkeypatch, explicit_guidance):
+@pytest.mark.parametrize("kind", ["work", "review"])
+def test_runner_executes_bounded_assignment_with_optional_local_guidance(tmp_path, monkeypatch, explicit_guidance, kind):
     import httpx
 
     workspace = tmp_path / "workspace"
@@ -412,10 +413,12 @@ def test_runner_executes_bounded_assignment_with_optional_local_guidance(tmp_pat
     monkeypatch.setenv("ANTHROPIC_API_KEY", "inference-fixture")
 
     task = {"id": "task-1", "attempt": 1, "token": "t" * 40, "workspace": "project",
-            "kind": "build", "max_turns": 4, "timeout_seconds": 30,
-            "goal": {"objective": "Fix the bounded bug", "acceptance": "Regression test passes",
+            "kind": kind, "max_turns": 4, "timeout_seconds": 30,
+            "goal": {"objective": "Complete the overall relay evaluation",
+                     "acceptance": "Fleet acceptance requires two workspaces, four receipts, independent reviews, and parent checks.",
                      "authority": "Local edits and tests only"},
-            "instruction": "Implement and test the fix", "reviews_task": None}
+            "instruction": "Inspect the local fixture and run its targeted regression; report findings without editing." if kind == "review" else "Change the local fixture and run its targeted regression; report local files and check results.",
+            "reviews_task": "original-work" if kind == "review" else None}
     posted = []
 
     def respond(request):
@@ -457,8 +460,22 @@ def test_runner_executes_bounded_assignment_with_optional_local_guidance(tmp_pat
     assert len(captured) == 1
     prompt = captured[0]
     assert "The coordinator owns Northstar policy, separate review, and continuation" in prompt
-    assert "Fix the bounded bug" in prompt and "Regression test passes" in prompt
-    assert "Implement and test the fix" in prompt
+    assert "goal objective and acceptance below provide coordinator-owned context for alignment" in prompt
+    assert "your deliverable is the bounded assignment and its local checks" in prompt
+    assert "After the assigned checks, return your final reply immediately" in prompt
+    assert "The coordinator owns fleet-level acceptance and receipt/checkpoint persistence" in prompt
+    assert "unless the bounded assignment explicitly requests it within local authority" in prompt
+    assert ("Independent review only." in prompt) is (kind == "review")
+    marker = '\n{"objective":'
+    wrapper = json.loads(prompt[prompt.rfind(marker) + 1:])
+    assert wrapper == {"objective": task["goal"]["objective"],
+                       "acceptance": task["goal"]["acceptance"],
+                       "authority": task["goal"]["authority"],
+                       "assignment": task["instruction"], "reviews_task": task["reviews_task"]}
+    assert "two workspaces, four receipts, independent reviews, and parent checks" not in prompt[:prompt.rfind(marker)]
+    assert task["instruction"] in prompt
+    assert "assigned goal below is this session's active outcome" not in prompt
+    assert "Your terminal handoff is this task's Northstar checkpoint" not in prompt
     assert ("LOCAL FIXTURE GUIDANCE" in prompt) is explicit_guidance
     assert "Central coordinator of the six-skill" not in prompt
     assert len(posted) == 1

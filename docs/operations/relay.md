@@ -22,7 +22,7 @@ flowchart LR
 
 ## What it owns
 
-The hub owns goals, delegated authority, tasks, attempts, deadlines, lifecycle events and acceptance records. A runner owns its machine's workspace aliases, Claude installation, permitted tools, inference credentials and local execution caps. LiteLLM continues to own inference protocols, routing and provider fallbacks. Relay does not change the saved routing desk or gateway Compose stack.
+The hub owns goals, delegated authority, tasks, attempts, deadlines, lifecycle events and acceptance records. A leaf receives goal objective/acceptance as coordinator-owned alignment context; its deliverable is the bounded assignment and local checks. Its final reply is the handoff, and the coordinator persists receipts/checkpoints and verifies fleet acceptance. Producing a handoff does not require discovering Relay/Northstar state; an explicit state-inspection assignment still follows local authority. A runner owns its machine's workspace aliases, Claude installation, permitted tools, inference credentials and local execution caps. LiteLLM continues to own inference protocols, routing and provider fallbacks. Relay does not change the saved routing desk or gateway Compose stack.
 
 The current gateway has no durable multi-machine job leases or workspace execution lifecycle. MCP supplies the tool transport, not a scheduler. These gaps justify one optional service and one private SQLite volume. The service reuses the already-used MCP SDK, HTTPX and Uvicorn rather than adding a broker or orchestration framework. SQLite is for a small LAN installation with one coordinator process, not an HA cluster. Keep one Uvicorn worker; stop the service before copying its database for backup, or use SQLite's online backup API.
 
