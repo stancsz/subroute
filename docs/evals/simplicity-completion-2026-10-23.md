@@ -39,3 +39,5 @@ The independent reviews are retained in this repository: [native hook discovery]
 ## Skill learning
 
 Direct method parity does not prove a framework will discover inherited hooks. After this demonstrated gap, verify the installed framework's discovery and actual HTTP path; preserve the failing candidate and use one concrete binding with a retirement condition. For CLI answers, prefer existing native structured output over cleaning up provider prose. These methods apply to the pinned runtime and observed boundaries; they do not establish universal compatibility.
+
+Scoped implementation published as `20995ff3b08914bb365a6b4a139186d59be0ebe7`. [Independent final audit and fresh remote verification](simplicity-final-audit-2026-10-23.md) passed; GOAL records completed source/staging acceptance. Production remains unchanged.

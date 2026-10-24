@@ -1,6 +1,6 @@
 # Subroute: simpler code, fewer failure paths, cooperative Sift
 
-Status: active
+Status: complete for scoped source and staging/private-expert delivery; production promotion excluded
 Owner: repository owner; execution and evidence maintained by the working agent
 Set: 2026-10-23
 
@@ -41,12 +41,12 @@ LiteLLM owns the supported tool orchestration. Normal gateway ports 4000 and 400
 - [x] Measure before/after nonblank, noncomment production-source lines consistently, with explicit file scope and per-module totals. Report tests/docs separately. Deliver a net production-source reduction across the affected maintained code; moving, vendoring or generating the same code elsewhere does not count as removal. No arbitrary percentage quota or code golf.
 - [x] Remove duplicated decisions or failure-prone paths, with clear ownership and a simpler normal request flow. Each delivered slice identifies its requirement, existing mechanism, failure mechanism removed, behavior preserved and verification. Smaller files alone are insufficient.
 - [x] Remove normal-target Sift callbacks, compaction-specific pre-counting, target-budget recovery and long-history instruction injection. Keep required provider-boundary translation and validation. Normal routing must not execute Sift, consult an Advisor automatically, or inject behavioral guidance.
-- [ ] Keep Sift confined to a private copy of explicitly chosen Advisor input at experts port 4040, with one owner for its budget, bounded CPU admission, audit and failure handling. Advisor selection or compaction must never modify the original target request. No new gateway-managed tool loop, framework, registry or hidden provider work.
-- [ ] Cover Chat Completions, Anthropic Messages and Responses where supported: normal content/tool/output-limit preservation, native admission at and beyond provider capacity, normal dispatch independent of Sift availability, and no hidden additional calls. Test Advisor-only compaction success, unsupported/irreducible/busy/error outcomes, truthful audit, cancellation and terminal accounting at that boundary. Document exclusions.
-- [ ] Align client context metadata, launch settings and documentation with actual selected-provider capacity or explicit client-side compaction. Retire normal-path virtual 4M intake/32K optimization promises. Oversized normal requests must receive normal provider/LiteLLM admission behavior; do not silently shorten them or fabricate completion.
-- [ ] Maintain one authoritative deployed Sift version with explicit, reviewed gateway patch provenance and a repeatable comparison against its upstream pin. Verify relevant standalone and gateway checks before any replacement; never blindly substitute upstream main.
-- [ ] Pass affected regression checks before/after structural changes and obtain independent source and behavioral review. Distinguish existing baseline failures from regressions. Verify affected success/failure paths end to end in staging before any production promotion; unit tests and readiness alone do not establish live compatibility.
-- [ ] Reconcile README/runtime behavior and record reduction, independent review, actual validation, deployment state and remaining limitations here. Mark done only when every criterion has evidence.
+- [x] Keep Sift confined to a private copy of explicitly chosen Advisor input at experts port 4040, with one owner for its budget, bounded CPU admission, audit and failure handling. Advisor selection or compaction must never modify the original target request. No new gateway-managed tool loop, framework, registry or hidden provider work.
+- [x] Cover Chat Completions, Anthropic Messages and Responses where supported: normal content/tool/output-limit preservation, native admission at and beyond provider capacity, normal dispatch independent of Sift availability, and no hidden additional calls. Test Advisor-only compaction success, unsupported/irreducible/busy/error outcomes, truthful audit, cancellation and terminal accounting at that boundary. Document exclusions.
+- [x] Align client context metadata, launch settings and documentation with actual selected-provider capacity or explicit client-side compaction. Retire normal-path virtual 4M intake/32K optimization promises. Oversized normal requests must receive normal provider/LiteLLM admission behavior; do not silently shorten them or fabricate completion.
+- [x] Maintain one authoritative deployed Sift version with explicit, reviewed gateway patch provenance and a repeatable comparison against its upstream pin. Verify relevant standalone and gateway checks before any replacement; never blindly substitute upstream main.
+- [x] Pass affected regression checks before/after structural changes and obtain independent source and behavioral review. Distinguish existing baseline failures from regressions. Verify affected success/failure paths end to end in staging before any production promotion; unit tests and readiness alone do not establish live compatibility.
+- [x] Reconcile README/runtime behavior and record reduction, independent review, actual validation, deployment state and remaining limitations here. Mark done only when every criterion has evidence.
 
 ## Constraints and invariants
 
@@ -67,7 +67,7 @@ LiteLLM owns the supported tool orchestration. Normal gateway ports 4000 and 400
 
 | Scope | Verified state | Remaining limit |
 | --- | --- | --- |
-| Published source | `53681a7` and `70ee280` pushed and independently checked. Current callback/plain-answer follow-up is reviewed and awaiting publication. [Current report and portable receipts](docs/evals/simplicity-completion-2026-10-23.md). | Verify the next commit against the remote branch before crediting publication. |
+| Published source | `53681a7` and `70ee280` pushed and independently checked. Callback/plain-answer follow-up `20995ff3b08914bb365a6b4a139186d59be0ebe7` is pushed and independently verified. [Current report and portable receipts](docs/evals/simplicity-completion-2026-10-23.md). | Remote branch and local HEAD independently matched; scoped checkout was clean. Closing documentation is recorded separately. |
 | Reduction and regressions | Current selected source: 1,641 fewer maintained lines over 21 explicit paths; 989 non-live passes, two environmental skips, 35 live deselections; five desktop checks previously passed. | Counts apply to declared source scope and checked snapshots, not a repository-wide reduction or all-provider guarantee. |
 | Normal protocols | Native HTTP fixtures preserve content/tools/limits, reject native capacity overflow and work without Sift. Short real Chat/Responses and reviewed Messages completion passed. | No all-provider or broad benchmark claim. |
 | Private experts | Nine aliases have 32,000 input policy and offline real-counter/private-copy proof. Real Codex passed; final same-payload Gemini acceptance passed exact answer, trusted headers and reported input 17,075. | Earlier failed harness and intermediate missing-header result remain failed. Selected-route evidence is not universal near-limit compatibility. |
@@ -77,7 +77,4 @@ LiteLLM owns the supported tool orchestration. Normal gateway ports 4000 and 400
 | Sift provenance | Current pinned comparison: three patched files and one identical file against `e8dc791ba76d99012a3cd43e6114c01faedeeb6a`. No upstream replacement or fresh standalone test claim. | Standalone parity is required before any future replacement. |
 | Existing ingress bounds | Independent before/after review confirms retained native context/media/bridge/accounting bounds. The old Sift raw limit measured parsed tokens, not HTTP bytes. | No generic pre-parse public body-byte cap was configured in either inspected baseline; this pre-existing debt is recorded in TECH_DEBT.md. |
 
-Next actions, in order:
-
-1. Independently reconcile this final metadata package against the unchanged acceptance criteria, current source, actual runtime receipts and preserved failures.
-2. Commit and push reviewed changes, verify the remote revision, and record the requirement-by-requirement verdict before closing the goal. Production promotion remains separate from source publication and requires a concrete, separately authorized operational step.
+Closure: independent [requirement-by-requirement audit and publication verification](docs/evals/simplicity-final-audit-2026-10-23.md) support all ten criteria within this source/staging scope. The implementation is published as `20995ff`; this final documentation records acceptance without claiming production activation. No required implementation or staging work remains. Production promotion, exact selected-Git-image deployment and the separately recorded ingress hardening remain outside this completed delivery.

@@ -35,3 +35,19 @@ Production remains the older image/lifecycle with host mounts; its loaded new be
 The generic pre-parse HTTP byte cap was absent from the inspected baseline and current configuration. The independent ingress challenge establishes that the removed parsed-token Sift limit was not such a cap; retained endpoint/media/context bounds and this pre-existing debt are documented. This does not establish a regression requiring new middleware or an entitlement bypass.
 
 Next required action: publish only the reviewed scoped implementation and evidence, preserve unrelated work, verify the remote branch SHA, and record that publication receipt before marking the remaining criteria/goal complete. Reopen only for a concrete changed-source mismatch, publication failure or new behavioral evidence.
+
+## Independent implementation publication verification
+
+# Independent source publication verification
+
+Verdict: PASS for scoped implementation/evidence publication.
+
+- Fresh `git ls-remote --heads origin codex/simplify-gateway` returned `20995ff3b08914bb365a6b4a139186d59be0ebe7`, equal to independently queried local HEAD.
+- `git status --porcelain` returned no entries in C:/Users/stanc/.codex/worktrees/simplify-gateway/subroute.
+- Commit `20995ff` contains exactly the 19 previously reviewed paths plus `docs/evals/simplicity-final-audit-2026-10-23.md`, 20 paths total. Runtime changes remain limited to the two reviewed files, antigravity.py and expert_sift.py. Other paths are the reviewed tests, documentation and evidence.
+- Recomputed all 21 ledger current source hashes after publication; zero mismatches. The portable final audit equals the original reviewer artifact after ordinary text newline normalization.
+- Source publication therefore closes the remaining publication dependency identified in final-goal-acceptance-audit.md. A subsequent docs-only goal closure commit still requires its requested final remote check.
+
+No source edit, inference, service operation or Git mutation was performed by this reviewer. Only this verification artifact was written. Production activation and MiniMax-specific current production availability remain outside this source-publication verdict.
+
+Final owner decision: accept all ten criteria for the reviewed source/staging delivery after the independent publication PASS. Production activation remains excluded; no old or failed receipt is reclassified. This closure changes documentation only.
