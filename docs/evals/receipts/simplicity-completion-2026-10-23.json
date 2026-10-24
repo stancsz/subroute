@@ -1,0 +1,370 @@
+{
+  "confirmed_cli_metadata": {
+    "purpose": "single diagnostic with exact prior synthetic payload; not acceptance or repair proof",
+    "started_epoch": 1792805238.0271213,
+    "payload_sha256": "d35cc30b3e6ecf37591740b8fd768c75a8b9cb30d624bf4c5a5df5c38c4ff402",
+    "payload_bytes": 189356,
+    "attempted_posts": 1,
+    "status": 200,
+    "sift_headers": {
+      "x-sift-compacted": "true",
+      "x-sift-estimated-input-tokens": "33213",
+      "x-sift-estimated-forwarded-tokens": "15863"
+    },
+    "finish_reason": "stop",
+    "answer_text": "{\"toolAction\":\"Replying to user\",\"toolSummary\":\"Reply completed\"}\nEXPERT_OK\n",
+    "answer_chars": 76,
+    "answer_sha256": "8e1114ee1fb1ecfcc43ae279584aa9830cb34af1964bb60f438b865044933438",
+    "answer_excerpt_truncated": false,
+    "marker_exact": false,
+    "marker_present": true,
+    "usage_as_reported": {
+      "completion_tokens": 1553,
+      "prompt_tokens": 20676,
+      "total_tokens": 22229
+    },
+    "ended_epoch": 1792805256.6203551,
+    "payload_unchanged": true
+  },
+  "answer_fixed_header_missing": {
+    "purpose": "single post-repair acceptance with exact prior synthetic payload",
+    "started_epoch": 1792806145.767508,
+    "payload_sha256": "d35cc30b3e6ecf37591740b8fd768c75a8b9cb30d624bf4c5a5df5c38c4ff402",
+    "payload_bytes": 189356,
+    "attempted_posts": 1,
+    "status": 200,
+    "sift_headers": {},
+    "finish_reason": "stop",
+    "answer_text": "EXPERT_OK",
+    "answer_chars": 9,
+    "answer_sha256": "46670c535bfa98bfaed3727b4664289b4ce9645a91313ff8e678f357ce378f7e",
+    "answer_excerpt_truncated": false,
+    "marker_exact": true,
+    "marker_present": true,
+    "usage_as_reported": {
+      "completion_tokens": 139,
+      "prompt_tokens": 17075,
+      "total_tokens": 17214
+    },
+    "ended_epoch": 1792806151.9801347,
+    "payload_unchanged": true,
+    "accepted": false
+  },
+  "final_gemini": {
+    "purpose": "single post-repair acceptance with exact prior synthetic payload",
+    "started_epoch": 1792806630.5581415,
+    "payload_sha256": "d35cc30b3e6ecf37591740b8fd768c75a8b9cb30d624bf4c5a5df5c38c4ff402",
+    "payload_bytes": 189356,
+    "attempted_posts": 1,
+    "status": 200,
+    "sift_headers": {
+      "x-sift-compacted": "true",
+      "x-sift-estimated-input-tokens": "33213",
+      "x-sift-estimated-forwarded-tokens": "15863"
+    },
+    "finish_reason": "stop",
+    "answer_text": "EXPERT_OK",
+    "answer_chars": 9,
+    "answer_sha256": "46670c535bfa98bfaed3727b4664289b4ce9645a91313ff8e678f357ce378f7e",
+    "answer_excerpt_truncated": false,
+    "marker_exact": true,
+    "marker_present": true,
+    "usage_as_reported": {
+      "completion_tokens": 41,
+      "prompt_tokens": 17075,
+      "total_tokens": 17116
+    },
+    "ended_epoch": 1792806637.3652546,
+    "payload_unchanged": true,
+    "accepted": true
+  },
+  "final_gemini_execution": {
+    "exit_code": 0,
+    "child_sha256": "34a7f3fe570677307360a67a089479ec7366fe3ba87cc801e319425f82348ed6",
+    "supervisor_sha256": "c1b4072124a509ed0cd65d04fa138f836ae60a310ba0b9f79e5e88fd5f0b4700",
+    "supervisor_bound_seconds": 45,
+    "image": "sha256:a99773d74df38fe676e17054ed9228f53a844449395ba420be7a112b59cd62cd",
+    "container_id": "f37f37c89d3bbdbb485ad012ae2a9612b49534f18b785b33799c4ba2da1cff84",
+    "lifecycle_unchanged": true,
+    "retries": 0,
+    "credentials_printed": false
+  },
+  "selected_cycle": {
+    "public_result": "public_response_passed_not_advisor_acceptance",
+    "public_attempted_post_count": 1,
+    "public_state_unchanged": true,
+    "saved_policy_bytes_unchanged": true,
+    "container_lifecycle_unchanged": true,
+    "artifact_sha256": "515a8fe82fc8c238e1b7563529bcf49186fd7ead57b1ac2e6aa94fb6073da6ec",
+    "supervisor_sha256": "63a40239c24f2be1beeb4ba424d608028fd825b19a8d44d58008ec74d93635ef",
+    "accepted_runtime_sha256": "d0aff4ec341a95047adc25424c9cb786d6b3ada64bd7c4511e4e80569ae8ccf2",
+    "accepted_expert_identity_match": true,
+    "expert_public_post_count": 1,
+    "expert_public_post_projection": [
+      {
+        "path": "/v1/messages",
+        "status": 200
+      }
+    ],
+    "expert_provider_provenance_match": true,
+    "ledger_rows": [
+      {
+        "attempt_id": "a16892ab-a78c-4588-b2e9-2a26d365bb48",
+        "request_id": "894b506a-09f5-4b9c-8049-98a515cdfde5",
+        "parent_attempt_id": null,
+        "kind": "bridge",
+        "role": "inference",
+        "outcome": "complete",
+        "usage_complete": true,
+        "api_path": "/v1/messages",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "created_at": 1792806793190
+      },
+      {
+        "attempt_id": "f3baa7ec-9122-4fed-a5ed-59cf3426f50d",
+        "request_id": "894b506a-09f5-4b9c-8049-98a515cdfde5",
+        "parent_attempt_id": null,
+        "kind": "provider",
+        "role": "inference",
+        "outcome": "complete",
+        "usage_complete": true,
+        "api_path": "/v1/messages",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "created_at": 1792806793248
+      },
+      {
+        "attempt_id": "1db836d0-6f3c-4249-8754-6f3cf8a078c2",
+        "request_id": "894b506a-09f5-4b9c-8049-98a515cdfde5",
+        "parent_attempt_id": null,
+        "kind": "provider",
+        "role": "advisor",
+        "outcome": "complete",
+        "usage_complete": true,
+        "api_path": "/v1/messages",
+        "upstream_model": "anthropic/gemini-3.8-flash-advisor",
+        "provider_id": "anthropic",
+        "created_at": 1792806799180
+      },
+      {
+        "attempt_id": "af1852bc-82d3-46cb-84ff-8c8100139729",
+        "request_id": "894b506a-09f5-4b9c-8049-98a515cdfde5",
+        "parent_attempt_id": null,
+        "kind": "bridge",
+        "role": "inference",
+        "outcome": "complete",
+        "usage_complete": true,
+        "api_path": "/v1/messages",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "created_at": 1792806803986
+      },
+      {
+        "attempt_id": "9230fc8d-e8dd-416b-b621-030df65b29cc",
+        "request_id": "894b506a-09f5-4b9c-8049-98a515cdfde5",
+        "parent_attempt_id": null,
+        "kind": "provider",
+        "role": "inference",
+        "outcome": "complete",
+        "usage_complete": true,
+        "api_path": "/v1/messages",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "created_at": 1792806804013
+      }
+    ],
+    "ledger_verdict": {
+      "accepted": true,
+      "provider_rows": 3,
+      "inference_provider_rows": 2,
+      "advisor_provider_rows": 1,
+      "one_request_id": true,
+      "single_request_cohort": true,
+      "provider_sequence_valid": true,
+      "selected_target_provenance_match": true,
+      "all_rows_terminal": true,
+      "provider_usage_complete": true,
+      "pending_orphan_detected": false,
+      "extra_or_nonprovider_rows_retained": 2
+    },
+    "audit_errors": [],
+    "acceptance": true
+  },
+  "selected_cycle_public": {
+    "exit_code": 0,
+    "report": {
+      "result": "public_response_passed_not_advisor_acceptance",
+      "attempted_post_count": 1,
+      "preflight_state": {
+        "active_model": "mimo-v2.6-pro",
+        "mode": "force",
+        "advisor_model": "gemini-subscription",
+        "reasoning_effort": null,
+        "fast_mode": false
+      },
+      "after_state": {
+        "active_model": "mimo-v2.6-pro",
+        "mode": "force",
+        "advisor_model": "gemini-subscription",
+        "reasoning_effort": null,
+        "fast_mode": false
+      },
+      "before_after_state_equal": true,
+      "request": {
+        "status": 200,
+        "request_shape": {
+          "model": "default",
+          "stream": true,
+          "max_tokens": 512,
+          "tools_count": 0,
+          "tool_choice": {
+            "type": "auto"
+          }
+        },
+        "expected_marker": true,
+        "message_start": true,
+        "terminal": "message_stop",
+        "stop_reason": "end_turn",
+        "tool_use_detected": false,
+        "usage": {
+          "input_tokens": 271,
+          "output_tokens": 26
+        },
+        "safe_headers": {
+          "x-litellm-attempted-retries": 0,
+          "x-litellm-attempted-fallbacks": 0
+        },
+        "result": "public_response_passed",
+        "elapsed_seconds": 13.461
+      },
+      "elapsed_seconds": 14.034
+    }
+  },
+  "native_header_http": {
+    "result": "passed",
+    "cases": [
+      {
+        "protocol": "chat",
+        "stream": false,
+        "negative_control": false,
+        "status": 200,
+        "headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33210",
+          "x-sift-estimated-forwarded-tokens": "15860"
+        }
+      },
+      {
+        "protocol": "chat",
+        "stream": true,
+        "negative_control": false,
+        "status": 200,
+        "headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33210",
+          "x-sift-estimated-forwarded-tokens": "15860"
+        }
+      },
+      {
+        "protocol": "responses",
+        "stream": false,
+        "negative_control": false,
+        "status": 200,
+        "headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33210",
+          "x-sift-estimated-forwarded-tokens": "15860"
+        }
+      },
+      {
+        "protocol": "responses",
+        "stream": true,
+        "negative_control": false,
+        "status": 200,
+        "headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33210",
+          "x-sift-estimated-forwarded-tokens": "15860"
+        }
+      },
+      {
+        "protocol": "messages",
+        "stream": false,
+        "negative_control": false,
+        "status": 200,
+        "headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33210",
+          "x-sift-estimated-forwarded-tokens": "15860"
+        }
+      },
+      {
+        "protocol": "messages",
+        "stream": true,
+        "negative_control": false,
+        "status": 200,
+        "headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33210",
+          "x-sift-estimated-forwarded-tokens": "15860"
+        }
+      },
+      {
+        "protocol": "chat",
+        "stream": false,
+        "negative_control": true,
+        "status": 200,
+        "headers": {
+          "x-sift-compacted": null,
+          "x-sift-estimated-input-tokens": null,
+          "x-sift-estimated-forwarded-tokens": null
+        }
+      }
+    ],
+    "actual_upstream_provider_requests": 0,
+    "scope": "native ASGI proxy HTTP and SDK bridge, upstream stubbed, no deployed ports",
+    "source_sha256": "2bddd6969aa8a2859aa79e7fdb031336ae9aaa9c34be94e4c83e63fe34853b1f"
+  },
+  "image": {
+    "result": "passed",
+    "image": "sha256:a99773d74df38fe676e17054ed9228f53a844449395ba420be7a112b59cd62cd",
+    "input_hashes_verified": 46,
+    "app_src_config_hashes_verified": 42,
+    "runtime_lock_hashes_verified": 2,
+    "total_baked_file_hashes_verified": 44,
+    "plain_handler_reviewed_hash": "a0a0f968dbffba5b4df5a78635305af20fe8fcb7fcdf6a245bda34563428f719",
+    "accounting_reviewed_hash": "829d25eda6909201ccc45449e9ec837eb4a9c179ff19476cf45468b12a5cbba2",
+    "accounting_baked_hash": "0a1aa24786da79854757fad1ab5aaf8ec0f4a1f9b6299c4460928befae80f637",
+    "accounting_function_ast_mapping": {
+      "async_pre_call_deployment_hook": true,
+      "install_native_advisor_accounting": true
+    },
+    "shared_lifecycles_unchanged": true,
+    "expert_sift_reviewed_hash": "2bddd6969aa8a2859aa79e7fdb031336ae9aaa9c34be94e4c83e63fe34853b1f",
+    "service_snapshots": {
+      "/subroute-gateway-1": {
+        "id": "c448e447f6e4b117a79c08e22a5c105482539570e3afad5873a98958c85c2132",
+        "image": "sha256:2d3076d83d415a2066532b4c69cf0921fe1667f0452e377a83ba53116390005d",
+        "started": "2026-10-23T20:39:14.744126774Z",
+        "restarts": 0
+      },
+      "/subroute-gateway-staging-1": {
+        "id": "b2490accbd7f5fd54aa58d17d6ac2e9f13c4c0aa9aa8582cd4e842e0e14134cd",
+        "image": "sha256:a99773d74df38fe676e17054ed9228f53a844449395ba420be7a112b59cd62cd",
+        "started": "2026-10-24T01:48:29.925798713Z",
+        "restarts": 0
+      },
+      "/subroute-experts-1": {
+        "id": "f37f37c89d3bbdbb485ad012ae2a9612b49534f18b785b33799c4ba2da1cff84",
+        "image": "sha256:a99773d74df38fe676e17054ed9228f53a844449395ba420be7a112b59cd62cd",
+        "started": "2026-10-24T01:49:12.067967378Z",
+        "restarts": 0
+      }
+    },
+    "inspection": "isolated read-only hash-only container, network none, no application imports",
+    "provider_calls": 0,
+    "service_rollout_performed": false
+  },
+  "scope": "Synthetic diagnostic text is included only for the owned fixture. Every failed receipt stays failed. Current full selected suite989; preserved root full998 before leaf alias plus final focused verification separately recorded. Integration image preserves unrelated local outbox code and is not identified as an exact clean-Git image. Provider receipt counts identify proxy HTTP hops, not independent vendor generations or billing."
+}

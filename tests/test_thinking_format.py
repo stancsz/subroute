@@ -439,7 +439,7 @@ def test_gemini_subscription_messages_preserve_formatting(tmp_path, monkeypatch,
 
     async def bridge(model, prompt, **kwargs):
         calls.append(model)
-        return ANSWER, litellm.Usage(prompt_tokens=3, completion_tokens=7, total_tokens=10)
+        return json.dumps({"kind": "text", "text": ANSWER}), litellm.Usage(prompt_tokens=3, completion_tokens=7, total_tokens=10)
 
     monkeypatch.setattr(antigravity, "invoke_agy", bridge)
     config = tmp_path / "providers.yaml"

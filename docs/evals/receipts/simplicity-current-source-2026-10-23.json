@@ -1,7 +1,7 @@
 {
-  "status": "Exact selected follow-up source snapshot; historical per-file baseline counts/hashes retained; accounting baseline is explicit Git blob.",
+  "status": "Final selected source including native header discovery alias and native text-envelope repair.",
   "method": "nonblank source lines excluding full-line Python # / JS // comments; Python docstrings retained; HTML/CSS comments removed preserving line boundaries",
-  "scope": "Coordinated Sift/Advisor/routing/UI simplification plus desktop launcher and selected native-accounting compatibility/closure fixes.",
+  "scope": "Coordinated Sift/Advisor/routing/UI/desktop simplification, selected accounting lifecycle repairs and native CLI plain-answer isolation.",
   "excluded": "Unrelated dirty outbox/media/Relay orchestration/sidecar work, configuration/lock/build recipes, data artifacts, tests and documentation.",
   "files": [
     {
@@ -46,8 +46,8 @@
       "baseline": "new file",
       "before_lines": 0,
       "before_sha256": null,
-      "after_lines": 94,
-      "after_sha256": "39f484b6396f32ab752033c46073b936f8b349ad40cf536cffc160cf8f313dad"
+      "after_lines": 80,
+      "after_sha256": "2bddd6969aa8a2859aa79e7fdb031336ae9aaa9c34be94e4c83e63fe34853b1f"
     },
     {
       "file": "src/subroute/advisor_ranker.py",
@@ -183,12 +183,21 @@
       "before_sha256": "79f732963ed32e656291f3308b4ad8e5a73c16d54b4230ccd5b2088cd39a42c1",
       "after_lines": 788,
       "after_sha256": "829d25eda6909201ccc45449e9ec837eb4a9c179ff19476cf45468b12a5cbba2"
+    },
+    {
+      "file": "src/subroute/handlers/antigravity.py",
+      "category": "runtime_python",
+      "baseline": "git70ee280:src/subroute/handlers/antigravity.py",
+      "before_lines": 476,
+      "before_sha256": "d6bab98420249f9b3e1887f04d59a1514a7e56bfbb1a861c461f11e584c1fe40",
+      "after_lines": 488,
+      "after_sha256": "a0a0f968dbffba5b4df5a78635305af20fe8fcb7fcdf6a245bda34563428f719"
     }
   ],
   "totals": {
-    "runtime_python": -1536,
+    "runtime_python": -1538,
     "runtime_js": -62,
     "ui_markup_style": -41
   },
-  "net_source_lines": -1639
+  "net_source_lines": -1641
 }

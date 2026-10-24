@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import HTTPException
-from litellm.integrations.custom_logger import CustomLogger
-
 from sift.litellm_proxy import SiftLiteLLMHook
 
 
@@ -45,12 +42,15 @@ def _has_nontext_content(value: Any) -> bool:
     return False
 
 
-class ExpertSiftHook(CustomLogger):
+class ExpertSiftHook(SiftLiteLLMHook):
     """Run Sift and enforce short expert calls before 4040 provider admission."""
 
+    # LiteLLM 1.106.2 discovers header hooks only on the concrete class.
+    # Retire this alias when native discovery follows inherited overrides.
+    async_post_call_response_headers_hook = SiftLiteLLMHook.async_post_call_response_headers_hook
+
     def __init__(self) -> None:
-        super().__init__()
-        self.sift = SiftLiteLLMHook(
+        super().__init__(
             {model: EXPERT_SIFT_TARGET for model in EXPERT_MODELS},
             max_target=EXPERT_INPUT_LIMIT,
         )
@@ -101,20 +101,6 @@ class ExpertSiftHook(CustomLogger):
         # exactly and let the expert model's native 32K admission decide them.
         if _has_nontext_content(data.get("messages")) or _has_nontext_content(data.get("input")) or _has_nontext_content(data.get("system")):
             return data
-        try:
-            return await self.sift.async_pre_call_hook(user_api_key_dict, cache, data, call_type)
-        except HTTPException:
-            raise
-
-    async def async_post_call_response_headers_hook(
-        self, data: dict, user_api_key_dict: Any, response: object,
-        request_headers: dict[str, str] | None = None,
-        litellm_call_info: dict[str, object] | None = None,
-    ) -> dict[str, str] | None:
-        """Forward Sift's native response audit headers for compacted calls."""
-        return await self.sift.async_post_call_response_headers_hook(
-            data, user_api_key_dict, response, request_headers, litellm_call_info,
-        )
-
+        return await super().async_pre_call_hook(user_api_key_dict, cache, data, call_type)
 
 expert_sift_hook = ExpertSiftHook()

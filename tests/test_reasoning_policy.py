@@ -219,9 +219,9 @@ def test_native_custom_provider_transmits_target_effort(control, monkeypatch, pr
     captured = []
 
     async def fake_agy(model, prompt, **kwargs):
-        assert kwargs.get("json_schema") is None
+        assert kwargs.get("json_schema") == antigravity.PLAIN_TEXT_SCHEMA
         captured.append((model, None))
-        return "OK", Usage(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+        return json.dumps({"kind": "text", "text": "OK"}), Usage(prompt_tokens=1, completion_tokens=1, total_tokens=2)
 
     async def fake_codex(model, messages, **kwargs):
         captured.append((model, kwargs.get("reasoning_effort")))

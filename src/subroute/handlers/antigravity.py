@@ -46,6 +46,16 @@ MODELS = {
 # Keep in sync with sidecars/antigravity/bridge.py. Reject oversized requests
 # before writing a body the sidecar will refuse and reset the HTTP connection.
 BRIDGE_MAX_REQUEST_BYTES = 1_000_000
+# The CLI's native schema separates answer text from its lifecycle metadata.
+PLAIN_TEXT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "kind": {"type": "string", "enum": ["text"]},
+        "text": {"type": "string"},
+    },
+    "required": ["kind", "text"],
+    "additionalProperties": False,
+}
 
 
 class _ToolOutputError(Exception):
@@ -401,8 +411,9 @@ class AntigravityLLM(CustomLLM):
             if attachments and tools:
                 raise ValueError("audio does not support schema-constrained client tools")
             allow_multiple = forced_kind is None and optional_params.get("parallel_tool_calls") is not False
-            schema = AntigravityLLM._tool_schema(tools, forced_kind, allow_multiple_tools=allow_multiple) if tools else None
+            schema = PLAIN_TEXT_SCHEMA if not attachments else None
             if tools:
+                schema = AntigravityLLM._tool_schema(tools, forced_kind, allow_multiple_tools=allow_multiple)
                 prompt = AntigravityLLM._tool_prompt(prompt, tools, forced_kind, allow_multiple_tools=allow_multiple)
             content, usage = await invoke_agy(
                 model,
@@ -410,7 +421,7 @@ class AntigravityLLM(CustomLLM):
                 json_schema=schema,
                 **({"attachments": attachments} if attachments else {}),
             )
-            if not tools:
+            if attachments:
                 return content, usage, []
             decision = AntigravityLLM._parse_tool_decision(content)
             jsonschema.validate(decision, schema, registry=Registry())
@@ -421,6 +432,8 @@ class AntigravityLLM(CustomLLM):
                     raise _ToolOutputError("Antigravity returned extra fields in a text decision")
                 if forced_kind == "tool_call" or not isinstance(decision.get("text"), str):
                     raise _ToolOutputError("Antigravity returned text when a tool call was required")
+                if not tools and not decision["text"].strip():
+                    raise _ToolOutputError("Antigravity returned no response text")
                 return decision["text"], usage, []
             if decision["kind"] == "tool_calls":
                 if not allow_multiple or set(decision) != {"kind", "calls"}:

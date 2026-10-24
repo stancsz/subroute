@@ -204,7 +204,7 @@ def test_local_tool_schema_reference_still_validates(monkeypatch):
 @pytest.mark.parametrize("stream", [False, True])
 def test_backend_managed_output_limit_preserves_completed_output_and_usage(monkeypatch, stream):
     async def invoke(*args, **kwargs):
-        return "A complete provider answer.", antigravity.Usage(
+        return json.dumps({"kind": "text", "text": "A complete provider answer."}), antigravity.Usage(
             prompt_tokens=4, completion_tokens=6, total_tokens=10,
         )
 
@@ -310,6 +310,75 @@ def test_auto_text_decision_preserves_exact_answer_and_literal_escapes(monkeypat
     assert response.choices[0].message.tool_calls is None
 
 
+def test_plain_answer_uses_native_structured_text_not_cli_lifecycle_metadata(monkeypatch):
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "plain_text_bridge", Path(__file__).resolve().parents[1] / "sidecars/antigravity/bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bridge)
+    answer = ' \tExact answer.\n中文 😀\n```text\n\\n stays literal\n```\n\t '
+    captured = {}
+
+    def transport(request):
+        captured.update(json.loads(request.content))
+        terminal = json.dumps({"event": "result", "result": {
+            "status": "SUCCESS", "num_turns": 1,
+            "response": '{"toolAction":"Replying to user","toolSummary":"Reply completed"}\n' + answer,
+            "structured_output": {"kind": "text", "text": answer},
+            "json_schema": captured["json_schema"],
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }})
+        return httpx.Response(200, json={
+            "content": bridge._response_text(terminal, captured["json_schema"]),
+            "usage": bridge._provider_usage(terminal),
+        })
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(antigravity.httpx, "AsyncClient", lambda **kwargs: original_client(
+        **kwargs, transport=httpx.MockTransport(transport), trust_env=False,
+    ))
+    monkeypatch.setenv("ANTIGRAVITY_BRIDGE_URL", "http://bridge.fixture")
+    response = asyncio.run(antigravity.antigravity_handler.acompletion(
+        model="gemini-3.8-flash", messages=[{"role": "user", "content": "Answer without tools"}],
+        optional_params={},
+    ))
+    assert response.choices[0].message.content == answer
+    assert response.usage.total_tokens == 15
+    assert captured["prompt"] == "[User]:\nAnswer without tools"
+    assert captured["json_schema"] == {
+        "type": "object",
+        "properties": {"kind": {"type": "string", "enum": ["text"]}, "text": {"type": "string"}},
+        "required": ["kind", "text"],
+        "additionalProperties": False,
+    }
+
+
+@pytest.mark.parametrize("content", [
+    "lifecycle: Replying to user. Reply completed.",
+    '{"kind":"text"}',
+    '{"kind":"tool_call","name":"ping","input":{}}',
+    '{"kind":"text","text":42}',
+    '{"kind":"text","text":"OK","extra":true}',
+    '{"kind":"text","text":""}',
+    '{"kind":"text","text":"  \\n\\t"}',
+])
+def test_plain_answer_rejects_non_native_or_invalid_envelopes(monkeypatch, content):
+    async def invoke(*args, **kwargs):
+        assert kwargs["json_schema"] == antigravity.PLAIN_TEXT_SCHEMA
+        return content, antigravity.Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+    monkeypatch.setattr(antigravity, "invoke_agy", invoke)
+    with pytest.raises(antigravity.CustomLLMError) as caught:
+        asyncio.run(antigravity.antigravity_handler.acompletion(
+            model="gemini-3.8-flash", messages=[{"role": "user", "content": "hello"}],
+            optional_params={},
+        ))
+    assert caught.value.status_code == 502
+
+
 @pytest.mark.parametrize("second,options,count", [
     ({"kind": "tool_call", "name": "unknown", "input": {}}, {}, 2),
     ({"kind": "tool_call", "name": "ping", "input": {"text": 42}}, {}, 2),
@@ -364,7 +433,7 @@ def test_subscription_sse_adapter_waits_for_cli_completion_before_emitting(monke
     async def invoke(model, prompt, **kwargs):
         started.set()
         await release.wait()
-        return "completed answer", antigravity.Usage(
+        return json.dumps({"kind": "text", "text": "completed answer"}), antigravity.Usage(
             prompt_tokens=10, completion_tokens=5, total_tokens=15
         )
 

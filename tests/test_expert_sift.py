@@ -2,6 +2,8 @@ import asyncio
 
 import pytest
 
+from sift.litellm_proxy import SiftLiteLLMHook
+
 from subroute.plugins.expert_sift import (
     EXPERT_INPUT_LIMIT,
     EXPERT_MODELS,
@@ -14,8 +16,8 @@ from subroute.plugins.expert_sift import (
 def test_expert_sift_keeps_compacted_input_under_configured_budget():
     hook = ExpertSiftHook()
     assert EXPERT_SIFT_TARGET == 25_600
-    assert hook.sift.max_target == EXPERT_INPUT_LIMIT == 32_000
-    assert set(hook.sift.model_targets) == set(EXPERT_MODELS)
+    assert hook.max_target == EXPERT_INPUT_LIMIT == 32_000
+    assert set(hook.model_targets) == set(EXPERT_MODELS)
 
 
 def test_expert_calls_are_short_by_default_and_respect_lower_client_limits():
@@ -87,11 +89,11 @@ def test_expert_hook_compacts_only_allowlisted_4040_models(monkeypatch):
     hook = ExpertSiftHook()
     seen = []
 
-    async def compact(*args, **kwargs):
+    async def compact(self, *args, **kwargs):
         seen.append(kwargs)
         return args[2]
 
-    monkeypatch.setattr(hook.sift, "async_pre_call_hook", compact)
+    monkeypatch.setattr(SiftLiteLLMHook, "async_pre_call_hook", compact)
     request = {"model": "codex-luna-advisor", "messages": [{"role": "user", "content": "Review."}]}
     assert asyncio.run(hook.async_pre_call_hook({}, None, request, "aanthropic_messages")) is request
     assert len(seen) == 1
@@ -123,8 +125,8 @@ def test_experts_hook_compacts_a_private_copy_before_provider_dispatch(monkeypat
 
     monkeypatch.setattr(proxy_server, "llm_router", CountingRouter())
     hook = ExpertSiftHook()
-    hook.sift.model_targets["codex-luna-advisor"] = 256
-    hook.sift.max_target = 512
+    hook.model_targets["codex-luna-advisor"] = 256
+    hook.max_target = 512
     request = {
         "model": "codex-luna-advisor",
         "messages": [
@@ -174,33 +176,32 @@ def test_multimodal_bypass_does_not_echo_caller_sift_audit(carrier):
     assert asyncio.run(hook.async_post_call_response_headers_hook(ordinary, {}, object())) is None
 
 
-def test_response_header_hook_forwards_native_sift_audit_only(monkeypatch):
+def test_response_headers_expose_only_expert_server_audit(monkeypatch):
+    import litellm
+    from litellm.caching.caching import DualCache
+    from litellm.proxy._types import UserAPIKeyAuth
+    from litellm.proxy.utils import ProxyLogging
+
     hook = ExpertSiftHook()
+    monkeypatch.setattr(litellm, "callbacks", [hook])
+    monkeypatch.setattr(ProxyLogging, "_callback_capabilities_cache", {})
+    proxy = ProxyLogging(user_api_key_cache=DualCache())
     data = {"model": "codex-luna-advisor", "metadata": {"sift": {
         "compacted": True, "input_tokens": 36_000, "forwarded_tokens": 25_000,
     }}}
-    key, response, headers, info = object(), object(), {"x-test": "1"}, {"call": 1}
-    native_hook = hook.sift.async_post_call_response_headers_hook
-    seen = []
-
-    async def native(*args):
-        seen.append(args)
-        return await native_hook(*args)
-
-    monkeypatch.setattr(hook.sift, "async_post_call_response_headers_hook", native)
-    assert asyncio.run(hook.async_post_call_response_headers_hook(data, key, response, headers, info)) == {
+    key, response, headers = UserAPIKeyAuth(), object(), {"x-test": "1"}
+    assert asyncio.run(proxy.post_call_response_headers_hook(data, key, response, headers)) == {
         "x-sift-compacted": "true",
         "x-sift-estimated-input-tokens": "36000",
         "x-sift-estimated-forwarded-tokens": "25000",
     }
-    assert seen == [(data, key, response, headers, info)]
 
     ordinary = {"model": "codex-luna", "metadata": {"sift": data["metadata"]["sift"]}}
-    assert asyncio.run(hook.async_post_call_response_headers_hook(ordinary, key, response)) is None
-    assert asyncio.run(hook.async_post_call_response_headers_hook({"model": "codex-luna-advisor"}, key, response)) is None
-    assert asyncio.run(hook.async_post_call_response_headers_hook(
+    assert asyncio.run(proxy.post_call_response_headers_hook(ordinary, key, response)) == {}
+    assert asyncio.run(proxy.post_call_response_headers_hook({"model": "codex-luna-advisor"}, key, response)) == {}
+    assert asyncio.run(proxy.post_call_response_headers_hook(
         {"model": "codex-luna-advisor", "metadata": {}}, key, response,
-    )) is None
+    )) == {}
 
 
 def test_multimodal_expert_request_is_preserved_for_native_admission(monkeypatch):
@@ -209,7 +210,7 @@ def test_multimodal_expert_request_is_preserved_for_native_admission(monkeypatch
     async def forbidden(*args, **kwargs):
         raise AssertionError("Sift must not rewrite multimodal expert content")
 
-    monkeypatch.setattr(hook.sift, "async_pre_call_hook", forbidden)
+    monkeypatch.setattr(SiftLiteLLMHook, "async_pre_call_hook", forbidden)
     request = {
         "model": "gemini-4-argon-advisor",
         "messages": [{"role": "user", "content": [
