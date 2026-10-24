@@ -11,12 +11,13 @@ import yaml
 from subroute.handlers import codex_advisor as advisor
 
 
-def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=None):
+def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=None, max_output_tokens=None):
     body = raw if raw is not None else "".join("data: " + json.dumps(event) + "\n\n" for event in events)
 
     def respond(request):
         payload = json.loads(request.content)
         assert payload.get("reasoning") == ({"effort": effort} if effort is not None else None)
+        assert payload.get("max_output_tokens") == max_output_tokens
         if error:
             raise error
         return httpx.Response(status, text=body)
@@ -27,6 +28,7 @@ def collect(monkeypatch, events, *, status=200, raw=None, error=None, effort=Non
     monkeypatch.setattr(advisor.httpx, "AsyncClient", lambda **kw: client_type(transport=transport, **kw))
     return asyncio.run(advisor.call_codex_streaming_collect(
         "luna", [{"role": "user", "content": "hello"}], reasoning_effort=effort,
+        max_output_tokens=max_output_tokens,
     ))
 
 
@@ -54,6 +56,32 @@ def test_completed_response_preserves_provider_usage(monkeypatch, effort):
     }], effort=effort)
     assert text == "partial"
     assert (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens) == (19, 7, 26)
+
+
+def test_output_limit_is_sent_to_codex_and_provider_completion_is_required(monkeypatch):
+    text, usage = collect(monkeypatch, [DELTA, {
+        "type": "response.completed", "response": {
+            "status": "completed",
+            "usage": {"input_tokens": 19, "output_tokens": 7, "total_tokens": 26},
+        },
+    }], max_output_tokens=1024)
+    assert text == "partial"
+    assert usage.completion_tokens == 7
+
+
+@pytest.mark.parametrize("terminal", ["response.incomplete", "response.failed"])
+def test_limited_provider_failure_is_not_promoted_to_success(monkeypatch, terminal):
+    with pytest.raises(RuntimeError):
+        collect(monkeypatch, [DELTA, {"type": terminal}], max_output_tokens=16)
+
+
+@pytest.mark.parametrize("limit", [0, -1, True, 1.5, "16"])
+def test_invalid_output_limit_is_rejected_before_provider_call(monkeypatch, limit):
+    monkeypatch.setattr(advisor, "read_codex_credentials", lambda: pytest.fail("credentials read before validation"))
+    with pytest.raises(ValueError, match="positive integer"):
+        asyncio.run(advisor.call_codex_streaming_collect(
+            "luna", [{"role": "user", "content": "hello"}], max_output_tokens=limit,
+        ))
 
 
 def test_missing_usage_is_not_fabricated(monkeypatch):
@@ -91,6 +119,23 @@ def test_luna_advisor_alias_uses_current_luna_model(monkeypatch):
     assert sent["stream"] is True
     assert text == "partial"
     assert usage.total_tokens == 3
+
+
+def test_custom_llm_forwards_lite_llm_output_limit_to_codex_wire(monkeypatch):
+    sent = {}
+
+    async def fake_collect(model, messages, *, reasoning_effort=None, max_output_tokens=None):
+        sent.update(model=model, reasoning_effort=reasoning_effort, max_output_tokens=max_output_tokens)
+        return "short", advisor.Usage(prompt_tokens=2, completion_tokens=1, total_tokens=3)
+
+    monkeypatch.setattr(advisor, "call_codex_streaming_collect", fake_collect)
+    response = asyncio.run(advisor.CodexAdvisorLLM().acompletion(
+        model="codex-advisor/gpt-6-luna",
+        messages=[{"role": "user", "content": "Review briefly."}],
+        optional_params={"max_tokens": 1024, "reasoning_effort": "low"},
+    ))
+    assert sent == {"model": "gpt-6-luna", "reasoning_effort": "low", "max_output_tokens": 1024}
+    assert response.choices[0].message.content == "short"
 
 
 @pytest.mark.parametrize("message", [
@@ -254,15 +299,24 @@ def test_dedicated_experts_allows_all_current_advisors_without_fallback():
     assert set(models) == {
         "codex-luna-advisor", "codex-sol-advisor", "codex-astra-advisor",
         "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
+        "gemini-3.1-pro-advisor", "gemini-3.6-flash-advisor",
+        "gemini-3.7-flash-advisor", "gemini-3.8-flash-advisor",
     }
     for name, item in models.items():
-        if name == "gemini-4-argon-advisor":
-            assert item["litellm_params"]["model"] == "antigravity/gemini-4-argon-low"
+        if name.startswith("gemini-"):
+            expected = {
+                "gemini-4-argon-advisor": "antigravity/gemini-4-argon-low",
+                "gemini-3.1-pro-advisor": "antigravity/gemini-3.1-pro",
+                "gemini-3.6-flash-advisor": "antigravity/gemini-3.6-flash",
+                "gemini-3.7-flash-advisor": "antigravity/gemini-3.7-flash",
+                "gemini-3.8-flash-advisor": "antigravity/gemini-3.8-flash",
+            }[name]
+            assert item["litellm_params"]["model"] == expected
             assert item["model_info"]["capabilities"] == ["text"]
             continue
         assert "vision" in item["model_info"]["capabilities"]
         assert item["litellm_params"]["model"].startswith("codex-advisor/gpt-6")
-    assert models["codex-luna-advisor"]["litellm_params"]["reasoning_effort"] == "high"
+    assert models["codex-luna-advisor"]["litellm_params"]["reasoning_effort"] == "low"
     assert config["router_settings"]["num_retries"] == 0
     assert config["router_settings"]["fallbacks"] == []
 

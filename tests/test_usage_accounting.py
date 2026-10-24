@@ -158,49 +158,6 @@ def test_direct_local_inference_aliases_are_canonical_and_management_is_not_a_re
     asyncio.run(scenario())
 
 
-def test_advisor_and_compaction_roles_keep_observed_usage(store, monkeypatch):
-    from types import SimpleNamespace
-    from subroute.plugins import advisor_plugin
-    async def scenario():
-        trace = accounting.Trace(str(uuid.uuid4()), "production", "key-1", "customer-1")
-        accounting.trace_context.set(trace)
-
-        async def complete(*args, **kwargs):
-            return "advice", Usage(prompt_tokens=7, completion_tokens=2, total_tokens=9)
-        monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", complete)
-        await advisor_plugin.AdvisorPlugin._invoke_advisor("codex-luna-advisor", [{"role": "user", "content": "private prompt"}], "low")
-        compaction_roles = []
-        async def compact(**kwargs):
-            compaction_roles.append(accounting.role_context.get())
-            return SimpleNamespace(
-                choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="briefing"))],
-                usage=Usage(prompt_tokens=5, completion_tokens=2, total_tokens=7),
-            )
-        await advisor_plugin.AdvisorPlugin._mimo_compaction(
-            SimpleNamespace(acompletion=compact), [{"role": "user", "content": "private prior context"}],
-        )
-        assert compaction_roles == ["compaction"]
-        async def fail(*args, **kwargs):
-            await accounting.observe_direct({"response": {"usage": {"input_tokens": 11, "output_tokens": 3}}})
-            raise RuntimeError("private provider error with sk-secret")
-        monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fail)
-        with pytest.raises(RuntimeError):
-            await advisor_plugin.AdvisorPlugin._invoke_advisor("codex-luna-advisor", [], None)
-        with pytest.raises(asyncio.CancelledError):
-            async with accounting.direct_attempt("gpt-6-luna", "codex-subscription", "advisor"):
-                await accounting.observe_direct({"usage": {"input_tokens": 5}})
-                raise asyncio.CancelledError()
-        rows = list(store.rows.values())
-        assert [row["role"] for row in rows] == ["advisor", "advisor", "advisor"]
-        assert [row["outcome"] for row in rows] == ["complete", "failed", "cancelled"]
-        assert rows[1]["facts"]["input_tokens"] == 11 and rows[1]["facts"]["usage_complete"] is False
-        assert rows[3]["facts"] == {"input_tokens": 5, "usage_complete": False}
-        assert store.mirrors == [next(ident for ident, row in store.rows.items() if row is rows[0])]
-        assert all(row["trace"] == trace for row in rows)
-        assert "private" not in str(rows) and "sk-secret" not in str(rows)
-    asyncio.run(scenario())
-
-
 def test_missing_cost_tokens_and_litellm_estimates_are_not_zero():
     assert accounting.usage_facts({"usage": None, "response_cost": 99}) == {}
     assert accounting.usage_facts({"usage": {"prompt_tokens": True, "completion_tokens": -1}}) == {}

@@ -13,10 +13,11 @@ def client():
         return SimpleNamespace(team_id=None, team_metadata=None)
 
     app.dependency_overrides[user_api_key_auth] = authenticated_key
+    test_client = TestClient(app)
     try:
-        with TestClient(app) as test_client:
-            yield test_client
+        yield test_client
     finally:
+        test_client.close()
         app.dependency_overrides.pop(user_api_key_auth, None)
 
 

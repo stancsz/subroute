@@ -109,6 +109,7 @@ def test_nonstreaming_collects_native_chat_stream_with_tool_usage_and_terminal_s
     assert captured["store"] is False
     assert "max_tokens" not in captured
     assert "max_output_tokens" not in captured
+    assert captured["max_completion_tokens"] == 64
     assert "user" not in captured
     assert captured["store"] is False
     assert response.model == "gpt-6-luna"
@@ -476,6 +477,7 @@ def test_litellm_responses_dispatch_preserves_roleless_tool_history(monkeypatch)
     assert nested_call["stream"] is True
     assert "max_tokens" not in nested_call
     assert "max_output_tokens" not in nested_call
+    assert nested_call["max_completion_tokens"] == 64
     assert nested_call["reasoning_effort"] == {"effort": "high", "summary": "auto"}
     assert "user" not in nested_call
     assert response.status == "completed"

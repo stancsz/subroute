@@ -58,28 +58,9 @@
           <p id="route-fast-help" class="route-help" hidden>Fast mode uses more OpenAI subscription allowance. It applies to requests routed to this target, not the advisor.</p>
         </div>
         <div class="route-column route-model-panel advisor-panel">
-          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small id="advisor-policy-note">Selected consultations also call Claude Opus 5.5 Low via Antigravity (max 32,000 input tokens). Oversized context is compacted with Sift, then MiniMax or MiMo.</small></div><span id="advisor-policy-pill" class="role-pill">Saved per environment</span></div>
+          <div class="route-panel-head"><span class="panel-index">B</span><div><strong>Advisor</strong><small id="advisor-policy-note">The target may use its optional Advisor tool. The expert service 4040 applies Sift toward 25.6K estimated input tokens; output limits depend on the selected provider.</small></div><span id="advisor-policy-pill" class="role-pill">Saved per environment</span></div>
           <label>Provider<select id="advisor-provider" aria-label="Advisor provider" disabled><option value="">Loading providers…</option></select></label>
           <label>Model route<select id="route-advisor" aria-label="Advisor model" disabled><option value="">Loading advisors…</option></select></label>
-          <label>Reasoning effort<select id="route-advisor-effort" aria-label="Advisor reasoning" aria-describedby="route-advisor-effort-help" disabled><option value="">Loading reasoning…</option></select></label>
-          <p id="route-advisor-effort-help" class="route-help"></p>
-          <div class="advisor-frequency-control">
-            <div class="frequency-heading"><label for="route-advisor-frequency">Advisor frequency</label><output id="route-advisor-frequency-value" for="route-advisor-frequency">~50%</output></div>
-            <input id="route-advisor-frequency" type="range" min="0" max="2" step="1" value="1" aria-valuetext="Balanced, about 50 percent" aria-describedby="route-advisor-frequency-help route-advisor-frequency-state" disabled>
-            <div class="frequency-stops" aria-hidden="true"><span>Less often<small>~30%</small></span><span>Balanced<small>~50%</small></span><span>More often<small>~70%</small></span></div>
-          </div>
-          <p id="route-advisor-frequency-help" class="route-help">Approximate targets favor higher estimated review priority. Short windows and changing traffic can vary.</p>
-          <p id="route-advisor-frequency-state" class="route-help">Waiting for gateway policy.</p>
-          <div class="advisor-frequency-stats">
-            <div class="analytics-heading"><label for="route-advisor-analytics-window">Advisor activity</label><select id="route-advisor-analytics-window" aria-describedby="route-advisor-analytics-meaning"><option value="30">30 minutes</option><option value="60" selected>1 hour</option><option value="120">2 hours</option></select></div>
-            <p id="route-advisor-frequency-stats">Advisor activity unavailable</p>
-            <p id="route-advisor-analytics-ratios"></p>
-            <p id="route-advisor-analytics-failures" hidden></p>
-            <small id="route-advisor-analytics-scope">This gateway · last 1 hour</small>
-            <small id="route-advisor-analytics-coverage"></small>
-            <small id="route-advisor-analytics-meaning">Eligible means an advisor is enabled and the context is supported. Invoked means consultation started, including failures.</small>
-            <small>Counts cover Chat, Responses and Messages requests reaching routing; health checks and authentication rejections are excluded. Stored counts persist across policy changes and restarts.</small>
-          </div>
         </div>
       </div>
       <div class="route-footer">

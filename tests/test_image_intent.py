@@ -94,7 +94,7 @@ def test_cline_image_function_stays_client_owned(tmp_path, protocol, mode, activ
     control = make_control_plane(tmp_path)
     control.update(active_model, mode)
     result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, protocol))
-    assert result["model"] == ("default" if mode == "off" else active_model)
+    assert result["model"] == active_model
     assert result["tools"] == before["tools"]
     assert result["tool_choice"] == before["tool_choice"]
     assert "gateway_image_request" not in result
@@ -385,3 +385,25 @@ def test_multiple_caption_blocks_survive_native_translation(monkeypatch):
         {"protocol": "acompletion", "tool": {"type": "image_generation"}, "tool_choice": "auto"}))
     assert result.choices[0].message.content == "First caption.\nSecond caption."
     assert result.choices[0].message.images[0]["image_url"]["url"].endswith(PNG)
+
+
+def test_caption_annotation_indices_survive_native_translation(monkeypatch):
+    from subroute.handlers.codex_images import image_conversation
+    citation_url = "https://example.invalid/caption"
+    native_stub(monkeypatch, [image_event(), {"type": "response.output_item.done", "item": {
+        "type": "message", "id": "msg_caption", "role": "assistant", "status": "completed",
+        "content": [{"type": "output_text", "text": "First caption.", "annotations": []},
+                    {"type": "output_text", "text": "Second caption.", "annotations": [{
+                        "type": "url_citation", "start_index": 0, "end_index": len("Second caption."),
+                        "title": "Caption source", "url": citation_url,
+                    }]}],
+    }}, terminal()])
+    result = asyncio.run(image_conversation([{"role": "user", "content": "Generate an image"}], {},
+        {"protocol": "acompletion", "tool": {"type": "image_generation"}, "tool_choice": "auto"}))
+    message = result.choices[0].message
+    assert message.content == "First caption.\nSecond caption."
+    annotations = message.model_dump()["annotations"]
+    assert annotations
+    citation = annotations[0]
+    assert message.content[citation["start_index"]:citation["end_index"]] == "Second caption."
+    assert citation["url"] == citation_url

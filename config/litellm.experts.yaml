@@ -2,12 +2,72 @@
 # bearer authentication because the listener is reachable from the LAN.
 # It exposes no executor aliases, routing state, UI, or advisor orchestration.
 model_list:
+  - model_name: gemini-3.8-flash-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: Gemini 3.8 Flash Advisor (Low)
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-3.8-flash
+      reasoning_effort: low
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: gemini-3.7-flash-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: Gemini 3.7 Flash Advisor (Low)
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-3.7-flash
+      reasoning_effort: low
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: gemini-3.6-flash-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: Gemini 3.6 Flash Advisor (Low)
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-3.6-flash
+      reasoning_effort: low
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: gemini-3.1-pro-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: Gemini 3.1 Pro Advisor (Low)
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-3.1-pro
+      reasoning_effort: low
+      allowed_openai_params: [reasoning_effort]
+
   - model_name: gemini-4-argon-advisor
     model_info:
       max_input_tokens: 32000
       context_window: 32000
       auto_compact_token_limit: 25600
-      compaction_scope: total
+      compaction_scope: input
       display_name: Gemini 4 Argon Advisor (Low)
       capabilities: [text]
       selectable: false
@@ -22,14 +82,14 @@ model_list:
         max_input_tokens: 32000
         context_window: 32000
         auto_compact_token_limit: 25600
-        compaction_scope: total
+        compaction_scope: input
       display_name: GPT-6 Luna Advisor
       capabilities: [text, vision]
       selectable: false
       advisor_selectable: true
     litellm_params:
       model: codex-advisor/gpt-6-luna
-      reasoning_effort: high
+      reasoning_effort: low
       allowed_openai_params: [reasoning_effort]
 
   - model_name: codex-sol-advisor
@@ -41,6 +101,7 @@ model_list:
       advisor_selectable: true
     litellm_params:
       model: codex-advisor/gpt-6-sol
+      reasoning_effort: low
       allowed_openai_params: [reasoning_effort]
 
   - model_name: codex-astra-advisor
@@ -52,6 +113,7 @@ model_list:
       advisor_selectable: true
     litellm_params:
       model: codex-advisor/gpt-6-astra
+      reasoning_effort: low
       allowed_openai_params: [reasoning_effort]
 
   - model_name: codex-gpt-6.1-sol-advisor
@@ -63,6 +125,7 @@ model_list:
       advisor_selectable: true
     litellm_params:
       model: codex-advisor/gpt-6.1-sol
+      reasoning_effort: low
       allowed_openai_params: [reasoning_effort]
 
 router_settings:
@@ -78,6 +141,8 @@ litellm_settings:
       custom_handler: subroute.handlers.antigravity.antigravity_handler
     - provider: codex-advisor
       custom_handler: subroute.handlers.codex_advisor.codex_advisor_handler
+  callbacks:
+    - subroute.plugins.expert_sift.expert_sift_hook
   drop_params: true
   set_verbose: false
 

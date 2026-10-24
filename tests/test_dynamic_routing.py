@@ -92,15 +92,14 @@ def test_alias_mode_resolves_default_but_preserves_explicit_models(tmp_path: Pat
 
     assert run(plugin, data) is data
     assert data["model"] == "minimax"
-    assert {k:v for k,v in data["metadata"].items() if not k.startswith("_gateway_analytics_")} == {
+    assert data["metadata"] == {
         "client": "codex",
         "gateway_reasoning_effort": None,
         "gateway_target_fast_mode": False,
         "gateway_policy": {
             "active_model": "minimax", "mode": "alias", "policy_version": 1,
             "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "fast_mode": False, "advisor_reasoning_effort": "low", "advisor_trigger": "adaptive",
-        "advisor_sensitivity": "balanced", "advisor_classifier": "ranked",
+        "reasoning_effort": None, "fast_mode": False,
         },
         "routing": {
             "requested_model": "default",
@@ -122,7 +121,7 @@ def test_alias_mode_resolves_default_but_preserves_explicit_models(tmp_path: Pat
     run(plugin, automatic)
     assert automatic["model"] == "auto"
     assert automatic["metadata"]["gateway_reasoning_effort"] is None
-    assert "routing" not in automatic["metadata"]
+    assert automatic["metadata"]["routing"] == {"requested_model": "auto"}
 
 
 def test_force_and_off_modes_have_explicit_semantics(tmp_path: Path):
@@ -136,9 +135,50 @@ def test_force_and_off_modes_have_explicit_semantics(tmp_path: Path):
     assert data["metadata"]["routing"]["policy_version"] == force.policy_version
 
     control.update("minimax", "off")
-    passthrough = {"model": "default"}
+    # Explicit provider selections pass through in off mode; the stable
+    # default alias always follows the saved target in every mode.
+    passthrough = {"model": "desktop"}
     assert run(plugin, passthrough) is passthrough
-    assert passthrough["model"] == "default"
+    assert passthrough["model"] == "desktop"
+    selected = {"model": "default"}
+    run(plugin, selected)
+    assert selected["model"] == "minimax"
+
+
+@pytest.mark.parametrize("case", [
+    {"tool_choice": {"type": "function", "function": {"name": "lookup"}}},
+    {"max_output_tokens": 8192},
+])
+def test_qwen_compatibility_uses_native_tools_route_without_mutating_request(
+    tmp_path: Path, monkeypatch, case: dict,
+):
+    from litellm.proxy import proxy_server
+
+    class LimitsRouter:
+        def get_configured_token_limits(self, model):
+            assert model == "qwen3.8-27b"
+            return 32_768, 4096
+
+    monkeypatch.setattr(proxy_server, "llm_router", LimitsRouter())
+    plugin = DynamicRoutingPlugin(RoutingControlPlane(
+        Path(__file__).parents[1] / "config" / "litellm.yaml", tmp_path / "policy.json",
+    ))
+    data = {
+        "model": "qwen3.8-27b",
+        "messages": [{"role": "user", "content": "keep the complete request"}],
+        **case,
+    }
+    original = {key: value.copy() if isinstance(value, dict) else value
+                for key, value in data.items()}
+
+    assert run(plugin, data) is data
+    assert data["model"] == "mimo-v2.6-pro"
+    assert data["messages"] == original["messages"]
+    assert data.get("tool_choice") == original.get("tool_choice")
+    assert data.get("max_output_tokens") == original.get("max_output_tokens")
+    assert data["metadata"]["routing"]["requested_model"] == "qwen3.8-27b"
+    assert data["metadata"]["routing"]["resolved_model"] == "mimo-v2.6-pro"
+    assert data["metadata"]["routing"]["mode"] == "qwen_native_compatibility"
 
 
 def test_unknown_model_is_rejected_before_force_routing(tmp_path: Path):
@@ -153,7 +193,7 @@ def test_unknown_model_is_rejected_before_force_routing(tmp_path: Path):
 
     assert error.value.status_code == 404
     assert data["model"] == "does-not-exist"
-    assert {k:v for k,v in data["metadata"].items() if not k.startswith("_gateway_analytics_")} == {}
+    assert data["metadata"]["routing"] == {"requested_model": "does-not-exist"}
 
 
 def test_default_resolves_to_saved_target_even_when_alias_mode_is_off(tmp_path: Path):
@@ -187,22 +227,9 @@ def test_unconfigured_provider_operations_return_client_errors(method, path, bod
     assert response.json()["error"]["code"] == "unsupported_operation"
 
 
-def test_routing_precedes_advisor_injection_for_plain_target(tmp_path: Path, monkeypatch):
-    async def score(self, prompt):
-        return .1
-
-    from subroute.advisor_ranker import AdvisorRequestRanker
-    from subroute.advisor_frequency import AdvisorFrequencyGate
-    monkeypatch.setattr(AdvisorRequestRanker, "rank", score)
-    monkeypatch.setattr(AdvisorFrequencyGate, "choose", lambda self, *args: {
-        "consult": False, "score": .1, "target_rate": .5,
-        "selected_count": 0, "eligible_count": 1,
-    })
+def test_routing_does_not_consult_advisor_automatically(tmp_path):
     control = make_control_plane(tmp_path)
     control.update("minimax", "alias")
-    # Capture the intended advisor in the same policy snapshot as the target.
-    # Changing the persisted policy after the router hook would leave this
-    # request on its original snapshot and could invoke a live Gemini advisor.
     control.update_advisor("codex-gpt-6.1-sol-advisor")
     router = DynamicRoutingPlugin(control)
     advisor = AdvisorPlugin()
@@ -212,9 +239,14 @@ def test_routing_precedes_advisor_injection_for_plain_target(tmp_path: Path, mon
     asyncio.run(advisor.async_pre_call_hook({}, None, data, "anthropic_messages"))
 
     assert data["model"] == "minimax"
-    assert "tools" not in data
-    assert data["metadata"]["gateway_advisor_decision"]["source"] == "ranked"
-    assert data["metadata"]["gateway_advisor"]["model"] == "codex-gpt-6.1-sol-advisor"
+    assert len(data["tools"]) == 1
+    assert data["tools"][0]["type"].startswith("advisor_")
+    assert data["tools"][0]["model"] == "experts/codex-gpt-6.1-sol-advisor"
+    assert data["tools"][0]["max_uses"] == 1
+    assert data["messages"] == [{"role": "user", "content": "help"}]
+    assert "gateway_advisor" not in data.get("metadata", {})
+
+
 
 
 def test_persisted_advisor_wins_over_startup_environment(tmp_path, monkeypatch):
@@ -245,18 +277,17 @@ def test_removed_active_reasoning_effort_migrates_without_changing_route_policy(
     assert migrated.snapshot().policy_version == 13
     assert migrated.snapshot().reasoning_effort is None
     assert migrated.snapshot().advisor_model == saved["advisor_model"]
-    assert migrated.snapshot().advisor_reasoning_effort == "low"
-    assert migrated.snapshot().advisor_sensitivity == "frequent"
     persisted = json.loads(control.state_path.read_text(encoding="utf-8"))
     assert persisted["reasoning_effort"] is None
     assert persisted["policy_version"] == 13
+    assert not {"advisor_reasoning_effort", "advisor_trigger", "advisor_sensitivity", "advisor_classifier"} & persisted.keys()
 
     restarted = RoutingControlPlane(control.config_path, control.state_path)
     assert restarted.snapshot() == migrated.snapshot()
     assert json.loads(control.state_path.read_text(encoding="utf-8")) == persisted
 
 
-def test_default_desk_uses_luna_target_and_sol_low_without_locking_selection(tmp_path, monkeypatch):
+def test_default_desk_uses_luna_target_and_preserves_advisor_selection(tmp_path, monkeypatch):
     monkeypatch.delenv("ACTIVE_MODEL", raising=False)
     monkeypatch.delenv("ADVISOR_MODEL", raising=False)
     config_path = Path(__file__).parents[1] / "config/litellm.yaml"
@@ -264,15 +295,13 @@ def test_default_desk_uses_luna_target_and_sol_low_without_locking_selection(tmp
     control = RoutingControlPlane(config_path, state_path)
     assert control.snapshot().active_model == "codex-luna"
     assert control.snapshot().advisor_model == "codex-gpt-6.1-sol-advisor"
-    assert control.snapshot().advisor_reasoning_effort == "low"
     for model in (
         "codex-sol-advisor", "codex-astra-advisor", "codex-gpt-6.1-sol-advisor",
         "codex-luna-advisor",
     ):
-        control.update_advisor(model, reasoning_effort="medium")
+        control.update_advisor(model)
         restarted = RoutingControlPlane(config_path, state_path)
         assert restarted.snapshot().advisor_model == model
-        assert restarted.snapshot().advisor_reasoning_effort == "medium"
 
 
 @pytest.mark.parametrize("retired, replacement", [
@@ -285,13 +314,12 @@ def test_saved_gpt_5_target_migrates_once_and_preserves_policy(tmp_path, retired
     saved = {
         "active_model": retired, "mode": "force", "policy_version": 12,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": "high", "advisor_reasoning_effort": "low",
+        "reasoning_effort": "high",
     }
     state_path.write_text(json.dumps(saved), encoding="utf-8")
     control = RoutingControlPlane(config_path, state_path)
     expected = {
         **saved, "active_model": replacement, "policy_version": 13,
-        "advisor_trigger": "adaptive", "advisor_sensitivity": "balanced", "advisor_classifier": "ranked",
         "fast_mode": False,
     }
     assert json.loads(state_path.read_text(encoding="utf-8")) == expected
@@ -329,16 +357,7 @@ def test_advisor_cannot_be_cleared(tmp_path: Path):
     )
 
 
-def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
-    from subroute.advisor_ranker import AdvisorRequestRanker
-    from subroute.advisor_frequency import AdvisorFrequencyGate
-    async def score(self, prompt):
-        return .1
-    monkeypatch.setattr(AdvisorRequestRanker, "rank", score)
-    monkeypatch.setattr(AdvisorFrequencyGate, "choose", lambda self, *args: {
-        "consult": False, "score": .1, "target_rate": .5,
-        "selected_count": 0, "eligible_count": 1,
-    })
+def test_framework_routing_hook_does_not_add_advisor_guidance_or_tool(tmp_path, monkeypatch):
     import litellm
     from litellm.caching.caching import DualCache
     from litellm.proxy.utils import ProxyLogging
@@ -346,19 +365,21 @@ def test_framework_runs_routing_before_advisor(tmp_path, monkeypatch):
 
     control = make_control_plane(tmp_path)
     control.update("minimax", "alias")
-    control.update_advisor("codex-gpt-6.1-sol-advisor")
     proxy = ProxyLogging(user_api_key_cache=DualCache())
     monkeypatch.setattr(litellm, "callbacks", [DynamicRoutingPlugin(control), AdvisorPlugin()])
+    data = {"model": "default", "messages": [{"role": "user", "content": "hello"}]}
     result = asyncio.run(proxy.pre_call_hook(
-        user_api_key_dict=UserAPIKeyAuth(),
-        data={"model": "default", "messages": [{"role": "user", "content": "hello"}]},
-        call_type="anthropic_messages",
+        user_api_key_dict=UserAPIKeyAuth(), data=data, call_type="anthropic_messages",
     ))
     assert result["model"] == "minimax"
-    assert "tools" not in result
-    assert result["metadata"]["gateway_advisor"]["model"] == "codex-gpt-6.1-sol-advisor"
-    assert result["metadata"]["gateway_advisor_decision"]["source"] == "ranked"
-    assert result["metadata"]["gateway_policy"]["policy_version"] == control.snapshot().policy_version
+    assert len(result["tools"]) == 1
+    assert result["tools"][0]["type"].startswith("advisor_")
+    assert result["tools"][0]["max_uses"] == 1
+    assert result["messages"] == [{"role": "user", "content": "hello"}]
+    assert "gateway_advisor" not in result.get("metadata", {})
+    assert "gateway_advisor_decision" not in result.get("metadata", {})
+
+
 
 
 def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
@@ -371,8 +392,7 @@ def test_update_is_validated_versioned_and_atomically_persisted(tmp_path: Path):
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "fast_mode": False, "advisor_reasoning_effort": "low", "advisor_trigger": "adaptive",
-        "advisor_sensitivity": "balanced", "advisor_classifier": "ranked",
+        "reasoning_effort": None, "fast_mode": False,
     }
     assert not list(tmp_path.glob("*.tmp"))
     with pytest.raises(ValueError, match="not selectable"):
@@ -407,8 +427,7 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
         "mode": "force",
         "policy_version": 2,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
-        "reasoning_effort": None, "fast_mode": False, "advisor_reasoning_effort": "low", "advisor_trigger": "adaptive",
-        "advisor_sensitivity": "balanced", "advisor_classifier": "ranked",
+        "reasoning_effort": None, "fast_mode": False,
     }
     assert client.get("/api/active-model").json() == response.json()
     options = client.get("/api/routing-options")
@@ -429,26 +448,13 @@ def test_control_routes_share_one_page_and_update_new_request_policy(
     )
     assert luna_advisor.status_code == 200
     assert luna_advisor.json()["advisor_model"] == "codex-luna-advisor"
-    adaptive = client.post(
-        "/api/advisor-model",
-        json={
-            "advisor_model": "codex-luna-advisor",
-            "advisor_sensitivity": "conservative",
-        },
-        headers={"origin": "http://testserver"},
-    )
-    assert adaptive.status_code == 200
-    assert adaptive.json()["advisor_trigger"] == "adaptive"
-    assert adaptive.json()["advisor_sensitivity"] == "conservative"
-    assert adaptive.json()["advisor_classifier"] == "ranked"
-    assert RoutingControlPlane(control.config_path, control.state_path).snapshot().advisor_trigger == "adaptive"
     invalid = client.post(
         "/api/advisor-model",
-        json={"advisor_model": "codex-luna-advisor", "advisor_trigger": "random"},
+        json={"advisor_model": "codex-luna-advisor", "reasoning_effort": "high"},
         headers={"origin": "http://testserver"},
     )
     assert invalid.status_code == 422
-    assert control.snapshot().advisor_trigger == "adaptive"
+    assert control.snapshot().advisor_model == "codex-luna-advisor"
     no_advisor = client.post(
         "/api/advisor-model",
         json={"advisor_model": None},
@@ -482,54 +488,28 @@ def test_control_api_rejects_cross_origin_non_json_and_unknown_models(
     assert "not selectable" in response.json()["detail"]
 
 
-@pytest.mark.parametrize("trigger", ["model", "hybrid", "always", "adaptive"])
-@pytest.mark.parametrize("classifier", ["local", "rules", "ranked"])
-def test_saved_legacy_selection_migrates_once_and_preserves_other_settings(tmp_path, trigger, classifier):
+def test_saved_legacy_advisor_policy_is_removed_once(tmp_path):
     control = make_control_plane(tmp_path)
     saved = json.loads(control.state_path.read_text())
     saved.update(policy_version=17, active_model="desktop", mode="force",
                  advisor_model="codex-luna-advisor", advisor_reasoning_effort="high",
-                 advisor_sensitivity="frequent", advisor_trigger=trigger,
-                 advisor_classifier=classifier)
+                 advisor_sensitivity="frequent", advisor_trigger="adaptive",
+                 advisor_classifier="ranked")
     control.state_path.write_text(json.dumps(saved))
     migrated = RoutingControlPlane(control.config_path, control.state_path)
     actual = json.loads(control.state_path.read_text())
-    assert actual == {**saved, "advisor_trigger": "adaptive", "advisor_classifier": "ranked",
-                      "policy_version": 17 if (trigger, classifier) == ("adaptive", "ranked") else 18}
-    assert migrated.snapshot().advisor_trigger == "adaptive"
-    assert migrated.snapshot().advisor_classifier == "ranked"
+    assert actual == {"active_model": "desktop", "mode": "force", "policy_version": 18,
+                      "advisor_model": "codex-luna-advisor", "reasoning_effort": None,
+                      "fast_mode": False}
+    assert migrated.snapshot().advisor_model == "codex-luna-advisor"
     restarted = RoutingControlPlane(control.config_path, control.state_path)
     assert restarted.snapshot() == migrated.snapshot()
     assert json.loads(control.state_path.read_text()) == actual
 
 
-@pytest.mark.parametrize("field,value", [
-    ("advisor_trigger", "model"), ("advisor_trigger", "always"),
-    ("advisor_trigger", "adaptive"), ("advisor_classifier", "rules"),
-    ("advisor_classifier", "local"), ("advisor_classifier", "ranked"),
-])
-def test_control_api_rejects_removed_selection_writes_without_policy_change(tmp_path, monkeypatch, field, value):
-    control = make_control_plane(tmp_path)
-    monkeypatch.setattr(dynamic_routing, "control_plane", control)
-    before = control.snapshot()
-    client = TestClient(app, client=("127.0.0.1", 50000))
-    response = client.post("/api/advisor-model", json={"advisor_model": "codex-luna-advisor", field: value})
-    assert response.status_code == 422
-    assert control.snapshot() == before
 
 
-def test_retired_subcall_metadata_cannot_bypass_authoritative_routing_and_ranking(tmp_path, monkeypatch):
-    from subroute.advisor_ranker import AdvisorRequestRanker
-    from subroute.advisor_frequency import AdvisorFrequencyGate
-    calls = []
-    async def score(self, prompt):
-        calls.append(prompt)
-        return .1
-    monkeypatch.setattr(AdvisorRequestRanker, "rank", score)
-    monkeypatch.setattr(AdvisorFrequencyGate, "choose", lambda self, *args: {
-        "consult": False, "score": .1, "target_rate": .5,
-        "selected_count": 0, "eligible_count": 1,
-    })
+def test_retired_subcall_metadata_cannot_change_advisor_selection(tmp_path):
     control = make_control_plane(tmp_path)
     control.update_advisor("codex-luna-advisor")
     data = {"model": "default", "messages": [{"role": "user", "content": "Review this"}],
@@ -538,5 +518,5 @@ def test_retired_subcall_metadata_cannot_bypass_authoritative_routing_and_rankin
     asyncio.run(AdvisorPlugin().async_pre_call_hook(None, None, data, "acompletion"))
     assert data["model"] == "minimax"
     assert data["metadata"]["gateway_policy"]["advisor_model"] == "codex-luna-advisor"
-    assert len(calls) == 1
-    assert data["metadata"]["gateway_advisor_decision"]["source"] == "ranked"
+    assert "tools" not in data
+    assert "gateway_advisor_decision" not in data["metadata"]

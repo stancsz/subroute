@@ -1,0 +1,10 @@
+[mcp_servers."subroute-search"]
+command = "uv"
+args = ["run", "--no-cache", "--no-sync", "--project", ".", "--extra", "search", "python", "-m", "subroute.search_mcp"]
+env_vars = ["GATEWAY_MASTER_KEY", "SUBROUTE_GATEWAY_URL"]
+enabled_tools = ["web_search"]
+startup_timeout_sec = 20
+tool_timeout_sec = 30
+
+[mcp_servers."subroute-search".tools.web_search]
+approval_mode = "auto"

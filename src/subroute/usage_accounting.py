@@ -10,6 +10,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import os
@@ -110,7 +111,7 @@ def deployment_kind(kwargs: Mapping, call_type: Any) -> str:
     model, provider, _, _ = get_llm_provider(model=str(kwargs.get("model") or ""),
                                             custom_llm_provider=kwargs.get("custom_llm_provider"), api_base=kwargs.get("api_base"))
     if call in {"anthropic_messages", "aanthropic_messages"}:
-        from litellm.llms.anthropic.experimental_pass_through.messages.handler import _deployment_passes_through_anthropic_messages
+        from litellm.llms.anthropic.pass_through.messages.handler import _deployment_passes_through_anthropic_messages
         native = ProviderConfigManager.get_provider_anthropic_messages_config(model, LlmProviders(provider)) if provider in {item.value for item in LlmProviders} else None
         return "provider" if native is not None or _deployment_passes_through_anthropic_messages(kwargs.get("model_info")) else "bridge"
     if call in {"responses", "aresponses"}:
@@ -118,7 +119,7 @@ def deployment_kind(kwargs: Mapping, call_type: Any) -> str:
         # This helper recognizes the full openai/chat_completions/ prefix before
         # resolving the provider config. get_llm_provider strips that prefix.
         return "bridge" if _will_bridge_to_chat_completions(str(kwargs.get("model") or ""), provider,
-            bool(kwargs.get("use_chat_completions_api")), kwargs.get("model_info")) else "provider"
+            bool(kwargs.get("use_chat_completions_api")), kwargs.get("model_info"), kwargs.get("api_base")) else "provider"
     if call in {"completion", "acompletion"}:
         from litellm.main import responses_api_bridge_check
         from litellm.utils import peek_reasoning_summary_aliases
@@ -467,21 +468,39 @@ class UsageAccounting(CustomLogger):
 usage_accounting = UsageAccounting()
 
 
+def _require_hook(owner: type, name: str, *required_parameters: str) -> None:
+    """Reject framework drift that makes a required accounting hook unusable."""
+    hook = getattr(owner, name, None)
+    if not callable(hook):
+        raise RuntimeError(f"LiteLLM accounting hook unavailable: {owner.__name__}.{name}")
+    try:
+        parameters = inspect.signature(hook).parameters
+        if not set(required_parameters).issubset(parameters):
+            raise TypeError("required parameters missing")
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"LiteLLM accounting hook signature changed: {owner.__name__}.{name}") from exc
+
+
 def install_stream_accounting():
     """Retain provider facts before LiteLLM substitutes token-count estimates.
 
     The installed deployment streaming hook runs only on the final chunk, after
     usage stripping. Its success callback receives an assembled response that
-    estimates missing usage. This narrow version-checked observation preserves
+    estimates missing usage. This narrow capability-checked observation preserves
     the framework's output and owns no protocol parsing or provider transport.
     Retire when LiteLLM exposes provider-origin usage and cancellation per chunk.
     """
-    from importlib.metadata import version
     from litellm.litellm_core_utils.streaming_handler import CustomStreamWrapper
     if getattr(CustomStreamWrapper, "_subroute_usage_observer", False):
         return
-    if version("litellm") not in {"1.101.0", "1.103.0"}:
-        raise RuntimeError("Review accounting hook behavior before changing LiteLLM version")
+    # LiteLLM version numbers are not a compatibility contract. Fail closed
+    # only when a hook this observer actually wraps disappears or can no longer
+    # be called with the arguments used below. Behavioral compatibility is
+    # exercised by the real Router/stream tests in test_usage_accounting.py.
+    _require_hook(CustomStreamWrapper, "chunk_creator", "self", "chunk")
+    _require_hook(CustomStreamWrapper, "__anext__", "self")
+    _require_hook(CustomStreamWrapper, "aclose", "self")
+    _require_hook(CustomStreamWrapper, "__init__", "self", "completion_stream", "model", "logging_obj")
     original_chunk = CustomStreamWrapper.chunk_creator
     original_next = CustomStreamWrapper.__anext__
     original_close = CustomStreamWrapper.aclose
@@ -597,7 +616,8 @@ def install_stream_accounting():
 
 
 def install_native_advisor_accounting():
-    from litellm.llms.anthropic.experimental_pass_through.messages.interceptors.advisor import AdvisorOrchestrationHandler
+    from litellm.llms.anthropic.pass_through.messages.interceptors.advisor import AdvisorOrchestrationHandler
+    _require_hook(AdvisorOrchestrationHandler, "handle", "self")
     original = AdvisorOrchestrationHandler.handle
 
     async def handle(self, *args, **kwargs):
@@ -626,6 +646,10 @@ def install_native_stream_accounting():
     original_next = ResponsesAPIStreamingIterator.__anext__
     original_close = getattr(ResponsesAPIStreamingIterator, "aclose", None)
     original_messages = PassThroughStreamingHandler.chunk_processor
+    _require_hook(BaseResponsesAPIStreamingIterator, "_process_chunk", "self", "chunk")
+    _require_hook(ResponsesAPIStreamingIterator, "__anext__", "self")
+    _require_hook(PassThroughStreamingHandler, "chunk_processor",
+                  "response", "request_body", "litellm_logging_obj")
 
     def observation(details):
         ident = attempt_id(details)

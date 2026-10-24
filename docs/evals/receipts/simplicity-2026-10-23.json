@@ -1,0 +1,320 @@
+{
+  "ordinary-live-smoke": {
+    "client_result": "passed",
+    "policy_bytes_unchanged": true,
+    "staging_lifecycle_unchanged": true,
+    "production_and_experts_lifecycle_unchanged": true,
+    "attempt_receipts": [
+      {
+        "attempt_id": "3d636726-8799-436c-b18e-834505a3a9ca",
+        "outcome": "complete",
+        "role": "inference",
+        "kind": "provider",
+        "api_path": "/v1/chat/completions",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "usage_complete": true
+      },
+      {
+        "attempt_id": "815777ce-65cd-4305-82a4-edff2e1368c5",
+        "outcome": "complete",
+        "role": "inference",
+        "kind": "provider",
+        "api_path": "/v1/responses",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "usage_complete": true
+      }
+    ],
+    "expert_attempts_observed": 0
+  },
+  "messages-no-tools": {
+    "client_result": "passed",
+    "policy_bytes_unchanged": true,
+    "staging_lifecycle_unchanged": true,
+    "production_and_experts_lifecycle_unchanged": true,
+    "attempt_receipts": [
+      {
+        "attempt_id": "3a84c124-4978-46f4-a108-ad723ffc55e6",
+        "outcome": "pending",
+        "role": "inference",
+        "kind": "bridge",
+        "api_path": "/v1/messages",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "usage_complete": false
+      },
+      {
+        "attempt_id": "35171808-a1cd-4b2d-b9f9-3417d9f0e5ea",
+        "outcome": "complete",
+        "role": "inference",
+        "kind": "bridge",
+        "api_path": "/v1/messages",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "usage_complete": true
+      },
+      {
+        "attempt_id": "fb10295c-cd31-4cdb-b9a3-17edb9d37325",
+        "outcome": "complete",
+        "role": "inference",
+        "kind": "provider",
+        "api_path": "/v1/messages",
+        "upstream_model": "openai/mimo-v2.6-pro",
+        "provider_id": "openai",
+        "usage_complete": true
+      }
+    ],
+    "expert_attempts_observed": 0
+  },
+  "budget_admission": {
+    "checks": [
+      {
+        "alias": "gemini-3.8-flash-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "gemini-3.7-flash-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "gemini-3.6-flash-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "gemini-3.1-pro-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "gemini-4-argon-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "codex-luna-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "codex-sol-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "codex-astra-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      },
+      {
+        "alias": "codex-gpt-6.1-sol-advisor",
+        "input32000_plus_output1024_admitted": true,
+        "input32001_rejected": true
+      }
+    ],
+    "native_admission_cases_passed": 18,
+    "normal_config_byte_identical_to_before": true,
+    "gemini_aliases_retained": 5,
+    "provider_requests": 0,
+    "scope": "real Router admission using configured expert metadata and synthetic OpenAI deployment; precomputed input counts, no actual provider or tokenizer boundary",
+    "hashes": {
+      "src/subroute/plugins/expert_sift.py": "e496d95a768ae1de41b8df5a78832339a617ccfcff3e8dad9d45d7ee1b3d1265",
+      "config/litellm.experts.yaml": "1ec762f2f2f3779d25be9a0ba6db68ae199959034c2813ac140cf5cc12cbd962",
+      "config/litellm.yaml": "9cdbd089406974d48edb9ad65688e1d0682248bba1e1483f0285f2ec7309fe5e",
+      "tests/test_expert_sift.py": "873e30e8fd7a011ca449eebee5dfb191b718edc3e2c5bae1d8ace96329f12c9b",
+      "tests/test_litellm_config.py": "d232d38e50ee30fd2ed04b74b7e234ca2b5732a44337b8c630409da919feb9c7",
+      "tests/test_expert_transport.py": "5b5a9f10bb81cd8227c8e495c926076a3d19d3ebf4e2e8562f4ee58155f8af51"
+    },
+    "socket_guard": "blocks external/deployed endpoints; permits Windows event-loop self-pipe",
+    "rerun_passed": true
+  },
+  "source_reduction": {
+    "status": "Historical coordinated working-tree ledger before final expert ceiling update and clean-checkout EOL normalization. Raw after-hashes identify that historical snapshot, not this publication tree; net reduction is historical.",
+    "method": "nonblank source lines excluding full-line Python # / JS // comments; Python docstrings retained; HTML/CSS comments removed preserving line boundaries",
+    "scope": "coordinated Sift/Advisor/routing/UI simplification plus desktop launcher; includes helper moved to expert hook and vendored adapter changes; no standalone repository moves",
+    "excluded": "unrelated dirty media/Relay/accounting/sidecar changes, configuration, lock/build recipes, data artifacts, tests and documentation; these are not counted as source reduction",
+    "files": [
+      {
+        "file": "src/subroute/sift_plugin.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 352,
+        "before_sha256": "6455dc9b72d4c44cd9266323eb2778f4fa740ae1b5e9c64e3616d8eb52b9e1f6",
+        "after_lines": 0,
+        "after_sha256": null
+      },
+      {
+        "file": "src/subroute/local_context.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 25,
+        "before_sha256": "e39df29add5b401a5bef446b7c3f71bfa6959fa174a603fb01523b8881f071b3",
+        "after_lines": 25,
+        "after_sha256": "94305892146b80bd31161d6168a3059ec456218229980ece806ae05c6b519eb6"
+      },
+      {
+        "file": "src/subroute/plugins/advisor_plugin.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 1113,
+        "before_sha256": "92b2f9a6d442761e0f7174d9969198a3b7d9aeb1f2ebccd247f6e9a3fd5c8365",
+        "after_lines": 135,
+        "after_sha256": "725de86ee898634a87b86ac1e30978921e55737fe1654c73a3e7d4a531d481f0"
+      },
+      {
+        "file": "src/subroute/plugins/dynamic_router.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 999,
+        "before_sha256": "8a6d2b34f5d2573be7dc92ee83ad9c839a1e02d431829604c140e78256f225bf",
+        "after_lines": 955,
+        "after_sha256": "f13519c1e4f9e4e562a577e71f1157923c9b1198211a34e4fbeb364d2a87b075"
+      },
+      {
+        "file": "src/subroute/plugins/expert_sift.py",
+        "category": "runtime_python",
+        "baseline": "new file",
+        "before_lines": 0,
+        "before_sha256": null,
+        "after_lines": 81,
+        "after_sha256": "8801faafe24eaf4d31f3d62c888ba9855ad42da67593fdc592d24e680d31da16"
+      },
+      {
+        "file": "src/subroute/advisor_ranker.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 119,
+        "before_sha256": "32d06d76b8aebf3d5ab1edb091fadb7a641aa7e34e34dbc200a87151c7058c5b",
+        "after_lines": 0,
+        "after_sha256": null
+      },
+      {
+        "file": "src/subroute/advisor_frequency.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 88,
+        "before_sha256": "44ae5402b1fc24d22603885e30f5f2eedb4a6f3abd52ff3d244614dddd570509",
+        "after_lines": 0,
+        "after_sha256": null
+      },
+      {
+        "file": "src/subroute/advisor_analytics.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 125,
+        "before_sha256": "2ef2561b479d4de35fbbb5297ff947406315491f4a0f1184f821636b6072a908",
+        "after_lines": 0,
+        "after_sha256": null
+      },
+      {
+        "file": "src/sift/core.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 798,
+        "before_sha256": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d",
+        "after_lines": 798,
+        "after_sha256": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d"
+      },
+      {
+        "file": "src/sift/litellm_proxy.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 288,
+        "before_sha256": "f0db546a000d4026df1445c4affbd8c3ae0b0353de8ee8d778d1a9c912648b86",
+        "after_lines": 293,
+        "after_sha256": "225651a9664904cccc356441415ea6c4d3abde01290d6d4cbb11cf5889b2ba4a"
+      },
+      {
+        "file": "src/sift/litellm_responses.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 118,
+        "before_sha256": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e",
+        "after_lines": 118,
+        "after_sha256": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e"
+      },
+      {
+        "file": "desktop/agents.cjs",
+        "category": "runtime_js",
+        "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+        "before_lines": 256,
+        "before_sha256": "1c4eb1843b5d22a6a2b8fac3a2e654e5961bb1bc53f951defa556d365317d83a",
+        "after_lines": 256,
+        "after_sha256": "ce33d2e8849e3a174729ffaeb15bb211d5f473bc9c596b9d87a1fb5320a19612"
+      },
+      {
+        "file": "src/subroute/control/app.js",
+        "category": "runtime_js",
+        "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+        "before_lines": 333,
+        "before_sha256": "c696cf0d05179d1208476a9a0bf5a1f5da471635b867b17886f67d0718b237e2",
+        "after_lines": 271,
+        "after_sha256": "344104d1792a418a426906e593a7350fb977bc10f58791287d6b8819610ab0c5"
+      },
+      {
+        "file": "src/subroute/control/index.html",
+        "category": "ui_markup_style",
+        "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+        "before_lines": 115,
+        "before_sha256": "9df5e5295245ccfc441d4b05ec409dcf664777839bf6bb436039d50ec3dc3bd3",
+        "after_lines": 96,
+        "after_sha256": "49ae298450faac0c8fa0bedf44f7857c7d56dfc5e9473f322beb0caef9ae4a60"
+      },
+      {
+        "file": "src/subroute/control/styles.css",
+        "category": "ui_markup_style",
+        "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+        "before_lines": 223,
+        "before_sha256": "86447e6a2f1d9afa5081f367e02b731002f414475ad8a7653db79478a1686e9c",
+        "after_lines": 201,
+        "after_sha256": "180198a651ee135621468892412f61431060dc7200a6d2037d057a6e68f081c1"
+      },
+      {
+        "file": "src/subroute/handlers/codex_advisor.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 333,
+        "before_sha256": "697253bbf0b376f39b3a21c7ff892e3d4006cb98377c36e3f37d45cd93b96ef9",
+        "after_lines": 347,
+        "after_sha256": "33b4fcbdba4b6f8137ba4235f72b0eef5124f88323b59df26c3f6121bd2c1ada"
+      },
+      {
+        "file": "src/subroute/token_counting.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 21,
+        "before_sha256": "8ae89b5a0f2cd5d980bf584249c1b02e750a6574acfc0707fd7449cf57e95614",
+        "after_lines": 21,
+        "after_sha256": "73dc6e54df3d6e9f6420c8823cdffe58a07a82f052b35f17489a4576e1d74371"
+      },
+      {
+        "file": "src/subroute/handlers/codex_subscription.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 278,
+        "before_sha256": "ac294236f437c021ca2acb961ed88469692fcd462617f92edc0b48692564e7f6",
+        "after_lines": 287,
+        "after_sha256": "54e453ad42d61a08378f40f367305c89b9e0cab362eae32bd5088b93fde0faeb"
+      },
+      {
+        "file": "src/subroute/handlers/codex_images.py",
+        "category": "runtime_python",
+        "baseline": "production-baseline.json",
+        "before_lines": 185,
+        "before_sha256": "b6d44e88b2d145e10c0858ef969f0b40336e65d5bf53daa59f4c6b2c962e7c1a",
+        "after_lines": 192,
+        "after_sha256": "361405b6030f078bd74e447874f2b115fe297d00c3cce416067e68cdc485da24"
+      }
+    ],
+    "totals": {
+      "runtime_python": -1590,
+      "runtime_js": -62,
+      "ui_markup_style": -41
+    },
+    "net_source_lines": -1693
+  },
+  "scope": "Reviewed checkpoint. Full-worktree historical tests are distinct from clean publication-tree validation. The Messages orphan is retained as an open defect; this checkpoint does not include its unaccepted repair."
+}

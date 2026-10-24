@@ -8,8 +8,6 @@ import logging
 import os
 import tempfile
 import threading
-import uuid
-from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -26,9 +24,6 @@ from subroute.ui_control import register_ui_routes, source_configuration
 
 
 RoutingMode = Literal["alias", "force", "off"]
-AdvisorTrigger = Literal["adaptive"]
-AdvisorSensitivity = Literal["conservative", "balanced", "frequent"]
-AdvisorClassifier = Literal["ranked"]
 CodexSearchResponseLength = Literal["short", "medium", "long"]
 # Small monotonic per-query bounds: concise results for short, default-like
 # coverage for medium, and a still-bounded larger set for long.
@@ -43,15 +38,20 @@ MEDIA_CONTENT_TYPES = frozenset({
     "image", "image_url", "input_image", "audio", "audio_url", "input_audio",
     "video", "video_url", "input_video", "file", "input_file",
 })
+MINIMAX_FLASH_PROVIDER_MODEL = "openrouter/minimax/minimax-m3.1-flash"
+MINIMAX_FLASH_DIRECT_PROVIDER_MODEL = "minimax/MiniMax-M3.1-Flash"
 MEDIA_CONTENT_KEYS = frozenset({
     "image_url", "input_image", "audio_url", "input_audio", "video_url",
     "input_video", "file_id", "file_data",
 })
 RETIRED_MODEL_ALIASES = {
-    "openai-guided": "openai", "openrouter-guided": "openrouter", "minimax-guided": "minimax",
+    "openai-guided": "openai", "openrouter-guided": "minimax/minimax-m3.1-flash", "minimax-guided": "minimax",
     "codex-terra": "codex-subscription", "codex-reserve": "codex-luna",
+    "openrouter": "minimax/minimax-m3.1-flash",
+    "openrouter-flash": "minimax/minimax-m3.1-flash",
+    "minimax-flash": "minimax/minimax-m3.1-flash",
 }
-FAILOVER_ADVISOR_MODELS = frozenset({"gemini-subscription", "codex-gpt-6.1-sol-advisor"})
+RESPONSES_PRIVATE_CODEX_MODELS = frozenset({"codex-luna", "codex-gpt-6.1-sol"})
 ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,8 @@ def _fallback_eligible(data: dict[str, Any], call_type: str) -> bool:
     """Restrict the generic text-model chain to text-only chat protocols."""
     if call_type not in FALLBACK_CALL_TYPES:
         return False
-    if data.get("model") in {
+    model = data.get("model")
+    if isinstance(model, str) and model in {
         "minimax-tts", "mimo-v2.5-asr", "mimo-v2.5-tts",
         "mimo-v2.5-tts-voiceclone", "mimo-v2.5-tts-voicedesign",
     }:
@@ -79,13 +80,13 @@ def _fallback_eligible(data: dict[str, Any], call_type: str) -> bool:
 
 
 def _requested_model_name(request_data: dict[str, Any]) -> str | None:
-    metadata = request_data.get("metadata")
-    if not isinstance(metadata, dict):
-        metadata = request_data.get("litellm_metadata")
-    if isinstance(metadata, dict):
-        routing = metadata.get("routing")
-        if isinstance(routing, dict) and isinstance(routing.get("requested_model"), str):
-            return routing["requested_model"]
+    # LiteLLM metadata is server-owned; top-level metadata may be client input.
+    for key in ("litellm_metadata", "metadata"):
+        metadata = request_data.get(key)
+        if isinstance(metadata, dict):
+            routing = metadata.get("routing")
+            if isinstance(routing, dict) and isinstance(routing.get("requested_model"), str):
+                return routing["requested_model"]
     requested = request_data.get("model")
     return requested if isinstance(requested, str) else None
 
@@ -94,19 +95,36 @@ def _stamp_requested_model(response: Any, requested_model: str | None) -> None:
     """Keep fallback provider resolution out of the client-visible model field."""
     if not requested_model:
         return
+    from litellm.proxy.utils import _UpstreamStreamBoundary
+    from litellm.router import FallbackAwareAnthropicMessagesStream
+    from litellm.llms.anthropic.pass_through.adapters.streaming_iterator import AnthropicSSEStream
+
+    if isinstance(response, _UpstreamStreamBoundary):
+        _stamp_requested_model(response._source, requested_model)
+        return
+    if isinstance(response, FallbackAwareAnthropicMessagesStream):
+        _stamp_requested_model(response._source_iterator, requested_model)
+        return
+    if isinstance(response, AnthropicSSEStream):
+        _stamp_requested_model(response._anthropic_wrapper, requested_model)
+        return
     if isinstance(response, dict):
         if "model" in response:
             response["model"] = requested_model
         nested = response.get("response")
+        message = response.get("message")
+        if isinstance(message, dict) and "model" in message:
+            message["model"] = requested_model
     else:
-        if hasattr(response, "model"):
+        model_descriptor = getattr(type(response), "model", None)
+        if hasattr(response, "model") and not (isinstance(model_descriptor, property) and model_descriptor.fset is None):
             response.model = requested_model
         nested = getattr(response, "response", None)
     if isinstance(nested, dict):
         if "model" in nested:
             nested["model"] = requested_model
-    elif nested is not None and hasattr(nested, "model"):
-        nested.model = requested_model
+    elif nested is not None:
+        _stamp_requested_model(nested, requested_model)
 
 
 @dataclass(frozen=True)
@@ -117,10 +135,6 @@ class RoutingState:
     advisor_model: str | None = "codex-gpt-6.1-sol-advisor"
     reasoning_effort: str | None = None
     fast_mode: bool = False
-    advisor_reasoning_effort: str | None = None
-    advisor_trigger: AdvisorTrigger = "adaptive"
-    advisor_sensitivity: AdvisorSensitivity = "balanced"
-    advisor_classifier: AdvisorClassifier = "ranked"
 
 
 @dataclass(frozen=True)
@@ -147,8 +161,6 @@ class RoutingUpdate(BaseModel):
 class AdvisorUpdate(BaseModel):
     model_config = {"extra": "forbid"}
     advisor_model: str
-    reasoning_effort: str | None = None
-    advisor_sensitivity: AdvisorSensitivity | None = None
 
 
 class CodexSearchQuery(BaseModel):
@@ -357,18 +369,14 @@ class RoutingControlPlane:
             fallback_model = (
                 DEFAULT_TARGET_MODEL
                 if DEFAULT_TARGET_MODEL in self.allowed_models
-                else "openrouter" if "openrouter" in self.allowed_models else self.choices[0].model_id
+                else "minimax/minimax-m3.1-flash"
+                if "minimax/minimax-m3.1-flash" in self.allowed_models
+                else self.choices[0].model_id
             )
             initial_model = os.getenv("ACTIVE_MODEL", fallback_model)
             initial_model = RETIRED_MODEL_ALIASES.get(initial_model, initial_model)
             advisor_model = os.getenv("ADVISOR_MODEL", "codex-gpt-6.1-sol-advisor")
-            state = RoutingState(
-                active_model=initial_model,
-                advisor_model=advisor_model,
-                advisor_reasoning_effort="low" if advisor_model == "codex-gpt-6.1-sol-advisor" else (
-                    "high" if advisor_model == "codex-luna-advisor" else None
-                ),
-            )
+            state = RoutingState(active_model=initial_model, advisor_model=advisor_model)
             self._validate(state)
             self._write_atomic(state)
             return state
@@ -384,14 +392,6 @@ class RoutingControlPlane:
             advisor_model=advisor_model,
             reasoning_effort=raw.get("reasoning_effort"),
             fast_mode=raw.get("fast_mode", False),
-            advisor_reasoning_effort=(
-                raw.get("advisor_reasoning_effort")
-                if advisor_model == saved_advisor_model
-                else None
-            ),
-            advisor_trigger="adaptive",
-            advisor_sensitivity=raw.get("advisor_sensitivity", "balanced"),
-            advisor_classifier="ranked",
         )
         replacement = RETIRED_MODEL_ALIASES.get(state.active_model)
         routed_model = replacement or state.active_model
@@ -402,11 +402,10 @@ class RoutingControlPlane:
             state.reasoning_effort is not None
             and (active_choice is None or state.reasoning_effort not in active_choice.reasoning_efforts)
         )
-        migrated = (
-            raw.get("advisor_trigger") != "adaptive"
-            or raw.get("advisor_classifier") != "ranked"
-            or advisor_model != saved_advisor_model
-            or unsupported_effort
+        migrated = advisor_model != saved_advisor_model or unsupported_effort or any(
+            key in raw for key in (
+                "advisor_reasoning_effort", "advisor_trigger", "advisor_sensitivity", "advisor_classifier",
+            )
         )
         if replacement or migrated:
             state = replace(state, active_model=replacement or state.active_model,
@@ -434,19 +433,8 @@ class RoutingControlPlane:
             raise ValueError("an advisor model must remain selected")
         if state.advisor_model not in self.advisor_models:
             raise ValueError(f"advisor model is not selectable: {state.advisor_model!r}")
-        if state.advisor_trigger != "adaptive":
-            raise ValueError(f"invalid advisor trigger: {state.advisor_trigger!r}")
-        if state.advisor_sensitivity not in {"conservative", "balanced", "frequent"}:
-            raise ValueError(f"invalid advisor sensitivity: {state.advisor_sensitivity!r}")
-        if state.advisor_classifier != "ranked":
-            raise ValueError(f"invalid advisor classifier: {state.advisor_classifier!r}")
-        for model, effort in (
-            (state.active_model, state.reasoning_effort),
-            (state.advisor_model, state.advisor_reasoning_effort),
-        ):
-            choice = next((item for item in self.choices if item.model_id == model), None)
-            if effort is not None and (choice is None or effort not in choice.reasoning_efforts):
-                raise ValueError(f"reasoning effort {effort!r} is not supported by {model!r}")
+        if state.reasoning_effort is not None and state.reasoning_effort not in active_choice.reasoning_efforts:
+            raise ValueError(f"reasoning effort {state.reasoning_effort!r} is not supported by {state.active_model!r}")
 
     def _write_atomic(self, state: RoutingState) -> None:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -486,22 +474,12 @@ class RoutingControlPlane:
             self._state = candidate
             return candidate
 
-    def update_advisor(self, advisor_model: str, **settings: Any) -> RoutingState:
-        if settings.keys() - {"reasoning_effort", "advisor_sensitivity"}:
-            raise ValueError("Advisor selection uses learned ranking; only frequency and reasoning effort can be changed")
+    def update_advisor(self, advisor_model: str) -> RoutingState:
         with self._lock:
-            default_effort = "low" if advisor_model in FAILOVER_ADVISOR_MODELS else None
             candidate = replace(
                 self._state,
                 advisor_model=advisor_model,
                 policy_version=self._state.policy_version + 1,
-                advisor_reasoning_effort=settings.get(
-                    "reasoning_effort",
-                    self._state.advisor_reasoning_effort
-                    if advisor_model == self._state.advisor_model
-                    else default_effort,
-                ),
-                advisor_sensitivity=settings.get("advisor_sensitivity") or self._state.advisor_sensitivity,
             )
             self._validate(candidate)
             self._write_atomic(candidate)
@@ -536,6 +514,32 @@ def _default_control_plane() -> RoutingControlPlane:
     return RoutingControlPlane(config_path, state_path)
 
 
+def _install_responses_fallback_boundary() -> None:
+    """Keep native failover, but never replay an exposed Responses stream.
+
+    LiteLLM 1.106.2 protects Chat output, while its Responses fallback helper
+    still synthesizes continuation instructions after emitted output. There
+    is no native setting for this boundary. Retire this small guard when the
+    native Responses helper exposes the same pre-output-only policy.
+    """
+    from litellm import Router
+
+    if getattr(Router, "_subroute_responses_pre_output_only", False):
+        return
+    original = Router._aresponses_fallback_attempt
+
+    async def pre_output_only(self, e, *args, **kwargs):
+        if not e.is_pre_first_chunk:
+            if e.original_exception is not None:
+                raise e.original_exception from e
+            raise e
+        async for event in original(self, e, *args, **kwargs):
+            yield event
+
+    Router._aresponses_fallback_attempt = pre_output_only
+    Router._subroute_responses_pre_output_only = True
+
+
 class DynamicRoutingPlugin(CustomLogger):
     def __init__(self, control_plane: RoutingControlPlane) -> None:
         super().__init__()
@@ -547,6 +551,7 @@ class DynamicRoutingPlugin(CustomLogger):
         install_responses_stream_repair()
         from subroute.usage_accounting import install_stream_accounting
         install_stream_accounting()
+        _install_responses_fallback_boundary()
         self.control_plane = control_plane
 
     async def async_post_call_streaming_iterator_hook(self, user_api_key_dict, response, request_data):
@@ -586,7 +591,13 @@ class DynamicRoutingPlugin(CustomLogger):
         data: dict,
         call_type: str,
     ) -> dict | None:
-        requested_model = data.get("model")
+        original_requested_model = data.get("model")
+        requested_model = (
+            RETIRED_MODEL_ALIASES.get(original_requested_model, original_requested_model)
+            if isinstance(original_requested_model, str) else original_requested_model
+        )
+        if requested_model != data.get("model"):
+            data["model"] = requested_model
         # This request snapshot is server-owned, never a client override.
         data.pop("gateway_image_request", None)
         if isinstance(data.get("extra_body"), dict):
@@ -594,21 +605,15 @@ class DynamicRoutingPlugin(CustomLogger):
         if call_type in {"aresponses", "responses"}:
             data.setdefault("litellm_metadata", {})
         _, metadata = get_or_create_metadata_bucket(data)
+        # Keep the caller-visible identity in server-owned metadata before
+        # any routing branch can rewrite data["model"]. Never trust a client
+        # supplied routing.requested_model value.
+        metadata["routing"] = {"requested_model": original_requested_model}
         if not _fallback_eligible(data, call_type):
             # The global chain is for text-only chat. Preserve media and
             # specialized endpoint semantics by keeping those requests local
             # to their explicitly selected provider route.
             data["disable_fallbacks"] = True
-        # The accounting callback owns the root ID. Never accept caller markers.
-        from subroute.plugins.advisor_plugin import advisor_plugin_instance, ADVISOR_CALL_TYPES
-        from subroute.usage_accounting import trace_context
-        metadata.pop("_gateway_analytics_id", None)
-        metadata.pop("_gateway_analytics_ok", None)
-        if call_type in ADVISOR_CALL_TYPES:
-            trace = trace_context.get()
-            request_id = trace.request_id if trace is not None else str(uuid.uuid4())
-            metadata["_gateway_analytics_id"] = request_id
-            metadata["_gateway_analytics_ok"] = await advisor_plugin_instance.analytics.record(request_id)
         from subroute.plugins.image_intent import image_request_context
         from subroute.audio import audio_route
 
@@ -630,7 +635,7 @@ class DynamicRoutingPlugin(CustomLogger):
             # use the existing Gemini subscription route below.
             resolved_model = requested_model if requested_model == "mimo-v2.5-asr" else "gemini-subscription"
             metadata["routing"] = {
-                "requested_model": requested_model, "resolved_model": resolved_model,
+                "requested_model": original_requested_model, "resolved_model": resolved_model,
                 "mode": "audio_input" if resolved_model == "gemini-subscription" else "speech_recognition",
                 "policy_version": state.policy_version,
             }
@@ -652,7 +657,7 @@ class DynamicRoutingPlugin(CustomLogger):
             metadata["gateway_reasoning_effort"] = None
             metadata["gateway_target_fast_mode"] = False
             metadata["routing"] = {
-                "requested_model": requested_model, "resolved_model": requested_model,
+                "requested_model": original_requested_model, "resolved_model": requested_model,
                 "mode": "speech_synthesis", "policy_version": state.policy_version,
             }
             return data
@@ -665,11 +670,11 @@ class DynamicRoutingPlugin(CustomLogger):
             data["disable_fallbacks"] = True
             _, metadata = get_or_create_metadata_bucket(data)
             state = self.control_plane.snapshot()
-            metadata["gateway_policy"] = asdict(state)
+            metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
             metadata["gateway_reasoning_effort"] = None
             metadata["gateway_target_fast_mode"] = False
             metadata["routing"] = {
-                "requested_model": requested_model, "resolved_model": "codex-luna",
+                "requested_model": original_requested_model, "resolved_model": "codex-luna",
                 "mode": image_context["reason"], "policy_version": state.policy_version,
             }
             data["model"] = "codex-luna"
@@ -685,11 +690,11 @@ class DynamicRoutingPlugin(CustomLogger):
                 raise HTTPException(exc.status_code, detail=str(exc)) from exc
             _, metadata = get_or_create_metadata_bucket(data)
             state = self.control_plane.snapshot()
-            metadata["gateway_policy"] = asdict(state)
+            metadata["gateway_policy"] = {**asdict(state), "advisor_model": None}
             metadata["gateway_reasoning_effort"] = None
             metadata["gateway_target_fast_mode"] = False
             metadata["routing"] = {
-                "requested_model": requested_model, "resolved_model": IMAGE_MODEL,
+                "requested_model": original_requested_model, "resolved_model": IMAGE_MODEL,
                 "mode": "image_generation", "policy_version": state.policy_version,
             }
             data["model"] = IMAGE_MODEL
@@ -716,15 +721,96 @@ class DynamicRoutingPlugin(CustomLogger):
         ))
         metadata["gateway_reasoning_effort"] = state.reasoning_effort if routed else None
         metadata["gateway_target_fast_mode"] = bool(routed and state.fast_mode)
+        private_responses_tools = (
+            call_type in {"responses", "aresponses"}
+            and isinstance(data.get("input"), list)
+            and any(isinstance(item, dict) and item.get("type") == "additional_tools"
+                    for item in data["input"])
+        )
+        if private_responses_tools:
+            # These private Responses input items are not supported by the
+            # OpenRouter/MiMo chat bridges. Keep the complete request on a
+            # native Codex Responses deployment and constrain fallback to
+            # the other configured Codex deployment only.
+            if resolved_model not in RESPONSES_PRIVATE_CODEX_MODELS:
+                resolved_model = "codex-luna"
+            alternate = "codex-gpt-6.1-sol" if resolved_model == "codex-luna" else "codex-luna"
+            data["fallbacks"] = [{resolved_model: [alternate]}]
+            data["max_fallbacks"] = 1
+            data["disable_fallbacks"] = False
+            metadata["routing"] = {
+                "requested_model": original_requested_model,
+                "resolved_model": resolved_model,
+                "mode": "responses_private_tools_native_codex",
+                "compatibility_reason": "additional_tools_requires_native_codex_responses",
+                "policy_version": state.policy_version,
+            }
+            data["model"] = resolved_model
+            logger.info("Responses compatibility route requested=%s resolved=%s fallback=%s",
+                        requested_model, resolved_model, alternate)
+            return data
+        if resolved_model == "qwen3.8-27b":
+            choice = data.get("tool_choice")
+            named_tool_choice = (
+                isinstance(choice, dict)
+                and ((choice.get("type") == "function"
+                      and isinstance(choice.get("function"), dict)
+                      and isinstance(choice["function"].get("name"), str)
+                      and bool(choice["function"]["name"]))
+                     or (choice.get("type") in ("tool", "function")
+                         and isinstance(choice.get("name"), str)
+                         and bool(choice["name"])))
+            )
+            output_limits = [data[name] for name in (
+                "max_tokens", "max_completion_tokens", "max_output_tokens",
+            ) if name in data and data[name] is not None]
+            valid_limits = all(type(value) is int and value > 0 for value in output_limits)
+            output_over_local_cap = False
+            if valid_limits and output_limits:
+                try:
+                    from litellm.proxy import proxy_server
+
+                    router = proxy_server.llm_router
+                    _, local_output_cap = router.get_configured_token_limits(resolved_model) \
+                        if router is not None else (None, None)
+                    output_over_local_cap = (
+                        type(local_output_cap) is int and local_output_cap > 0
+                        and max(output_limits) > local_output_cap
+                    )
+                except Exception as error:
+                    logger.warning("qwen_output_compatibility_check_unavailable reason=%s",
+                                   type(error).__name__)
+            if named_tool_choice or output_over_local_cap:
+                reason = ("named_tool_choice" if named_tool_choice
+                          else "output_limit_exceeds_local_cap")
+                resolved_model = "mimo-v2.6-pro"
+                metadata["routing"] = {
+                    "requested_model": original_requested_model,
+                    "resolved_model": resolved_model,
+                    "mode": "qwen_native_compatibility",
+                    "compatibility_reason": reason,
+                    "policy_version": state.policy_version,
+                }
+                data["model"] = resolved_model
+                logger.info("Qwen compatibility route requested=%s resolved=%s reason=%s",
+                            requested_model, resolved_model, reason)
+                return data
         if resolved_model == "qwen3.8-27b":
             from subroute.local_context import frontload_anthropic_system_messages
 
             data = frontload_anthropic_system_messages(data, call_type)
         if resolved_model == requested_model:
+            if original_requested_model != requested_model:
+                metadata["routing"] = {
+                    "requested_model": original_requested_model,
+                    "resolved_model": resolved_model,
+                    "mode": state.mode,
+                    "policy_version": state.policy_version,
+                }
             return data
 
         metadata["routing"] = {
-            "requested_model": requested_model,
+            "requested_model": original_requested_model,
             "resolved_model": resolved_model,
             "mode": state.mode,
             "policy_version": state.policy_version,
@@ -743,6 +829,48 @@ class DynamicRoutingPlugin(CustomLogger):
         metadata = kwargs.get(get_metadata_variable_name_from_kwargs(kwargs)) or {}
         effort = metadata.get("gateway_reasoning_effort")
         fast_mode = metadata.get("gateway_target_fast_mode") is True
+        is_minimax_flash = kwargs.get("model") == MINIMAX_FLASH_PROVIDER_MODEL
+        is_minimax_flash_direct = kwargs.get("model") == MINIMAX_FLASH_DIRECT_PROVIDER_MODEL
+        if is_minimax_flash and call_type in {
+            "aresponses", "responses", "anthropic_messages", "aanthropic_messages",
+            "acompletion", "completion",
+        }:
+            if any(
+                kwargs.get(key) is not None and not isinstance(kwargs.get(key), dict)
+                for key in ("reasoning", "output_config")
+            ):
+                return None
+            if effort is None:
+                effort = self._minimax_flash_caller_effort(kwargs)
+            if effort is None:
+                effort = self._minimax_flash_default_effort(kwargs)
+            if effort is not None:
+                # OpenRouter's pinned LiteLLM cost metadata rejects
+                # reasoning_effort for this model. Its native reasoning field
+                # also preserves MiniMax's distinct `max` level.
+                updated = kwargs.copy()
+                requested_effort = kwargs.get("reasoning_effort")
+                requested = kwargs.get("reasoning")
+                updated["reasoning"] = {
+                    **(requested_effort if isinstance(requested_effort, dict) else {}),
+                    **(requested if isinstance(requested, dict) else {}),
+                    "effort": effort,
+                }
+                updated.pop("reasoning_effort", None)
+                return updated
+        if is_minimax_flash_direct and call_type in {
+            "aresponses", "responses", "anthropic_messages", "aanthropic_messages",
+            "acompletion", "completion",
+        }:
+            if any(
+                kwargs.get(key) is not None and not isinstance(kwargs.get(key), dict)
+                for key in ("reasoning", "output_config")
+            ):
+                return None
+            if effort is None:
+                effort = self._minimax_flash_caller_effort(kwargs)
+            if effort is None:
+                effort = self._minimax_flash_default_effort(kwargs)
         if effort is None and not fast_mode:
             return None
         updated = kwargs.copy()
@@ -763,6 +891,39 @@ class DynamicRoutingPlugin(CustomLogger):
         else:
             return None
         return updated
+
+    @staticmethod
+    def _minimax_flash_caller_effort(kwargs: dict[str, Any]) -> str | None:
+        reasoning_effort = kwargs.get("reasoning_effort")
+        if isinstance(reasoning_effort, str):
+            return reasoning_effort
+        if isinstance(reasoning_effort, dict) and isinstance(reasoning_effort.get("effort"), str):
+            return reasoning_effort["effort"]
+        for carrier in (kwargs.get("reasoning"), kwargs.get("output_config")):
+            if isinstance(carrier, dict) and isinstance(carrier.get("effort"), str):
+                return carrier["effort"]
+        return None
+
+    @staticmethod
+    def _minimax_flash_default_effort(kwargs: dict[str, Any]) -> str | None:
+        """Default Flash effort only when the caller supplied no effort or budget."""
+        reasoning = kwargs.get("reasoning")
+        output_config = kwargs.get("output_config")
+        thinking = kwargs.get("thinking")
+        reasoning_effort = kwargs.get("reasoning_effort")
+        if reasoning_effort is not None:
+            return None
+        if isinstance(reasoning, dict) and any(
+            key in reasoning for key in ("effort", "max_tokens", "budget_tokens")
+        ):
+            return None
+        if isinstance(output_config, dict) and any(
+            key in output_config for key in ("effort", "budget_tokens", "max_tokens")
+        ):
+            return None
+        if thinking is not None:
+            return None
+        return "medium"
 
 
 def _require_local_control_request(request: Request) -> None:
@@ -883,45 +1044,13 @@ async def advisor_model_state(request: Request) -> dict[str, Any]:
     return asdict(control_plane.snapshot())
 
 
-async def advisor_frequency_state(request: Request) -> dict[str, Any]:
-    _require_local_control_request(request)
-    # The configured callback owns the process-local gate; this endpoint only reads it.
-    from subroute.plugins.advisor_plugin import advisor_plugin_instance
-    return advisor_plugin_instance.frequency_state(asdict(control_plane.snapshot()))
-
-
-async def advisor_analytics_state(request: Request) -> dict[str, Any]:
-    _require_local_control_request(request)
-    try:
-        raw = request.query_params.get("minutes", "60")
-        if raw not in {"30", "60", "120"}:
-            raise ValueError("Window must be 30, 60, or 120 minutes")
-        from subroute.plugins.advisor_plugin import advisor_plugin_instance
-        stats = await advisor_plugin_instance.analytics.summary(int(raw))
-    except ValueError as exc:
-        raise HTTPException(422, detail=str(exc)) from exc
-    return {
-        **stats,
-        "total_requests": stats["total"], "eligible_requests": stats["eligible"],
-        "invoked_requests": stats["invoked"], "successful_advice": stats["successful"],
-        "failed_advice": stats["failed"],
-        "coverage": {"complete": not stats["partial_window"] and not stats["counts_may_be_incomplete"],
-                     "started_at": datetime.fromtimestamp(stats["coverage_verified_start_ms"] / 1000, timezone.utc).isoformat()
-                     if stats["coverage_verified_start_ms"] is not None else None},
-    }
-
-
 async def update_advisor_model(request: Request) -> dict[str, Any]:
     _require_local_control_request(request)
     if request.headers.get("content-type", "").partition(";")[0].strip().lower() != "application/json":
         raise HTTPException(status_code=415, detail="application/json is required")
     try:
         update = AdvisorUpdate.model_validate(await request.json())
-        settings = update.model_dump(
-            include={"reasoning_effort", "advisor_sensitivity"},
-            exclude_unset=True,
-        )
-        return asdict(control_plane.update_advisor(update.advisor_model, **settings))
+        return asdict(control_plane.update_advisor(update.advisor_model))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise HTTPException(status_code=422, detail="invalid advisor update") from exc
     except ValueError as exc:
@@ -938,8 +1067,6 @@ def _register_routes() -> None:
         ("/api/active-model", update_active_model, ["POST"], None),
         ("/api/routing-options", routing_options, ["GET"], None),
         ("/api/advisor-model", advisor_model_state, ["GET"], None),
-        ("/api/advisor-frequency", advisor_frequency_state, ["GET"], None),
-        ("/api/advisor-analytics", advisor_analytics_state, ["GET"], None),
         ("/api/advisor-model", update_advisor_model, ["POST"], None),
     )
     for path, endpoint, methods, response_class in routes:

@@ -16,12 +16,23 @@ def _target_model(model: str) -> str:
 
 def _request_options(optional_params: dict[str, Any]) -> dict[str, Any]:
     options = dict(optional_params)
+    limits = []
+    for field in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
+        value = options.pop(field, None)
+        if value is not None:
+            # The pinned Responses bridge raises smaller limits to 16. Reject
+            # them here instead of silently spending beyond the caller's cap.
+            if type(value) is not int or value < 16:
+                raise CustomLLMError(400, "Codex output limits must be integers of at least 16 tokens")
+            limits.append(value)
+    if limits:
+        options["max_completion_tokens"] = min(limits)
     # The ChatGPT subscription endpoint rejects these public OpenAI/LiteLLM
     # fields. Filter them only on this provider-bound request; keep the
     # caller's original Messages/Responses payload intact.
     for key in (
         "stream", "api_base", "api_key", "extra_headers", "timeout", "num_retries",
-        "max_tokens", "max_output_tokens", "user",
+        "user",
     ):
         options.pop(key, None)
     if options.get("service_tier") == "fast":

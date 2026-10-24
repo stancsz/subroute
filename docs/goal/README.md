@@ -1,12 +1,10 @@
 # Goal records
 
-- **Current LAN coordination:** [Device A server and device B Docker client setup](../operations/relay-devices.md), [design and recovery](../operations/relay.md), and [test results and limits](../evals/relay-2026-10-23.md). Same-host client registration/restart and independent code review passed. Default workers need no skills bundle; the current Relay checks pass 55 tests, independently rerun. All 11 repeatable isolated Docker fault groups passed with cleanup verified; see the design guide. Two later real-Claude Docker rounds produced one completed goal and one failed worker handoff at the existing turn cap; A revised leaf handoff contract then passed one bounded four-task round with no observed coordinator-state reconnaissance. Provider-free supervisor success/failure checks and one unchanged-cap native six-turn pause/handoff cycle now pass in parent execution; direct independent native transcript verification is blocked by file permissions. Productive multi-cycle/default-24, repeatable unattended and sustained acceptance remain open. Physical-device testing is owner-deferred; current testing stays on one machine.
-
-- **Current context delivery:** [4M input, Sift targets, 1M client trigger and gateway error observation](../evals/subroute-4m-context-2026-10-23.md).
-
+- **Active:** [Subroute: simpler code, fewer failure paths, cooperative Sift](../../GOAL.md). This is the current execution contract.
+- **Previous goal and checkpoints:** [Contract before the 2026-10-23 simplification reset](archive/GOAL-2026-10-23-before-simplicity.md). Preserved verbatim; unresolved acceptance remains unresolved. Its original relative references are interpreted from the repository root.
+- **Historical/deferred LAN pilot:** [Device setup](../operations/relay-devices.md), [design and recovery](../operations/relay.md), and [test results and limits](../evals/relay-2026-10-23.md). Same-host fixture/code evidence does not close productive multi-cycle, sustained or physical-device acceptance. Physical-device testing remains owner-deferred.
+- **Historical context-delivery checkpoint:** [4M input, Sift targets, client trigger and gateway observation](../evals/subroute-4m-context-2026-10-23.md). Reuse evidence only for the source and runtime it covers.
 - **Completed:** [Subroute dashboard and shared Badlands identity](badlands-redesign.md).
+- **Earlier archives:** [Core goal before 2026-09-28](archive/GOAL-2026-09-28-legacy.md) and [control desk readiness](archive/control-desk-readiness-2026-09-28-legacy.md).
 
-- **目标记录：** [Subroute 维护性与可靠性](../../GOAL.md)（已完成，状态见目标文件）
-- **历史归档：** [2026-09-28 之前的 Subroute 核心目标](archive/GOAL-2026-09-28-legacy.md)、[Control desk readiness goal](archive/control-desk-readiness-2026-09-28-legacy.md)
-
-归档文件保留旧目标的原文，供追溯历史范围和验收证据。它们不再是活动工作合同。
+Archives retain prior scope and evidence. They are not competing active execution contracts and their limitations are not erased by a new priority.

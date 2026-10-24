@@ -153,7 +153,7 @@ async def image_conversation(messages: list, options: dict, context: dict):
     from litellm.completion_extras.litellm_responses_transformation.transformation import LiteLLMResponsesTransformationHandler
     from litellm.responses.utils import ResponseAPILoggingUtils
     from litellm.types.utils import Choices, Message, ModelResponse
-    from openai.types.responses import ResponseOutputMessage
+    from openai.types.responses import ResponseOutputMessage, ResponseOutputText
     from subroute.handlers.codex_messages import normalize_messages
     from subroute.plugins.image_intent import image_tool
 
@@ -176,11 +176,18 @@ async def image_conversation(messages: list, options: dict, context: dict):
     terminal = await collect_image_response(request)
     if not terminal.get("usage"):
         raise CustomLLMError(502, "Luna omitted usage required by the conversation protocol bridge")
+    outputs = [ResponseOutputMessage(**item) if item.get("type") == "message" else item
+               for item in terminal["output"]]
+    for message in outputs:
+        if isinstance(message, ResponseOutputMessage):
+            text_indexes = [index for index, part in enumerate(message.content)
+                            if part.type == "output_text" and part.text]
+            for index in reversed(text_indexes[1:]):
+                message.content.insert(index, ResponseOutputText(type="output_text", text="\n", annotations=[]))
+    # Give native conversion the exact rendered separators so it also owns
+    # citation offsets, instead of adding whitespace after annotations map.
     choices = bridge._convert_response_output_to_choices(
-        # The raw-dict callback retains only the first text block. The SDK
-        # message type lets LiteLLM preserve every block and its annotations.
-        [ResponseOutputMessage(**item) if item.get("type") == "message" else item
-         for item in terminal["output"]],
+        outputs,
         handle_raw_dict_callback=bridge._handle_raw_dict_response_item,
     )
     # Keep one Chat choice with all text/tool content, rather than presenting

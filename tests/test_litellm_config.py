@@ -21,20 +21,25 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
         assert settings["router_settings"]["enable_pre_call_checks"] is True
         for deployment in settings["model_list"]:
             info = deployment["model_info"]
+            if deployment["model_name"].startswith("experts/"):
+                assert info["selectable"] is False
+                assert "max_input_tokens" not in info
+                continue
             is_advisor = experts or deployment["model_name"].endswith("-advisor")
             speech = deployment["model_name"].startswith(("mimo-v2.5-asr", "mimo-v2.5-tts"))
             local_qwen = deployment["model_name"] == "qwen3.8-27b"
             context = 32000 if is_advisor else 8000 if speech else 40960 if local_qwen else 256000
-            assert info["max_input_tokens"] == (32768 if local_qwen else context), deployment["model_name"]
+            max_input = 32_000 if experts else 32768 if local_qwen else context
+            assert info["max_input_tokens"] == max_input, deployment["model_name"]
             assert info["context_window"] == context
-            trigger = 32768 if local_qwen else 1_000_000 if context == 256000 else context * 0.8
+            trigger = 32768 if local_qwen else context * 0.8
             assert info["auto_compact_token_limit"] == trigger
             if info.get("advisor_selectable"):
                 if info["max_input_tokens"] == 256000:
                     assert info["advisor_max_input_tokens"] == 32000
             if not local_qwen and context != 256000:
                 assert info["auto_compact_token_limit"] == info["context_window"] * 0.8
-            assert info["compaction_scope"] == "total"
+            assert info["compaction_scope"] == ("input" if experts else "total")
 
     supplemental = next(
         deployment for deployment in config()["model_list"]
@@ -43,13 +48,6 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
     assert supplemental["litellm_params"]["model"] == "antigravity/claude-opus-5-5-low"
     assert supplemental["model_info"]["max_input_tokens"] == 32000
     assert supplemental["model_info"]["auto_compact_token_limit"] == 25600
-
-
-def test_advisor_compaction_summarizers_are_configured_for_text_and_images():
-    by_name = {deployment["model_name"]: deployment for deployment in config()["model_list"]}
-    assert by_name["minimax"]["model_info"]["source_id"] == "minimax"
-    assert by_name["mimo-v2.6-flash"]["model_info"]["capabilities"] == ["text", "streaming"]
-    assert "vision" in by_name["mimo-v2.5-pro"]["model_info"]["capabilities"]
 
 
 def test_local_qwen_responses_uses_litellm_chat_bridge():
@@ -85,8 +83,12 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     assert stage_env["HEALTH_CHECK_TIMEOUT_SECONDS"] == "10"
     assert "OPENAI_API_KEY" not in prod_env and "OPENAI_API_KEY" not in stage_env
     assert "GEMINI_API_KEY" not in prod_env and "GEMINI_API_KEY" not in stage_env
-    assert prod_env["ACTIVE_MODEL_STATE_PATH"] != stage_env["ACTIVE_MODEL_STATE_PATH"]
-    assert "./config:/app/config:ro" in staging["volumes"]
+    assert prod_env["ACTIVE_MODEL_STATE_PATH"] == "/app/legacy-config/active_model.json"
+    assert stage_env["ACTIVE_MODEL_STATE_PATH"] == "/app/state/active_model.json"
+    assert "./config:/app/legacy-config" in prod["volumes"]
+    assert "./src:/app/src:ro" not in prod["volumes"]
+    assert "./config:/app/config:ro" not in staging["volumes"]
+    assert "./src:/app/src:ro" not in staging["volumes"]
     assert "gateway-staging-state:/app/state" in staging["volumes"]
     assert "@postgres-staging:5432/litellm_staging" in stage_env["DATABASE_URL"]
     assert "@postgres:5432/litellm" in prod_env["DATABASE_URL"]
@@ -108,9 +110,15 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     assert set(services["postgres"]["volumes"]).isdisjoint(services["postgres-staging"]["volumes"])
     assert prod["image"] == staging["image"]
     assert prod["build"] == staging["build"]
+    assert prod["image"] == services["experts"]["image"]
+    assert prod["build"] == services["experts"]["build"]
+    assert "./config:/app/config:ro" not in services["experts"]["volumes"]
+    assert "./src:/app/src:ro" not in services["experts"]["volumes"]
     recipe = (ROOT / prod["build"]["dockerfile"]).read_text()
-    assert "FROM ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56" in recipe
-    assert "onnxruntime==1.31.0 flatbuffers==25.12.19" in recipe
+    assert "FROM ghcr.io/berriai/litellm-database@sha256:35f2cec3a14bb297e08bfab56c1fc377432bc4071aaf71978fdff043a5d91e79" in recipe
+    assert "AS uv-tools" in recipe
+    assert "onnxruntime" not in recipe
+    assert "advisor-ranker" not in recipe
     assert ":latest" not in prod["image"] and ":latest" not in recipe
 
 
@@ -122,7 +130,6 @@ def test_compose_publishes_gateway_ports_on_loopback():
 
 
 def test_local_qwen_two_gpu_slots_preserve_input_output_and_context_headroom():
-    from subroute.sift_plugin import sift_qwen_hook
 
     services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
     service = services["qwen-local"]
@@ -146,7 +153,7 @@ def test_local_qwen_two_gpu_slots_preserve_input_output_and_context_headroom():
         assert command[command.index(flag) + 1] == expected
     assert int(command[command.index("--ctx-size") + 1]) == 2 * info["context_window"]
     assert info["max_input_tokens"] + info["max_output_tokens"] + 4096 == info["context_window"]
-    assert sift_qwen_hook.model_targets == {"qwen3.8-27b": info["auto_compact_token_limit"]}
+    assert info["auto_compact_token_limit"] == info["max_input_tokens"]
     assert service["cpus"] == 6.0
     assert service["mem_limit"] == service["memswap_limit"] == "12g"
     # Fixed placement avoids the contradictory CUDA/NVML free-memory views
@@ -218,7 +225,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     assert by_name["openrouter"]["litellm_params"] == {
         "model": "openrouter/minimax/minimax-m3.1-flash",
         "api_key": "os.environ/OPENROUTER_API_KEY",
-        "reasoning": {"exclude": True},
+        "allowed_openai_params": ["reasoning"],
     }
     assert not any(name.endswith("-guided") for name in by_name)
     assert by_name["minimax"]["litellm_params"]["model"].startswith("minimax/")
@@ -237,10 +244,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     assert config()["litellm_settings"]["callbacks"] == [
         "subroute.usage_accounting.usage_accounting",
         "subroute.plugins.dynamic_router.dynamic_routing_plugin",
-        "subroute.sift_plugin.sift_auto_hook",
-        "subroute.sift_plugin.sift_qwen_hook",
         "subroute.plugins.advisor_plugin.advisor_plugin_instance",
-        "subroute.sift_plugin.sift_target_hook",
         "subroute.plugins.codex_credentials.codex_credential_refresher",
         "websearch_interception",
     ]
@@ -294,9 +298,7 @@ def test_subscription_channels_stay_behind_litellm():
     assert by_name["codex-gpt-6.1-sol"]["litellm_params"]["model"] == (
         "codex-subscription/gpt-6.1-sol"
     )
-    assert by_name["codex-gpt-6.1-sol"]["model_info"]["display_name"] == (
-        "GPT-6.1 Sol"
-    )
+    assert by_name["codex-gpt-6.1-sol"]["model_info"]["display_name"] == "OpenAI: GPT-6.1 Sol"
     assert "codex-terra" not in by_name
     assert "codex-reserve" not in by_name
     assert not any("gpt-5" in deployment["litellm_params"]["model"] for deployment in by_name.values())
@@ -325,9 +327,10 @@ def test_minimax_m31_flash_routes_are_selectable_and_fail_over_once_per_provider
     control = RoutingControlPlane(CONFIG_PATH, tmp_path / "routing-state.json")
     choices = {choice.model_id: choice for choice in control.choices}
 
-    assert {"minimax-flash", "openrouter-flash"} <= choices.keys()
-    assert choices["minimax-flash"].source_id == "openrouter"
-    assert choices["openrouter-flash"].source_id == "openrouter"
+    canonical = "minimax/minimax-m3.1-flash"
+    assert canonical in choices
+    assert choices[canonical].source_id == "openrouter"
+    assert not {"minimax-flash", "openrouter-flash", "openrouter"} & choices.keys()
     assert by_name["minimax-flash"]["litellm_params"]["model"] == (
         "openrouter/minimax/minimax-m3.1-flash"
     )
@@ -337,6 +340,9 @@ def test_minimax_m31_flash_routes_are_selectable_and_fail_over_once_per_provider
     assert by_name["minimax-flash"]["litellm_params"] == by_name["openrouter-flash"][
         "litellm_params"
     ]
+    assert by_name[canonical]["litellm_params"] == by_name["minimax-flash"]["litellm_params"]
+    assert by_name["minimax-flash"]["model_info"]["selectable"] is False
+    assert by_name["minimax-flash-direct"]["litellm_params"]["model"] == "minimax/MiniMax-M3.1-Flash"
 
     fallbacks = {
         model: targets
@@ -365,7 +371,9 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
     assert routing["num_retries"] == 0
     assert routing["default_fallbacks"] == ["openrouter", "mimo-v2.6-pro", "codex-luna"]
     assert routing["fallbacks"] == [
+        {"minimax/minimax-m3.1-flash": ["mimo-v2.6-pro", "codex-luna"]},
         {"auto": ["mimo-v2.6-pro", "codex-luna"]},
+        {"qwen3.8-27b": ["mimo-v2.6-pro", "openrouter", "codex-luna"]},
         {"openrouter": ["mimo-v2.6-pro", "codex-luna"]},
         {"openrouter-flash": ["mimo-v2.6-pro", "codex-luna"]},
         {"minimax-flash": ["mimo-v2.6-pro", "codex-luna"]},
@@ -379,6 +387,15 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
         {"codex-sol-advisor": []},
         {"codex-astra-advisor": []},
         {"codex-luna-advisor": []},
+        {"experts/codex-gpt-6.1-sol-advisor": []},
+        {"experts/codex-sol-advisor": []},
+        {"experts/codex-astra-advisor": []},
+        {"experts/codex-luna-advisor": []},
+        {"experts/gemini-3.8-flash-advisor": []},
+        {"experts/gemini-4-argon-advisor": []},
+        {"experts/gemini-3.7-flash-advisor": []},
+        {"experts/gemini-3.6-flash-advisor": []},
+        {"experts/gemini-3.1-pro-advisor": []},
     ]
     assert settings["litellm_settings"]["drop_params"] is True
     assert settings["general_settings"]["master_key"] == (
@@ -422,7 +439,7 @@ def test_gateway_master_key_is_optional_and_passed_to_both_gateways():
 
 
 def test_experts_port_exposes_only_bounded_advisor_aliases():
-    from subroute.plugins.advisor_plugin import ADVISOR_MODEL_NAMES, TOOL_HISTORY_ADVISORS
+    from subroute.plugins.advisor_plugin import ADVISOR_MODEL_NAMES
 
     services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
     experts = services["experts"]
@@ -437,6 +454,8 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     assert {model["model_name"] for model in expert_models} == {
         "codex-sol-advisor", "codex-astra-advisor", "codex-luna-advisor",
         "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
+        "gemini-3.8-flash-advisor", "gemini-3.7-flash-advisor",
+        "gemini-3.6-flash-advisor", "gemini-3.1-pro-advisor",
     }
     assert all(model["model_info"]["selectable"] is False for model in expert_models)
     assert {
@@ -444,13 +463,19 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     } == {
         "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
         "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
-        "antigravity/gemini-4-argon-low",
+        "antigravity/gemini-4-argon-low", "antigravity/gemini-3.8-flash",
+        "antigravity/gemini-3.7-flash", "antigravity/gemini-3.6-flash",
+        "antigravity/gemini-3.1-pro",
     }
     assert experts_config()["router_settings"] == {
         "num_retries": 0, "fallbacks": [], "enable_pre_call_checks": True,
     }
-    assert "callbacks" not in experts_config()["litellm_settings"]
+    assert experts_config()["litellm_settings"]["callbacks"] == [
+        "subroute.plugins.expert_sift.expert_sift_hook",
+    ]
     assert experts_config()["general_settings"]["master_key"] == "os.environ/EXPERTS_API_KEY"
+    assert all(model["model_info"]["max_input_tokens"] == 32_000 for model in expert_models)
+    assert all(model["model_info"]["context_window"] == 32_000 for model in expert_models)
     gateway_advisors = {
         item["model_name"]: item["litellm_params"]["model"]
         for item in config()["model_list"]
@@ -463,4 +488,23 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     assert gateway_advisors == {
         alias: f"codex-advisor/{model}" for alias, model in ADVISOR_MODEL_NAMES.items()
     }
-    assert set(gateway_advisors) == TOOL_HISTORY_ADVISORS
+    assert set(gateway_advisors) == set(ADVISOR_MODEL_NAMES)
+
+    expert_transports = {
+        item["model_name"]: item for item in config()["model_list"]
+        if item["model_name"].startswith("experts/")
+    }
+    assert set(expert_transports) == {
+        f"experts/{alias}" for alias in {model["model_name"] for model in expert_models}
+    }
+    assert all("max_input_tokens" not in item["model_info"] for item in expert_transports.values())
+    assert all(item["litellm_params"]["api_base"] == "http://experts:4040"
+               for item in expert_transports.values())
+    assert all(item["litellm_params"]["api_key"] == "os.environ/EXPERTS_API_KEY"
+               for item in expert_transports.values())
+    assert all(any(item.startswith("EXPERTS_API_KEY=") for item in services[name]["environment"])
+               for name in ("gateway", "gateway-staging"))
+
+    fallbacks = config()["router_settings"]["fallbacks"]
+    fallback_map = {model: targets for group in fallbacks for model, targets in group.items()}
+    assert all(fallback_map[f"experts/{model['model_name']}"] == [] for model in expert_models)

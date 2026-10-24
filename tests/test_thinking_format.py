@@ -443,9 +443,17 @@ def test_gemini_subscription_messages_preserve_formatting(tmp_path, monkeypatch,
 
     monkeypatch.setattr(antigravity, "invoke_agy", bridge)
     config = tmp_path / "providers.yaml"
-    config.write_text("model_list:\n  - model_name: codex-luna\n    litellm_params: {model: antigravity/gemini-3.8-flash}\n")
+    config.write_text(
+        "model_list:\n  - model_name: codex-luna\n    litellm_params: {model: antigravity/gemini-3.8-flash}\n"
+        "  - model_name: codex-gpt-6.1-sol-advisor\n"
+        "    model_info: {selectable: false, advisor_selectable: true}\n"
+        "    litellm_params: {model: codex-advisor/gpt-6.1-sol}\n"
+    )
     state = tmp_path / "state.json"
-    state.write_text(json.dumps({"active_model": "codex-luna", "mode": "off", "advisor_model": None}))
+    state.write_text(json.dumps({
+        "active_model": "codex-luna", "mode": "off",
+        "advisor_model": "codex-gpt-6.1-sol-advisor",
+    }))
     plugin = DynamicRoutingPlugin(RoutingControlPlane(config, state))
     models = [{"model_name": "codex-luna", "litellm_params": {"model": "antigravity/gemini-3.8-flash"}}]
     with _configured_proxy(provider_model_list=models, dynamic_routing_plugin=plugin, additional_custom_providers=[{"provider": "antigravity", "custom_handler": antigravity.antigravity_handler}]) as (client, *_):

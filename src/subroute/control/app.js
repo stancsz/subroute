@@ -8,14 +8,8 @@ const cards = document.querySelector("#cards"), cardTemplate = document.querySel
 const moreCards = document.querySelector("#more-cards"), connectionCount = document.querySelector("#connection-count"), otherCount = document.querySelector("#other-count");
 const routeModel = document.querySelector("#route-model"), routeMode = document.querySelector("#route-mode"), routeAdvisor = document.querySelector("#route-advisor");
 const routeProvider = document.querySelector("#route-provider"), advisorProvider = document.querySelector("#advisor-provider");
-const routeEffort = document.querySelector("#route-effort"), advisorEffort = document.querySelector("#route-advisor-effort");
+const routeEffort = document.querySelector("#route-effort");
 const routeFast = document.querySelector("#route-fast"), routeFastField = document.querySelector("#route-fast-field"), routeFastHelp = document.querySelector("#route-fast-help");
-const advisorFrequency = document.querySelector("#route-advisor-frequency"), advisorFrequencyValue = document.querySelector("#route-advisor-frequency-value");
-const advisorFrequencyStats = document.querySelector("#route-advisor-frequency-stats");
-const advisorAnalyticsWindow = document.querySelector("#route-advisor-analytics-window");
-const advisorAnalyticsRatios = document.querySelector("#route-advisor-analytics-ratios"), advisorAnalyticsFailures = document.querySelector("#route-advisor-analytics-failures");
-const advisorAnalyticsCoverage = document.querySelector("#route-advisor-analytics-coverage"), advisorAnalyticsScope = document.querySelector("#route-advisor-analytics-scope");
-const frequencyPresets = ["conservative", "balanced", "frequent"], frequencyNames = ["Less often", "Balanced", "More often"], frequencyRates = [30, 50, 70];
 const routeStatus = document.querySelector("#route-status"), routeKey = document.querySelector("#route-key");
 const policySummary = document.querySelector("#policy-summary");
 new MutationObserver(() => {
@@ -27,7 +21,6 @@ new MutationObserver(() => {
 }).observe(routeStatus, {childList:true, subtree:true, characterData:true});
 let workingDirectory = null, routingReady = false;
 let routingModels = [], advisorModels = [];
-let analyticsPending = false;
 
 async function request(path, options) {
   let response;
@@ -52,52 +45,6 @@ function setRoutingDisabled(value) {
   routeAdvisor.disabled = value || !advisorProvider.value;
   routeEffort.disabled = value || !routeModel.value || routeMode.value === "off" || routeEffort.options.length < 2;
   routeFast.disabled = value || routeFastField.hidden || routeMode.value === "off";
-  advisorEffort.disabled = value || !routeAdvisor.value || advisorEffort.options.length < 2;
-  advisorFrequency.disabled = value || !routeAdvisor.value;
-  renderAdvisorFrequency(value);
-}
-
-function renderAdvisorFrequency(busy = false) {
-  const index = Number(advisorFrequency.value);
-  advisorFrequencyValue.textContent = `~${frequencyRates[index]}%`;
-  advisorFrequency.setAttribute("aria-valuetext", `${frequencyNames[index]}, about ${frequencyRates[index]} percent`);
-  document.querySelectorAll(".frequency-stops span").forEach((node, i) => node.classList.toggle("selected", i === index));
-  document.querySelector("#route-advisor-frequency-state").textContent = busy ? "Frequency control is unavailable while policy loads or saves." : !routeAdvisor.value ? "Choose an advisor to enable selection." : "Selected requests receive the chosen advisor plus Claude Opus 5.5 Low via Antigravity (max 32,000 input tokens) before the target responds. Oversized context is compacted with Sift, then MiniMax or MiMo.";
-}
-
-function clearAdvisorAnalytics(message) {
-  advisorFrequencyStats.textContent = message;
-  advisorAnalyticsRatios.textContent = "";
-  advisorAnalyticsFailures.hidden = true;
-  advisorAnalyticsCoverage.textContent = "";
-}
-
-async function refreshAdvisorAnalytics() {
-  if (analyticsPending || document.hidden) return;
-  const minutes = Number(advisorAnalyticsWindow.value);
-  const windowLabel = {30: "30 minutes", 60: "1 hour", 120: "2 hours"}[minutes];
-  advisorAnalyticsScope.textContent = `This gateway · last ${windowLabel}`;
-  analyticsPending = true;
-  try {
-    const stats = await request(`/api/advisor-analytics?minutes=${minutes}`);
-    if (Number(advisorAnalyticsWindow.value) !== minutes) return;
-    const countFields = ["total_requests", "eligible_requests", "invoked_requests", "successful_advice", "failed_advice", "provider_attempts"];
-    if (stats.window_minutes !== minutes || !countFields.every(field => Number.isSafeInteger(stats[field]) && stats[field] >= 0) || stats.invoked_requests > stats.eligible_requests || stats.eligible_requests > stats.total_requests || typeof stats.coverage?.complete !== "boolean") throw new Error("Incompatible activity statistics");
-    const percentage = (numerator, denominator) => denominator ? `${(numerator / denominator * 100).toFixed(1)}%` : "--";
-    advisorFrequencyStats.textContent = `${stats.invoked_requests} advisor invoked / ${stats.eligible_requests} eligible / ${stats.total_requests} total`;
-    advisorAnalyticsRatios.textContent = `Invoked / eligible ${percentage(stats.invoked_requests, stats.eligible_requests)} · Eligible / total ${percentage(stats.eligible_requests, stats.total_requests)} · Invoked / total ${percentage(stats.invoked_requests, stats.total_requests)}`;
-    advisorAnalyticsFailures.hidden = !stats.failed_advice && stats.provider_attempts === stats.invoked_requests;
-    advisorAnalyticsFailures.textContent = `${stats.failed_advice} advisor failures · ${stats.provider_attempts} provider attempts`;
-    const started = new Date(typeof stats.coverage.started_at === "string" ? stats.coverage.started_at : NaN);
-    const coverage = stats.coverage.complete ? "Full window verified" : Number.isFinite(started.getTime()) ? `Partial window · coverage verified since ${started.toLocaleString()}` : "Still collecting history";
-    advisorAnalyticsCoverage.textContent = `${coverage}${stats.counts_may_be_incomplete ? " · Counts may be incomplete" : ""}`;
-  } catch (_) {
-    if (Number(advisorAnalyticsWindow.value) === minutes) clearAdvisorAnalytics("Advisor activity unavailable");
-  }
-  finally {
-    analyticsPending = false;
-    if (Number(advisorAnalyticsWindow.value) !== minutes && !document.hidden) refreshAdvisorAnalytics();
-  }
 }
 
 function renderProviderMenu(select, choices, selected, emptyLabel = "No providers configured") {
@@ -123,17 +70,17 @@ function renderModelMenu(select, choices, provider, selected, emptyLabel = "Choo
   select.value = selected || "";
 }
 
-function renderEfforts(select, choices, model, selected, helpId, advisor = false) {
+function renderEfforts(select, choices, model, selected, helpId) {
   const choice = choices.find(item => item.model_id === model);
   const efforts = choice?.configured ? choice.reasoning_efforts || [] : [];
   const labels = { minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum", ultra: "Ultra" };
   const fallback = !model ? "Choose a model first" : !choice?.configured ? "Provider setup required" : efforts.length ? "Default (client or provider)" : "Provider managed";
   select.replaceChildren(option("", fallback), ...efforts.map(effort => option(effort, labels[effort] || effort)));
   select.value = efforts.includes(selected) ? selected : "";
-  let help = !model ? "Choose a configured provider and model." : !choice?.configured ? "This saved route needs provider configuration before it can be used." : !efforts.length ? (choice.reasoning_note || "This route has no verified reasoning effort control.") : advisor ? `${choice.access}. Reasoning is independent of the target.` : `${choice.access}. Lower effort favors speed; higher effort allows more reasoning.`;
+  let help = !model ? "Choose a configured provider and model." : !choice?.configured ? "This saved route needs provider configuration before it can be used." : !efforts.length ? (choice.reasoning_note || "This route has no verified reasoning effort control.") : `${choice.access}. Lower effort favors speed; higher effort allows more reasoning.`;
   if (efforts.length && choice.reasoning_note) help += ` ${choice.reasoning_note}`;
   if (model?.startsWith("gemini-subscription") && !advisor) help += " Text and schema-constrained tool calls; client tools are not run by the subscription. SSE is buffered until completion; vision is unsupported. Output limits are backend-managed; client token caps are not enforced.";
-  if (!advisor && routeMode.value === "off") help = "Routing is off. The client chooses the model and reasoning.";
+  if (routeMode.value === "off") help = "Routing is off. The client chooses the model and reasoning.";
   document.querySelector(helpId).textContent = help;
 }
 
@@ -163,24 +110,19 @@ async function renderRouting() {
     renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, routing.state.advisor_model, "Choose an advisor model…");
     routeMode.querySelector("[data-unavailable]")?.remove();
     routeMode.value = routing.state.mode;
-    const frequencyIndex = frequencyPresets.indexOf(routing.state.advisor_sensitivity);
-    advisorFrequency.value = String(frequencyIndex < 0 ? 1 : frequencyIndex);
     renderEfforts(routeEffort, routingModels, routeModel.value, routing.state.reasoning_effort, "#route-effort-help");
     renderTargetSpeed(routing.state.fast_mode);
-    renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, routing.state.advisor_reasoning_effort, "#route-advisor-effort-help", true);
-    document.querySelector("#advisor-policy-note").textContent = "Selected consultations also call Claude Opus 5.5 Low via Antigravity (max 32,000 input tokens). Oversized context is compacted with Sift, then MiniMax or MiMo.";
+    document.querySelector("#advisor-policy-note").textContent = "The target may use its optional Advisor tool. The expert service 4040 applies Sift toward 25.6K estimated input tokens; output limits depend on the selected provider.";
     document.querySelector("#advisor-policy-pill").textContent = "Saved per environment";
     routeStatus.textContent = `${routing.client_api_key_required ? "Client API key required" : "No client API key required"} · policy v${routing.state.policy_version}`;
     routeKey.textContent = routing.client_api_key_required ? "CLIENT API KEY REQUIRED" : "LOCAL CLIENT KEY BYPASS";
     setRoutingDisabled(false); routingReady = true;
-    refreshAdvisorAnalytics();
   } catch (error) {
     if (!routingModels.length) {
-      for (const select of [routeProvider, advisorProvider, routeModel, routeAdvisor, routeEffort, advisorEffort]) select.replaceChildren(option("", "Unavailable"));
+      for (const select of [routeProvider, advisorProvider, routeModel, routeAdvisor, routeEffort]) select.replaceChildren(option("", "Unavailable"));
       const unavailable = option("", "Policy unavailable"); unavailable.dataset.unavailable = "true"; routeMode.prepend(unavailable); routeMode.value = "";
     }
     setRoutingDisabled(true); routeStatus.textContent = error.message; routeKey.textContent = "GATEWAY UNAVAILABLE";
-    clearAdvisorAnalytics("Advisor activity unavailable");
   }
 }
 
@@ -189,7 +131,7 @@ async function saveActiveRouting() {
   setRoutingDisabled(true); routeStatus.textContent = "Saving routing…";
   try {
     const state = await request("/api/active-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: routeModel.value, mode: routeMode.value, reasoning_effort: routeEffort.value || null, fast_mode: !routeFastField.hidden && routeFast.value === "fast" }) });
-    routeStatus.textContent = `Routing saved · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorAnalytics();
+    routeStatus.textContent = `Routing saved · policy v${state.policy_version}`; setRoutingDisabled(false);
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
 }
 
@@ -198,8 +140,8 @@ async function saveAdvisorRouting() {
   const previousFocus = document.activeElement;
   setRoutingDisabled(true); routeStatus.textContent = "Saving advisor…";
   try {
-    const state = await request("/api/advisor-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ advisor_model: routeAdvisor.value || null, reasoning_effort: advisorEffort.value || null, advisor_sensitivity: frequencyPresets[Number(advisorFrequency.value)] }) });
-    routeStatus.textContent = `Advisor saved · policy v${state.policy_version}`; setRoutingDisabled(false); refreshAdvisorAnalytics();
+    const state = await request("/api/advisor-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ advisor_model: routeAdvisor.value || null }) });
+    routeStatus.textContent = `Advisor saved · policy v${state.policy_version}`; setRoutingDisabled(false);
   } catch (error) { await renderRouting(); routeStatus.textContent = `Not saved: ${error.message}`; }
   finally {
     // Disabling a keyboard-operated control moves focus to the document body.
@@ -304,7 +246,6 @@ routeProvider.addEventListener("change", () => {
 });
 advisorProvider.addEventListener("change", () => {
   renderModelMenu(routeAdvisor, advisorModels, advisorProvider.value, null, "Choose an advisor model…");
-  renderEfforts(advisorEffort, advisorModels, "", null, "#route-advisor-effort-help", true);
   setRoutingDisabled(false);
   if (!advisorProvider.value) saveAdvisorRouting();
   else routeStatus.textContent = "Choose an advisor model to save this provider.";
@@ -313,10 +254,7 @@ routeModel.addEventListener("change", () => { renderEfforts(routeEffort, routing
 routeMode.addEventListener("change", saveActiveRouting);
 routeEffort.addEventListener("change", saveActiveRouting);
 routeFast.addEventListener("change", saveActiveRouting);
-routeAdvisor.addEventListener("change", () => { renderEfforts(advisorEffort, advisorModels, routeAdvisor.value, null, "#route-advisor-effort-help", true); saveAdvisorRouting(); });
-advisorEffort.addEventListener("change", saveAdvisorRouting);
-advisorFrequency.addEventListener("input", () => renderAdvisorFrequency());
-advisorFrequency.addEventListener("change", saveAdvisorRouting);
+routeAdvisor.addEventListener("change", saveAdvisorRouting);
 const menuToggle = document.querySelector("#menu-toggle");
 function closeNavigation() {
   document.body.classList.remove("menu-open");
@@ -347,8 +285,5 @@ menuToggle.addEventListener("click", () => {
 document.querySelectorAll("[data-view]").forEach(link => link.addEventListener("click", event => { event.preventDefault(); location.hash = link.dataset.view; showSection(); document.querySelector("#page-title").focus({preventScroll:true}); window.scrollTo(0,0); }));
 document.addEventListener("keydown", event => { if (event.key === "Escape" && document.body.classList.contains("menu-open")) { closeNavigation(); menuToggle.focus(); } });
 window.addEventListener("hashchange", showSection);
-advisorAnalyticsWindow.addEventListener("change", () => { clearAdvisorAnalytics("Loading advisor activity…"); refreshAdvisorAnalytics(); });
-setInterval(() => { if (!document.hidden) refreshAdvisorAnalytics(); }, 10000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAdvisorAnalytics(); });
 showSection();
 load(false);

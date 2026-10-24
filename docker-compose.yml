@@ -49,7 +49,7 @@ services:
     memswap_limit: 1g
 
   gateway:
-    image: subroute-gateway:advisor-ranker-v1
+    image: subroute-gateway:local
     build:
       context: .
       dockerfile: Dockerfile.gateway
@@ -62,23 +62,27 @@ services:
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
-      - ./config:/app/config
-      - ./src:/app/src:ro
+      - ./config:/app/legacy-config
+      - gateway-state:/app/state
       - ~/.codex/auth.json:/root/.codex/auth.json:ro
     environment:
       - PYTHONPATH=/app/src
       - HEALTH_CHECK_TIMEOUT_SECONDS=10
       # Preserve the existing production policy file during migration.
-      - ACTIVE_MODEL_STATE_PATH=/app/config/active_model.json
+      - ACTIVE_MODEL_STATE_PATH=/app/legacy-config/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres:5432/litellm
       - SUBROUTE_ENVIRONMENT=production
+      - SUBROUTE_USAGE_OUTBOX_PATH=/app/state/usage-outbox.sqlite3
       - SUBROUTE_ACCOUNTING_SECRET
       # An explicit GATEWAY_MASTER_KEY enables the Admin UI and bearer-token auth.
-      # Leave it unset for the default loopback-only, unauthenticated API.
+      # The pinned LiteLLM image rejects unset and known-default keys unless its
+      # native local development override is explicitly enabled by the operator.
       - GATEWAY_MASTER_KEY
+      - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
+      - EXPERTS_API_KEY=${EXPERTS_API_KEY:?Set EXPERTS_API_KEY in .env before starting the gateway}
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
@@ -94,7 +98,7 @@ services:
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000", "--host", "0.0.0.0", "--telemetry", "False"]
 
   gateway-staging:
-    image: subroute-gateway:advisor-ranker-v1
+    image: subroute-gateway:local
     build:
       context: .
       dockerfile: Dockerfile.gateway
@@ -107,9 +111,7 @@ services:
     ports:
       - "127.0.0.1:4005:4005"
     volumes:
-      - ./config:/app/config:ro
       - gateway-staging-state:/app/state
-      - ./src:/app/src:ro
       - ~/.codex/auth.json:/root/.codex/auth.json:ro
     environment:
       - PYTHONPATH=/app/src
@@ -117,12 +119,15 @@ services:
       - ACTIVE_MODEL_STATE_PATH=/app/state/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
       - SUBROUTE_ENVIRONMENT=staging
+      - SUBROUTE_USAGE_OUTBOX_PATH=/app/state/usage-outbox.sqlite3
       - LITELLM_LOG=INFO
       - SUBROUTE_ACCOUNTING_SECRET
       - GATEWAY_MASTER_KEY
+      - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
+      - EXPERTS_API_KEY=${EXPERTS_API_KEY:?Set EXPERTS_API_KEY in .env before starting the gateway}
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
@@ -138,13 +143,14 @@ services:
     command: ["--config", "/app/config/litellm.yaml", "--port", "4005", "--host", "0.0.0.0", "--telemetry", "False"]
 
   experts:
-    image: ghcr.io/berriai/litellm-database@sha256:bd07ceb1fc7c4505f116c4eb2767956a8accba3119548dd8ae55e5356a381d56
+    image: subroute-gateway:local
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
     restart: unless-stopped
     ports:
       - "127.0.0.1:4040:4040"
     volumes:
-      - ./config:/app/config:ro
-      - ./src:/app/src:ro
       - ~/.codex/auth.json:/root/.codex/auth.json:ro
     environment:
       - PYTHONPATH=/app/src
@@ -254,6 +260,7 @@ services:
 volumes:
   litellm-postgres-data:
   litellm-postgres-staging-data:
+  gateway-state:
   gateway-staging-state:
   antigravity-config:
   antigravity-data:

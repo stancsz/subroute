@@ -21,4 +21,3 @@ htmlcov/
 Thumbs.db
 
 # Pinned public encoder assets are fetched and hash-checked before image builds.
-models/advisor-ranker/

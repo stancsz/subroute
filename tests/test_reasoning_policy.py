@@ -28,7 +28,7 @@ def test_retired_subcall_flag_cannot_override_image_routing(control, call_type, 
     plugin = DynamicRoutingPlugin(control)
     data = {"model": "codex-luna-advisor", "messages": [{"role": "user", "content": "Generate an image of a blue square"}],
             "input": "Generate an image of a blue square", bucket: {
-                "advisor_sub_call": True, "gateway_policy": {"advisor_reasoning_effort": "low"},
+        "advisor_sub_call": True, "gateway_policy": {"advisor_model": "codex-luna-advisor"},
             }}
     assert asyncio.run(plugin.async_pre_call_hook({}, None, data, call_type)) is data
     assert data["model"] == "codex-luna"
@@ -46,19 +46,18 @@ def control(tmp_path):
 
 def test_reasoning_persists_independently_and_old_state_still_loads(control):
     control.update("codex-luna", "force", reasoning_effort="high")
-    control.update_advisor("gemini-subscription-pro", reasoning_effort="low")
+    control.update_advisor("gemini-subscription-pro")
     restarted = RoutingControlPlane(control.config_path, control.state_path)
     assert restarted.snapshot() == control.snapshot()
     control.update("codex-luna", "alias")  # Existing API clients omit effort.
     assert control.snapshot().reasoning_effort == "high"
-    control.update_advisor(None)
+    control.update_advisor("codex-sol-advisor")
     assert control.snapshot().reasoning_effort == "high"
-    assert control.snapshot().advisor_reasoning_effort is None
+    assert control.snapshot().advisor_model == "codex-sol-advisor"
     control.update("desktop", "alias")
     assert control.snapshot().reasoning_effort is None
     raw = json.loads(control.state_path.read_text())
     raw.pop("reasoning_effort")
-    raw.pop("advisor_reasoning_effort")
     control.state_path.write_text(json.dumps(raw))
     assert RoutingControlPlane(control.config_path, control.state_path).snapshot().reasoning_effort is None
 
@@ -100,9 +99,11 @@ def test_fast_mode_is_openai_target_only_and_persists(control, monkeypatch):
         "model": "codex-luna", "mode": "alias",
     }).json()["fast_mode"] is True
     # Selecting another target clears the saved speed setting.
-    assert client.post("/api/active-model", json={
-        "model": "openrouter", "mode": "force",
-    }).json()["fast_mode"] is False
+    response = client.post("/api/active-model", json={
+        "model": "minimax", "mode": "force",
+    })
+    assert response.status_code == 200
+    assert response.json()["fast_mode"] is False
 
 
 @pytest.mark.parametrize("mode,requested,expected", [
@@ -129,7 +130,7 @@ def test_fast_mode_uses_target_routing_snapshot(control, mode, requested, expect
 
 @pytest.mark.parametrize("mode,requested,expected", [
     ("force", "desktop", "high"), ("alias", "default", "high"),
-    ("alias", "codex-luna", None), ("off", "default", None),
+    ("alias", "codex-luna", None), ("off", "default", "high"),
 ])
 def test_effort_only_overrides_routed_requests_and_uses_one_snapshot(control, mode, requested, expected):
     control.update("codex-luna", mode, reasoning_effort="high")
@@ -143,15 +144,13 @@ def test_effort_only_overrides_routed_requests_and_uses_one_snapshot(control, mo
     assert data["reasoning_effort"] == "low"  # Hook copies the original.
 
 
-@pytest.mark.parametrize("advisor_call,expected", [(False, "high"), (True, "high")])
-def test_responses_override_preserves_other_reasoning_fields(control, advisor_call, expected):
+def test_responses_override_preserves_other_reasoning_fields(control):
     plugin = DynamicRoutingPlugin(control)
     data = {"reasoning": {"effort": "medium", "summary": "auto"}, "metadata": {
-        "gateway_reasoning_effort": "high", "advisor_sub_call": advisor_call,
-        "gateway_policy": {"advisor_reasoning_effort": "low"},
+        "gateway_reasoning_effort": "high",
     }}
     result = asyncio.run(plugin.async_pre_call_deployment_hook(data, "aresponses"))
-    assert result["reasoning"] == {"effort": expected, "summary": "auto"}
+    assert result["reasoning"] == {"effort": "high", "summary": "auto"}
 
 
 def test_chat_override_preserves_reasoning_summary_and_original_request(control):
@@ -210,12 +209,11 @@ def test_native_codex_bridge_transmits_selected_effort(control, monkeypatch, pro
     assert captured[0]["reasoning"]["effort"] == effort
 
 
-@pytest.mark.parametrize("provider,model,advisor_call", [
-    ("antigravity", "gemini-3.1-pro", False),
-    ("antigravity", "gemini-3.1-pro", True),
-    ("codex-advisor", "gpt-6-sol", True),
+@pytest.mark.parametrize("provider,model", [
+    ("antigravity", "gemini-3.1-pro"),
+    ("codex-advisor", "gpt-6-sol"),
 ])
-def test_native_custom_provider_transmits_target_or_advisor_effort(control, monkeypatch, provider, model, advisor_call):
+def test_native_custom_provider_transmits_target_effort(control, monkeypatch, provider, model):
     plugin = DynamicRoutingPlugin(control)
     monkeypatch.setattr(litellm, "callbacks", [plugin])
     captured = []
@@ -235,8 +233,7 @@ def test_native_custom_provider_transmits_target_or_advisor_effort(control, monk
         {"provider": "antigravity", "custom_handler": antigravity.antigravity_handler},
         {"provider": "codex-advisor", "custom_handler": codex_advisor.codex_advisor_handler},
     ])
-    metadata = {"gateway_reasoning_effort": "high", "advisor_sub_call": advisor_call,
-                "gateway_policy": {"advisor_reasoning_effort": "low"}}
+    metadata = {"gateway_reasoning_effort": "high"}
     result = asyncio.run(litellm.anthropic.acreate(
         model=f"{provider}/{model}", messages=[{"role": "user", "content": "hello"}],
         max_tokens=100, metadata=metadata, allowed_openai_params=["reasoning_effort"],
@@ -279,15 +276,16 @@ def test_routing_choices_follow_configured_sources_without_exposing_credentials(
 
 
 @pytest.mark.parametrize("old,canonical", [("openrouter-guided", "openrouter"), ("minimax-guided", "minimax")])
-@pytest.mark.parametrize("advisor", [None, "codex-sol-advisor"])
+@pytest.mark.parametrize("advisor", ["codex-sol-advisor"])
 def test_retired_model_state_migrates_without_changing_advisor(control, old, canonical, advisor):
     original = {"active_model": old, "mode": "force", "policy_version": 9,
                 "advisor_model": advisor, "advisor_reasoning_effort": "high" if advisor else None}
     control.state_path.write_text(json.dumps(original), encoding="utf-8")
     restarted = RoutingControlPlane(control.config_path, control.state_path)
     state = restarted.snapshot()
-    assert state.active_model == canonical
+    migrated_model = "minimax/minimax-m3.1-flash" if old == "openrouter-guided" else canonical
+    assert state.active_model == migrated_model
     assert state.advisor_model == advisor
-    assert state.advisor_reasoning_effort == original["advisor_reasoning_effort"]
     assert state.policy_version == 10
+    assert "advisor_reasoning_effort" not in json.loads(control.state_path.read_text())
     assert RoutingControlPlane(control.config_path, control.state_path).snapshot() == state

@@ -14,7 +14,7 @@ import wave
 from typing import Annotated, Any
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from mutagen import MutagenError
 from mutagen.mp3 import MPEGInfo
@@ -30,7 +30,7 @@ GEMINI_AUDIO_REQUEST_TIMEOUT_SECONDS = 400
 
 def tool_result(report: dict, *, error: bool = False) -> CallToolResult:
     return CallToolResult(content=[TextContent(type="text", text=json.dumps(report, ensure_ascii=False))],
-                          structuredContent=report, isError=error)
+                          structured_content=report, is_error=error)
 
 
 def failure(code: str, detail: str, inputs: list[dict], http_status: int | None = None) -> CallToolResult:
@@ -94,11 +94,11 @@ def read_asset(root: Path, supplied_path: str) -> tuple[dict, dict]:
     return attachment, receipt
 
 
-def create_server(root: Path, gateway_url: str, api_key: str | None = None) -> FastMCP:
+def create_server(root: Path, gateway_url: str, api_key: str | None = None) -> MCPServer:
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("audio root must be a directory")
-    server = FastMCP("subroute-music")
+    server = MCPServer("subroute-music")
     annotations = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=False, openWorldHint=True)
 
     async def listen(paths: list[str], question: str, focus: list[str]) -> CallToolResult:

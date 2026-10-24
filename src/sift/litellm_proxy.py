@@ -26,6 +26,8 @@ _PROTOCOLS = {
     "acompletion": "openai",
     "anthropic_messages": "anthropic",
     "aanthropic_messages": "anthropic",
+    "responses": "openai",
+    "aresponses": "openai",
 }
 
 
@@ -236,15 +238,18 @@ def compact_proxy_request(
 class SiftLiteLLMHook(CustomLogger):
     """LiteLLM Proxy callback for explicitly configured chat model names."""
 
-    def __init__(self, model_targets: Mapping[str, int], *, raw_limit: int = 4_000_000) -> None:
+    def __init__(self, model_targets: Mapping[str, int], *, raw_limit: int = 4_000_000, max_target: int | None = None) -> None:
         super().__init__()
         if not model_targets or any(
             not isinstance(name, str) or not name or type(target) is not int or target <= 0
             for name, target in model_targets.items()
         ) or type(raw_limit) is not int or raw_limit < max(model_targets.values()):
             raise ValueError("invalid Sift model targets or raw limit")
+        if max_target is not None and (type(max_target) is not int or max_target < max(model_targets.values()) or max_target > raw_limit):
+            raise ValueError("invalid Sift relaxation ceiling")
         self.model_targets = dict(model_targets)
         self.raw_limit = raw_limit
+        self.max_target = max_target
         self._slots = threading.BoundedSemaphore(2)
 
     @staticmethod
@@ -313,7 +318,7 @@ class SiftLiteLLMHook(CustomLogger):
         if router is None:
             raise HTTPException(503, detail="Sift token counter is unavailable")
 
-        return await self._compact(router, data, call_type=call_type, target=target)
+        return await self._compact(router, data, call_type=call_type, target=target, max_target=self.max_target)
 
     async def async_post_call_response_headers_hook(
         self, data: dict, user_api_key_dict: Any, response: object,

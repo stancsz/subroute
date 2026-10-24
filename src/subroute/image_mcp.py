@@ -8,8 +8,8 @@ import binascii
 import os
 
 import httpx
-from mcp.server.fastmcp import FastMCP, Image
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver import Image, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import TextContent, ToolAnnotations
 
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
@@ -37,8 +37,8 @@ def decode_image(value: object) -> tuple[bytes, str]:
     raise ValueError("Subroute returned an unsupported image format")
 
 
-def create_server(gateway_url: str = "http://127.0.0.1:4000", api_key: str | None = None) -> FastMCP:
-    server = FastMCP("subroute-image")
+def create_server(gateway_url: str = "http://127.0.0.1:4000", api_key: str | None = None) -> MCPServer:
+    server = MCPServer("subroute-image")
     annotations = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True)
 
     @server.tool(annotations=annotations, structured_output=False)

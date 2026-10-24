@@ -1,4 +1,4 @@
-"""Qwen template translation before Sift's LiteLLM Proxy callback."""
+"""Required Qwen template translation before native provider dispatch."""
 
 from __future__ import annotations
 

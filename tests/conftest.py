@@ -21,7 +21,7 @@ def no_live_provider_connections_in_unit_tests(request, monkeypatch):
                 local = False
             # Local ephemeral fixture servers are allowed. A running gateway
             # or subscription sidecar is still a live provider entry point.
-            deployed = local and address[1] in {4000, 4005, 4015, 11435}
+            deployed = local and address[1] in {4000, 4005, 4015, 4040, 11435}
             if not local or deployed:
                 pytest.fail("A unit test attempted a live network connection; mock the provider or use explicit live opt-in")
 

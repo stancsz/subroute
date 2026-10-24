@@ -52,6 +52,7 @@ def test_generic_fallback_is_limited_to_text_chat_semantics():
     ("mimo-v2.6-pro", ["mimo-v2.6-pro", "openrouter", "codex-luna"]),
     ("mimo-v2.6-flash", ["mimo-v2.6-flash", "openrouter", "codex-luna"]),
     ("codex-luna", ["codex-luna", "openrouter", "mimo-v2.6-pro"]),
+    ("qwen3.8-27b", ["qwen3.8-27b", "mimo-v2.6-pro", "openrouter", "codex-luna"]),
 ])
 @pytest.mark.parametrize("failure_kind", ["unavailable", "bad_request", "context_window", "content_policy",
                                         "rate_limit", "timeout", "internal_server", "connection"])
@@ -60,7 +61,7 @@ def test_litellm_catchall_fallback_order_and_exhaustion(monkeypatch, primary, ch
     settings = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     groups = [
         "minimax", "auto", "codex-subscription", "openrouter", "mimo-v2.6-pro",
-        "mimo-v2.6-flash", "codex-luna",
+        "mimo-v2.6-flash", "codex-luna", "qwen3.8-27b",
     ]
     calls = []
     failure_count = len(chain) if exhausted else 1
@@ -196,3 +197,44 @@ def test_streaming_fallback_keeps_original_model_name(tmp_path):
         assert chunks[0]["model"] == "default"
 
     asyncio.run(check())
+
+
+def test_private_responses_tools_use_only_native_codex_and_preserve_request(tmp_path):
+    from copy import deepcopy
+
+    plugin = DynamicRoutingPlugin(RoutingControlPlane(CONFIG, tmp_path / "policy.json"))
+    original_input = [
+        {"type": "additional_tools", "role": "developer", "tools": [{"type": "browser"}]},
+        {"role": "user", "content": "Use the browser tool."},
+    ]
+    data = {"model": "openrouter", "input": deepcopy(original_input),
+            "instructions": "Keep this instruction.", "tools": [{"type": "function"}],
+            "max_output_tokens": 321, "stream": True}
+
+    result = asyncio.run(plugin.async_pre_call_hook({}, None, data, "aresponses"))
+
+    assert result is data
+    assert data["model"] == "codex-luna"
+    assert data["input"] == original_input
+    assert data["instructions"] == "Keep this instruction."
+    assert data["tools"] == [{"type": "function"}]
+    assert data["max_output_tokens"] == 321 and data["stream"] is True
+    assert data["fallbacks"] == [{"codex-luna": ["codex-gpt-6.1-sol"]}]
+    assert data["max_fallbacks"] == 1 and data["disable_fallbacks"] is False
+    assert data["litellm_metadata"]["routing"]["requested_model"] == "openrouter"
+    assert data["litellm_metadata"]["routing"]["compatibility_reason"] == (
+        "additional_tools_requires_native_codex_responses"
+    )
+
+
+def test_private_responses_tools_keep_selected_codex_as_primary_and_fallback(tmp_path):
+    plugin = DynamicRoutingPlugin(RoutingControlPlane(CONFIG, tmp_path / "policy.json"))
+    data = {"model": "codex-gpt-6.1-sol", "input": [
+        {"type": "additional_tools", "tools": []},
+        {"role": "user", "content": "Continue."},
+    ]}
+
+    asyncio.run(plugin.async_pre_call_hook({}, None, data, "aresponses"))
+
+    assert data["model"] == "codex-gpt-6.1-sol"
+    assert data["fallbacks"] == [{"codex-gpt-6.1-sol": ["codex-luna"]}]
