@@ -1,0 +1,60 @@
+{
+  "upstream_commit": "e8dc791ba76d99012a3cd43e6114c01faedeeb6a",
+  "normalization": "UTF8 decode, CRLF to LF only; no whitespace/content removal",
+  "source": "Local Git object in standalone clone; standalone working tree is not the comparison target and was not modified.",
+  "files": [
+    {
+      "file": "src/sift/core.py",
+      "command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/core.py"
+      ],
+      "upstream_normalized_sha256": "b290fde061dc28016f2bcd3d65e25ab9820b43e5eec5103056c5adeab2db5238",
+      "gateway_normalized_sha256": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d",
+      "identical": false
+    },
+    {
+      "file": "src/sift/litellm_proxy.py",
+      "command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/litellm_proxy.py"
+      ],
+      "upstream_normalized_sha256": "64c7ec7840242cabffc8c0e5f7bba690ee400f2001d324763cb1db1352fd39ae",
+      "gateway_normalized_sha256": "225651a9664904cccc356441415ea6c4d3abde01290d6d4cbb11cf5889b2ba4a",
+      "identical": false
+    },
+    {
+      "file": "src/sift/litellm_responses.py",
+      "command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/litellm_responses.py"
+      ],
+      "upstream_normalized_sha256": "ff446f39476645c0d81f502a207213d36c6e34b21b97610549dba1eec2326edd",
+      "gateway_normalized_sha256": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e",
+      "identical": false
+    },
+    {
+      "file": "src/sift/__init__.py",
+      "command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/__init__.py"
+      ],
+      "upstream_normalized_sha256": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159",
+      "gateway_normalized_sha256": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159",
+      "identical": true
+    }
+  ],
+  "tests": "This command is a source comparison, not a standalone test run. Fresh gateway suite:981passed; earlier standalone counts remain historical."
+}

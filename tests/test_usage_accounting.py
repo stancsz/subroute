@@ -297,7 +297,9 @@ def test_actual_framework_advisor_calls_keep_parent_identity_and_restore_executo
             await router.aanthropic_messages(model="fixture", max_tokens=10, messages=[{"role": "user", "content": "fixture"}],
                 tools=[{"type": "advisor_20260301", "name": "advisor", "model": "receipt-advisor-fixture/advice", "max_uses": 1}])
             await asyncio.sleep(0.2)
-            rows = [row for row in store.rows.values() if row["kind"] == "provider"]
+            all_rows = list(store.rows.values())
+            assert all(row["outcome"] == "complete" for row in all_rows), all_rows
+            rows = [row for row in all_rows if row["kind"] == "provider"]
             assert provider.calls == 3 and len(rows) == 3
             assert [row["role"] for row in rows] == ["inference", "advisor", "inference"]
             assert all(row["trace"] == trace and row["outcome"] == "complete" for row in rows)

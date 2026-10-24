@@ -74,6 +74,13 @@ class ExpertSiftHook(CustomLogger):
         if model not in EXPERT_MODELS:
             return None
 
+        # Only this request's Sift work may supply the reserved audit. In
+        # particular, multimodal bypass must not echo a caller's forged audit.
+        for key in ("metadata", "litellm_metadata"):
+            metadata = data.get(key)
+            if isinstance(metadata, dict) and "sift" in metadata:
+                data = {**data, key: {name: value for name, value in metadata.items() if name != "sift"}}
+
         # The Codex Responses adapter accepts the explicit output bound. The
         # Antigravity CLI has no equivalent control, so do not pretend a
         # LiteLLM request field limits its generation.
@@ -98,6 +105,16 @@ class ExpertSiftHook(CustomLogger):
             return await self.sift.async_pre_call_hook(user_api_key_dict, cache, data, call_type)
         except HTTPException:
             raise
+
+    async def async_post_call_response_headers_hook(
+        self, data: dict, user_api_key_dict: Any, response: object,
+        request_headers: dict[str, str] | None = None,
+        litellm_call_info: dict[str, object] | None = None,
+    ) -> dict[str, str] | None:
+        """Forward Sift's native response audit headers for compacted calls."""
+        return await self.sift.async_post_call_response_headers_hook(
+            data, user_api_key_dict, response, request_headers, litellm_call_info,
+        )
 
 
 expert_sift_hook = ExpertSiftHook()

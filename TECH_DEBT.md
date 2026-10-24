@@ -29,3 +29,9 @@ Leaf-contract mitigation, 2026-10-23: the prompt now separates coordinator-owned
 ## Relay supervisor cycle boundary and learning reuse
 
 The headless supervisor now has an explicit finite-cycle/final-handoff instruction. Provider-free success/failure, reservation, unused-budget inactivity and cleanup checks pass; one native six-turn missing-peer cycle returned successfully with no post-pause tool calls. The earlier failed cycle remains failed. The polling host persists the latest final reply, but does not automatically feed it into the next model prompt. Known evidence/learning should be included in the first authorized goal record when allowed; do not claim a durable general learning system or add a new history store without a concrete retention/input contract. Independent direct native transcript verification remains blocked by reviewer file permissions; no permission widening or raw-trace export is authorized as a workaround. Productive multi-cycle, normal-24 and sustained acceptance remain outstanding. See the existing Relay evaluation and metrics.
+
+## Expert exact-answer acceptance after simplification
+
+The private Gemini 3.8 Flash probe returned HTTP 200 and a stop terminal, trusted Sift headers (33,213 estimated input compacted to 15,863), and 19,460 input tokens as reported. It failed the strict exact-answer marker, so the two-provider harness remains failed. No answer text was retained; refusal, formatting, provider quality and cause are unverified. Preserve this result and obtain bounded diagnostic evidence before repeating the probe. Do not hide it with retries or prompt mutations. Codex passed the full check. See docs/evals/simplicity-followup-2026-10-23.md.
+
+The older Advisor policy/accounting fixture-drift observations above are historical. The affected suites now pass in the selected 981-test non-live run after the authorized simplification and obsolete fixture removal. Unrelated Relay gates remain open.

@@ -151,6 +151,7 @@ direct_context: ContextVar["DirectAttempt | None"] = ContextVar("subroute_direct
 deployment_context: ContextVar["DirectAttempt | None"] = ContextVar("subroute_deployment_attempt", default=None)
 native_advisor_context: ContextVar[bool] = ContextVar("subroute_native_advisor_orchestration", default=False)
 native_advisor_parent_role: ContextVar[str | None] = ContextVar("subroute_native_advisor_parent_role", default=None)
+native_advisor_attempts: ContextVar[list["DirectAttempt"] | None] = ContextVar("subroute_native_advisor_attempts", default=None)
 
 
 def local_trace() -> Trace:
@@ -401,6 +402,21 @@ class UsageAccounting(CustomLogger):
         call = getattr(call_type, "value", call_type)
         if call in {"search", "asearch"}:
             return kwargs
+        if call in {"anthropic_messages", "aanthropic_messages"}:
+            # LiteLLM invokes this hook for the intercepted public Messages
+            # request. It is orchestration, not a provider attempt; the native
+            # advisor executor's own hook records the actual provider call.
+            # Retire if LiteLLM stops invoking deployment hooks for this outer request.
+            from litellm.llms.anthropic.pass_through.messages.interceptors.advisor import AdvisorOrchestrationHandler
+            from litellm.litellm_core_utils.get_llm_provider_logic import get_llm_provider
+            _, provider, _, _ = get_llm_provider(
+                model=str(kwargs.get("model") or ""),
+                custom_llm_provider=kwargs.get("custom_llm_provider"),
+                api_base=kwargs.get("api_base"),
+            )
+            if AdvisorOrchestrationHandler().can_handle(kwargs.get("tools"), provider):
+                deployment_context.set(None)
+                return kwargs
         trace = trace_context.get() or local_trace()
         metadata = kwargs.get("litellm_metadata") or kwargs.get("metadata") or {}
         role = role_context.get() or trace.role
@@ -416,7 +432,11 @@ class UsageAccounting(CustomLogger):
         provider = str(kwargs.get("custom_llm_provider") or model.split("/", 1)[0])
         kind = deployment_kind(kwargs, call_type)
         ident = await self.store.start(trace, model, provider, role, kind)
-        deployment_context.set(DirectAttempt(ident, self.store))
+        attempt = DirectAttempt(ident, self.store)
+        deployment_context.set(attempt)
+        attempts = native_advisor_attempts.get()
+        if attempts is not None:
+            attempts.append(attempt)
         # Metadata is copied per attempt, never a shared fallback mutation.
         field = "litellm_metadata" if "litellm_metadata" in kwargs else "metadata"
         kwargs[field] = {**metadata, TAG: ident}
@@ -622,12 +642,22 @@ def install_native_advisor_accounting():
 
     async def handle(self, *args, **kwargs):
         token = native_advisor_context.set(True)
+        attempts = []
+        attempts_token = native_advisor_attempts.set(attempts)
         trace = trace_context.get()
         parent = native_advisor_parent_role.set(role_context.get() or (trace.role if trace else "inference"))
         role_token = role_context.set(role_context.get())
         try:
             return await original(self, *args, **kwargs)
+        except asyncio.CancelledError:
+            # LiteLLM 1.106.2 omits failure hooks when buffered inner HTTP is
+            # cancelled. Retire this cleanup when native hooks settle those
+            # attempts. The store leaves completed records unchanged.
+            for attempt in attempts:
+                await attempt.store.update(attempt.ident, {"usage_complete": False}, "cancelled")
+            raise
         finally:
+            native_advisor_attempts.reset(attempts_token)
             role_context.reset(role_token)
             native_advisor_parent_role.reset(parent)
             native_advisor_context.reset(token)

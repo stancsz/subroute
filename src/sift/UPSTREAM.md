@@ -57,9 +57,10 @@ hashes and identical flags are recorded in the evidence file.
 
 - [Core recovery tests](../../tests/test_sift_active_cycle_recovery.py): retained core tool-history
   recovery, separate from normal gateway dispatch
-- [Current comparison receipt](../../.runs/goal-simplicity-20261023/advisor-only/upstream-comparison.json): pinned-blob
-  hash comparison (exact commands, normalized source snapshots and hashes)
+- [Current comparison receipt](../../docs/evals/receipts/sift-upstream-comparison-2026-10-23.json): pinned-blob
+  hash comparison (exact commands and normalized hashes)
 - [Earlier review comparison](../../.runs/design-review-20261023-evidence/comparison.json): historical source snapshot
 
-This document describes known current behavior only. No new tests and no
-deployment were performed for this documentation change.
+The current receipt rechecks the pinned Git blobs against this publication tree.
+It does not claim a fresh standalone test run. Gateway checks and controlled
+staging/experts deployment are recorded in the follow-up evaluation.
