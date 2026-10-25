@@ -71,8 +71,12 @@
     "experts_image": "sha256:e5a155b6237b9f17d14378ad92e1791f1535adbafa0531744dca5ee2d7c244ec",
     "staging_restarts": 0,
     "experts_restarts": 0,
-    "production_image": "sha256:2d3076d83d415a2066532b4c69cf0921fe1667f0452e377a83ba53116390005d",
-    "production_restarts": 0,
+    "production_gateway_image": "sha256:2d3076d83d415a2066532b4c69cf0921fe1667f0452e377a83ba53116390005d",
+    "production_gateway_restarts": 0,
+    "experts_service_shared_by_production_and_staging": true,
+    "production_experts_dependency_image": "sha256:e5a155b6237b9f17d14378ad92e1791f1535adbafa0531744dca5ee2d7c244ec",
+    "production_experts_dependency_changed": true,
+    "production_boundary_note": "The Compose project has one experts service on subroute_default. Both production and staging gateway configs route experts/gemini-3.8-flash-advisor to http://experts:4040. The production gateway container stayed on its prior image, but its shared Experts dependency was replaced by the candidate image.",
     "expert_sift_source_matches_worktree": true,
     "expert_sift_sha256": "7f92983706f0c2e07981402a4fa0adaa52551cafc2a1ad603358cd866593c163",
     "experts_callback_configured": "subroute.plugins.expert_sift.expert_sift_hook"
@@ -80,8 +84,10 @@
   "sift_audit": {
     "matching_sift_request_line_observed": false,
     "experts_sift_request_lines_in_observed_12_minute_window": 0,
+    "experts_litellm_log_env": "unset",
+    "sift_audit_level": "INFO",
     "callback_execution_and_request_attempt_pairing": "not independently observed",
-    "limitation": "The Expert call completed, but this container log window contained no Sift audit line. The outer target response does not expose the Expert response headers. No claim of live Sift audit correlation or compaction is made."
+    "limitation": "The Expert call completed, but this container log window contained no Sift audit line. The Experts service has no LITELLM_LOG setting, and the Sift audit is emitted at INFO; this is consistent with the line being suppressed but does not prove whether the callback ran. The outer target response does not expose the Expert response headers. No claim of live Sift audit correlation or compaction is made."
   },
   "provider_sequence": ["MiniMax target", "Experts HTTP hop for Gemini Advisor", "MiniMax target"],
   "provider_receipt_count": 3,
