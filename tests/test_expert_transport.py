@@ -1,4 +1,6 @@
 import asyncio
+import json
+import uuid
 
 import httpx
 import litellm
@@ -89,6 +91,81 @@ def test_anthropic_expert_transport_builds_single_v1_path(monkeypatch):
     # LiteLLM's native Advisor tool loop forwards only its own sub-call metadata.
     # Expert defaults therefore come from the 4040 deployment config.
     assert body["metadata"] == {}
+
+
+def test_advisor_attempt_correlation_crosses_litellm_http_without_entering_body(monkeypatch):
+    from subroute import usage_accounting as accounting
+    from test_usage_accounting import MemoryStore
+    from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
+
+    requests = []
+    store = MemoryStore()
+    plugin = accounting.UsageAccounting(store)
+    root_id = str(uuid.uuid4())
+
+    async def capture(self, url, data=None, json=None, **kwargs):
+        import json as json_codec
+
+        body = json if json is not None else json_codec.loads(data)
+        requests.append((str(url), body, dict(kwargs.get("headers") or {})))
+        request = httpx.Request("POST", str(url))
+        return httpx.Response(200, request=request, json={
+            "id": "msg_fixture", "type": "message", "role": "assistant",
+            "model": "codex-luna-advisor", "content": [{"type": "text", "text": "fixture"}],
+            "stop_reason": "end_turn", "stop_sequence": None,
+            "usage": {"input_tokens": 10, "output_tokens": 2},
+        })
+
+    monkeypatch.setattr(AsyncHTTPHandler, "post", capture)
+    router = litellm.Router(
+        model_list=[{
+            "model_name": "experts/codex-luna-advisor",
+            "litellm_params": {
+                "model": "anthropic/codex-luna-advisor",
+                "api_base": "http://experts:4040",
+                "api_key": "fixture-only",
+            },
+        }],
+        num_retries=0,
+        fallbacks=[],
+    )
+
+    async def scenario():
+        trace_token = accounting.trace_context.set(accounting.Trace(root_id, "staging", "local-master"))
+        native_token = accounting.native_advisor_context.set(True)
+        role_token = accounting.role_context.set(None)
+        try:
+            deployment = {
+                "model": "anthropic/codex-luna-advisor",
+                "api_base": "http://experts:4040",
+                "metadata": {"advisor_sub_call": True},
+            }
+            await plugin.async_pre_call_deployment_hook(deployment, "anthropic_messages")
+            attempt_id = deployment["metadata"][accounting.TAG]
+            await router.aanthropic_messages(
+                model="experts/codex-luna-advisor",
+                messages=[{"role": "user", "content": "Review."}],
+                max_tokens=64,
+                extra_headers=deployment["extra_headers"],
+                metadata=deployment["metadata"],
+            )
+            return attempt_id
+        finally:
+            accounting.role_context.reset(role_token)
+            accounting.native_advisor_context.reset(native_token)
+            accounting.trace_context.reset(trace_token)
+
+    attempt_id = asyncio.run(scenario())
+
+    assert len(requests) == 1
+    url, body, headers = requests[0]
+    assert url == "http://experts:4040/v1/messages"
+    assert body["metadata"] == {}
+    assert headers["x-subroute-request-id"] == root_id
+    assert headers["x-subroute-attempt-id"] == attempt_id
+    assert store.rows[attempt_id]["trace"].request_id == root_id
+    assert "x-subroute-request-id" not in json.dumps(body)
+    assert "x-subroute-attempt-id" not in json.dumps(body)
 
 
 @pytest.mark.parametrize("stream", [False, True])

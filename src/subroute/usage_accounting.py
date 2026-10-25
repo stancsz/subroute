@@ -383,8 +383,19 @@ class UsageAccounting(CustomLogger):
             trace = local_trace()
             # Only an auth object created by LiteLLM is authoritative. A
             # presented header alone is never proof on keyless loopback.
-            from litellm.proxy._types import UserAPIKeyAuth
-            if isinstance(user_api_key_dict, UserAPIKeyAuth) and user_api_key_dict.via_virtual_key and user_api_key_dict.api_key:
+            from litellm.proxy._types import UserAPIKeyAuth, LitellmUserRoles
+            from litellm.proxy.auth.user_api_key_auth import LITELLM_PROXY_MASTER_KEY_ALIAS
+            local_master = (isinstance(user_api_key_dict, UserAPIKeyAuth)
+                            and user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
+                            and user_api_key_dict.api_key == LITELLM_PROXY_MASTER_KEY_ALIAS)
+            if local_master:
+                supplied_call_id = headers.get("x-litellm-call-id")
+                try:
+                    request_id = str(uuid.UUID(supplied_call_id))
+                except (ValueError, TypeError, AttributeError):
+                    request_id = trace.request_id
+                trace = Trace(request_id, trace.environment, "local-master", api_path=local_api_path(path))
+            elif isinstance(user_api_key_dict, UserAPIKeyAuth) and user_api_key_dict.via_virtual_key and user_api_key_dict.api_key:
                 trace = Trace(trace.request_id, trace.environment,
                               "local-sha256:" + hashlib.sha256(user_api_key_dict.api_key.encode()).hexdigest(),
                               api_path=local_api_path(path))
@@ -440,6 +451,20 @@ class UsageAccounting(CustomLogger):
         # Metadata is copied per attempt, never a shared fallback mutation.
         field = "litellm_metadata" if "litellm_metadata" in kwargs else "metadata"
         kwargs[field] = {**metadata, TAG: ident}
+        if role == "advisor" and kwargs.get("api_base") == "http://experts:4040":
+            # Carry attempt correlation over the private Advisor hop. The
+            # experts callback consumes these before provider dispatch.
+            configured_headers = kwargs.get("extra_headers")
+            internal_headers = {
+                name: value for name, value in (
+                    configured_headers.items() if isinstance(configured_headers, Mapping) else ()
+                ) if str(name).lower() not in {"x-subroute-request-id", "x-subroute-attempt-id"}
+            }
+            internal_headers.update({
+                "x-subroute-request-id": trace.request_id,
+                "x-subroute-attempt-id": ident,
+            })
+            kwargs["extra_headers"] = internal_headers
         logging_obj = kwargs.get("litellm_logging_obj")
         if logging_obj is not None:
             logging_obj.model_call_details[TAG] = ident

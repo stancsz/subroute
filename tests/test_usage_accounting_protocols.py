@@ -2,6 +2,7 @@
 import asyncio
 import json
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import litellm
@@ -10,6 +11,92 @@ from litellm import Router
 from subroute import usage_accounting as accounting
 from test_usage_accounting import MemoryStore
 from litellm.llms.anthropic.pass_through.messages.interceptors.advisor import ANTHROPIC_ADVISOR_TOOL_TYPE
+
+
+def test_local_master_call_id_is_the_accounting_request_id_only_when_uuid():
+    from litellm.proxy._types import LitellmUserRoles, UserAPIKeyAuth
+    from litellm.proxy.auth.user_api_key_auth import LITELLM_PROXY_MASTER_KEY_ALIAS
+
+    plugin = accounting.UsageAccounting(MemoryStore())
+    admin = UserAPIKeyAuth(user_role=LitellmUserRoles.PROXY_ADMIN,
+                           api_key=LITELLM_PROXY_MASTER_KEY_ALIAS)
+    root_id = str(uuid.uuid4())
+
+    async def scenario():
+        await plugin.async_pre_call_hook(admin, None, {
+            "proxy_server_request": {"headers": {"x-litellm-call-id": root_id}},
+        }, "anthropic_messages")
+        assert accounting.trace_context.get().request_id == root_id
+        assert accounting.trace_context.get().key_id == "local-master"
+
+        await plugin.async_pre_call_hook(UserAPIKeyAuth(api_key="fixture-key"), None, {
+            "proxy_server_request": {"headers": {"x-litellm-call-id": root_id}},
+        }, "anthropic_messages")
+        assert accounting.trace_context.get().request_id != root_id
+
+        await plugin.async_pre_call_hook(admin, None, {
+            "proxy_server_request": {"headers": {"x-litellm-call-id": "not-a-uuid"}},
+        }, "anthropic_messages")
+        assert accounting.trace_context.get().request_id != "not-a-uuid"
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        accounting.trace_context.set(None)
+
+
+def test_advisor_attempt_headers_are_scoped_and_override_forged_values():
+    root_id = str(uuid.uuid4())
+    trace = accounting.Trace(root_id, "staging", "local-master")
+    store = MemoryStore()
+    plugin = accounting.UsageAccounting(store)
+
+    async def scenario():
+        trace_token = accounting.trace_context.set(trace)
+        advisor_token = accounting.native_advisor_context.set(True)
+        try:
+            kwargs = {
+                "model": "anthropic/codex-luna-advisor",
+                "api_base": "http://experts:4040",
+                "metadata": {"advisor_sub_call": True},
+                "extra_headers": {
+                    "X-SUBROUTE-REQUEST-ID": "forged",
+                    "X-Subroute-Attempt-ID": "forged",
+                    "x-client-marker": "preserved",
+                },
+            }
+            await plugin.async_pre_call_deployment_hook(kwargs, "anthropic_messages")
+            attempt_id = kwargs["metadata"][accounting.TAG]
+            row = store.rows[attempt_id]
+            assert kwargs["extra_headers"] == {
+                "x-client-marker": "preserved",
+                "x-subroute-request-id": root_id,
+                "x-subroute-attempt-id": attempt_id,
+            }
+            assert row["trace"].request_id == root_id
+            assert row["role"] == "advisor"
+
+            ordinary = {
+                "model": "anthropic/codex-luna-advisor",
+                "api_base": "http://experts:4040",
+                "metadata": {"advisor_sub_call": False},
+            }
+            await plugin.async_pre_call_deployment_hook(ordinary, "anthropic_messages")
+            assert "extra_headers" not in ordinary
+
+            untrusted_base = {
+                "model": "anthropic/codex-luna-advisor",
+                "api_base": "http://other-host:4040",
+                "metadata": {"advisor_sub_call": True},
+            }
+            await plugin.async_pre_call_deployment_hook(untrusted_base, "anthropic_messages")
+            assert "extra_headers" not in untrusted_base
+        finally:
+            accounting.native_advisor_context.reset(advisor_token)
+            accounting.trace_context.reset(trace_token)
+
+    asyncio.run(scenario())
+
 
 RESPONSE = {
     "id": "resp_fixture", "object": "response", "created_at": 1,

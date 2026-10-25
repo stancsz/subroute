@@ -225,12 +225,15 @@ def compact_proxy_request(
         "counting_tool_floor_adjustment": tool_floor_adjustment or 0,
     }}
     output_limit = data.get("max_output_tokens", data.get("max_completion_tokens", data.get("max_tokens")))
+    correlation = data.get("_subroute_sift_correlation")
+    request_id = correlation.get("request_id", "-") if isinstance(correlation, dict) else "-"
+    attempt_id = correlation.get("advisor_attempt_id", "-") if isinstance(correlation, dict) else "-"
     logging.getLogger("LiteLLM Proxy").info(
-        "sift_request protocol=%s compacted=%s active_tool_results_compacted=%d input_tokens=%d forwarded_tokens=%d target=%d output_limit=%d",
+        "sift_request protocol=%s compacted=%s active_tool_results_compacted=%d input_tokens=%d forwarded_tokens=%d target=%d output_limit=%d request_id=%s advisor_attempt_id=%s",
         call_type, str(result.audit["compacted"]).lower(),
         result.audit.get("active_tool_results_compacted", 0), result.audit["input_tokens"],
         result.audit["forwarded_tokens"],
-        target, output_limit if type(output_limit) is int else -1,
+        target, output_limit if type(output_limit) is int else -1, request_id, attempt_id,
     )
     return output
 
