@@ -26,4 +26,4 @@ No service was started from the candidate and no staging request, route change, 
 
 Tests construct `UserAPIKeyAuth` directly and capture the outgoing LiteLLM HTTP request with a mocked handler. The real inbound Experts master-key authentication, callback carrier shape, provider-header stripping, and final correlated log have not been verified end to end. A staging window is still needed for that check. Exact-base matching also assumes the deployed route remains `http://experts:4040`.
 
-The implementation is recorded in commit `b539b74` on branch `codex/advisor-correlation-integration`. Publication and staging acceptance are tracked separately from the previously completed source/staging delivery.
+The implementation is commit `b539b74`; the follow-up code and evidence are published on `origin/codex/advisor-correlation-integration` at `b61fe01b9f6c295976e69466539442109be83dbd`. A fresh `git ls-remote` matched that SHA to local HEAD; `origin/main` remained at `f7b82d8a03c8c11207c76408379e23e1c3c90918`. Staging acceptance is still separate from this published source.
