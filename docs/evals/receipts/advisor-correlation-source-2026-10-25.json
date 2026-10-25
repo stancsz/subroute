@@ -1,0 +1,208 @@
+{
+  "status": "Current source snapshot including authenticated Advisor request and attempt correlation.",
+  "baseline_ledger": "simplicity-current-source-2026-10-23.json",
+  "method": "nonblank source lines excluding full-line Python # / JS // comments; Python docstrings retained; HTML/CSS comments removed preserving line boundaries SHA-256 uses UTF-8 source with CRLF normalized to LF.",
+  "scope": "Coordinated Sift/Advisor/routing/UI/desktop simplification, selected accounting lifecycle repairs and native CLI plain-answer isolation.",
+  "excluded": "Unrelated dirty outbox/media/Relay orchestration/sidecar work, configuration/lock/build recipes, data artifacts, tests and documentation.",
+  "files": [
+    {
+      "file": "src/subroute/sift_plugin.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 352,
+      "before_sha256": "6455dc9b72d4c44cd9266323eb2778f4fa740ae1b5e9c64e3616d8eb52b9e1f6",
+      "after_lines": 0,
+      "after_sha256": null
+    },
+    {
+      "file": "src/subroute/local_context.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 25,
+      "before_sha256": "e39df29add5b401a5bef446b7c3f71bfa6959fa174a603fb01523b8881f071b3",
+      "after_lines": 25,
+      "after_sha256": "f7dc0d3fc1432f4d7822c8a35208e914cdc19d4d8cdba802a579242bc37f5473"
+    },
+    {
+      "file": "src/subroute/plugins/advisor_plugin.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 1113,
+      "before_sha256": "92b2f9a6d442761e0f7174d9969198a3b7d9aeb1f2ebccd247f6e9a3fd5c8365",
+      "after_lines": 135,
+      "after_sha256": "b020fe30bee114cb1676f4479375ceebbd75c6efc39a4f69812e08283aba3264"
+    },
+    {
+      "file": "src/subroute/plugins/dynamic_router.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 999,
+      "before_sha256": "8a6d2b34f5d2573be7dc92ee83ad9c839a1e02d431829604c140e78256f225bf",
+      "after_lines": 955,
+      "after_sha256": "f13519c1e4f9e4e562a577e71f1157923c9b1198211a34e4fbeb364d2a87b075"
+    },
+    {
+      "file": "src/subroute/plugins/expert_sift.py",
+      "category": "runtime_python",
+      "baseline": "new file",
+      "before_lines": 0,
+      "before_sha256": null,
+      "after_lines": 152,
+      "after_sha256": "e8c67c1d3ef4a89f59584e768058e741eb8558cca6afda3046c53b182d1a3514"
+    },
+    {
+      "file": "src/subroute/advisor_ranker.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 119,
+      "before_sha256": "32d06d76b8aebf3d5ab1edb091fadb7a641aa7e34e34dbc200a87151c7058c5b",
+      "after_lines": 0,
+      "after_sha256": null
+    },
+    {
+      "file": "src/subroute/advisor_frequency.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 88,
+      "before_sha256": "44ae5402b1fc24d22603885e30f5f2eedb4a6f3abd52ff3d244614dddd570509",
+      "after_lines": 0,
+      "after_sha256": null
+    },
+    {
+      "file": "src/subroute/advisor_analytics.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 125,
+      "before_sha256": "2ef2561b479d4de35fbbb5297ff947406315491f4a0f1184f821636b6072a908",
+      "after_lines": 0,
+      "after_sha256": null
+    },
+    {
+      "file": "src/sift/core.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 798,
+      "before_sha256": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d",
+      "after_lines": 798,
+      "after_sha256": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d"
+    },
+    {
+      "file": "src/sift/litellm_proxy.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 288,
+      "before_sha256": "f0db546a000d4026df1445c4affbd8c3ae0b0353de8ee8d778d1a9c912648b86",
+      "after_lines": 296,
+      "after_sha256": "85681c1a9d5abf4a74f33c966026f0cdf6cb11244b735e4a4642f8aea310c321"
+    },
+    {
+      "file": "src/sift/litellm_responses.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 118,
+      "before_sha256": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e",
+      "after_lines": 118,
+      "after_sha256": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e"
+    },
+    {
+      "file": "desktop/agents.cjs",
+      "category": "runtime_js",
+      "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+      "before_lines": 256,
+      "before_sha256": "1c4eb1843b5d22a6a2b8fac3a2e654e5961bb1bc53f951defa556d365317d83a",
+      "after_lines": 256,
+      "after_sha256": "45e403145cc21360fa2fc92d6176262092f47fc3d033cb72001b342e679933af"
+    },
+    {
+      "file": "src/subroute/control/app.js",
+      "category": "runtime_js",
+      "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+      "before_lines": 333,
+      "before_sha256": "c696cf0d05179d1208476a9a0bf5a1f5da471635b867b17886f67d0718b237e2",
+      "after_lines": 271,
+      "after_sha256": "344104d1792a418a426906e593a7350fb977bc10f58791287d6b8819610ab0c5"
+    },
+    {
+      "file": "src/subroute/control/index.html",
+      "category": "ui_markup_style",
+      "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+      "before_lines": 115,
+      "before_sha256": "9df5e5295245ccfc441d4b05ec409dcf664777839bf6bb436039d50ec3dc3bd3",
+      "after_lines": 96,
+      "after_sha256": "49ae298450faac0c8fa0bedf44f7857c7d56dfc5e9473f322beb0caef9ae4a60"
+    },
+    {
+      "file": "src/subroute/control/styles.css",
+      "category": "ui_markup_style",
+      "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b; path clean in status-before.txt",
+      "before_lines": 223,
+      "before_sha256": "86447e6a2f1d9afa5081f367e02b731002f414475ad8a7653db79478a1686e9c",
+      "after_lines": 201,
+      "after_sha256": "180198a651ee135621468892412f61431060dc7200a6d2037d057a6e68f081c1"
+    },
+    {
+      "file": "src/subroute/handlers/codex_advisor.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 333,
+      "before_sha256": "697253bbf0b376f39b3a21c7ff892e3d4006cb98377c36e3f37d45cd93b96ef9",
+      "after_lines": 347,
+      "after_sha256": "f0c579613554def33183a6c14bd64732c0891b42bf5f26ee9160dea6051763fb"
+    },
+    {
+      "file": "src/subroute/token_counting.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 21,
+      "before_sha256": "8ae89b5a0f2cd5d980bf584249c1b02e750a6574acfc0707fd7449cf57e95614",
+      "after_lines": 21,
+      "after_sha256": "73dc6e54df3d6e9f6420c8823cdffe58a07a82f052b35f17489a4576e1d74371"
+    },
+    {
+      "file": "src/subroute/handlers/codex_subscription.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 278,
+      "before_sha256": "ac294236f437c021ca2acb961ed88469692fcd462617f92edc0b48692564e7f6",
+      "after_lines": 287,
+      "after_sha256": "54e453ad42d61a08378f40f367305c89b9e0cab362eae32bd5088b93fde0faeb"
+    },
+    {
+      "file": "src/subroute/handlers/codex_images.py",
+      "category": "runtime_python",
+      "baseline": "production-baseline.json",
+      "before_lines": 185,
+      "before_sha256": "b6d44e88b2d145e10c0858ef969f0b40336e65d5bf53daa59f4c6b2c962e7c1a",
+      "after_lines": 192,
+      "after_sha256": "361405b6030f078bd74e447874f2b115fe297d00c3cce416067e68cdc485da24"
+    },
+    {
+      "file": "src/subroute/usage_accounting.py",
+      "category": "runtime_python",
+      "baseline": "git df7de14c8fc27eb4455cf97ea065789eec84ec0b:src/subroute/usage_accounting.py",
+      "before_lines": 747,
+      "before_sha256": "79f732963ed32e656291f3308b4ad8e5a73c16d54b4230ccd5b2088cd39a42c1",
+      "after_lines": 811,
+      "after_sha256": "aca1c0565762b4c5d1c2382c37f492a0a10ea63fbb31ef276355ba5138553f9c"
+    },
+    {
+      "file": "src/subroute/handlers/antigravity.py",
+      "category": "runtime_python",
+      "baseline": "git70ee280:src/subroute/handlers/antigravity.py",
+      "before_lines": 476,
+      "before_sha256": "d6bab98420249f9b3e1887f04d59a1514a7e56bfbb1a861c461f11e584c1fe40",
+      "after_lines": 488,
+      "after_sha256": "845f3e6fc2321e813886a9f28606450179b94ff65cfacd155fbd12c2de2641c2"
+    }
+  ],
+  "summary": {
+    "file_count": 21,
+    "category_deltas": {
+      "runtime_python": -1440,
+      "runtime_js": -62,
+      "ui_markup_style": -41
+    },
+    "net_source_line_delta": -1543,
+    "net_reduction_lines": 1543
+  }
+}
