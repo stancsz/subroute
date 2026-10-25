@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-25",
+  "purpose": "One bounded staging Messages request with a forced Advisor tool choice to exercise request-level usage correlation.",
+  "request_id": "86828d60-6bcf-4a34-8e30-47f192e01c15",
+  "first_connection_attempt": {
+    "url": "http://127.0.0.1:4000/v1/messages",
+    "result": "connection_refused_before_http",
+    "provider_request": false,
+    "note": "The staging container listens on port 4005. The same request ID was reused after verifying the actual binding."
+  },
+  "effective_request": {
+    "url": "http://127.0.0.1:4005/v1/messages",
+    "http_status": 200,
+    "request_model": "default",
+    "tool_choice": "advisor",
+    "disable_fallbacks": true,
+    "response_model": "default",
+    "stop_reason": "end_turn",
+    "response_usage": {
+      "input_tokens": 47,
+      "output_tokens": 12,
+      "cache_read_input_tokens": 512,
+      "cache_creation_input_tokens": 0
+    },
+    "sift_response_headers": "not_present_on_outer_target_response"
+  },
+  "staging_policy": {
+    "active_model": "minimax-flash-direct",
+    "mode": "force",
+    "advisor_model": "gemini-subscription",
+    "policy_version": 2093
+  },
+  "provider_receipts": [
+    {
+      "attempt_id": "24b934c8-85a7-404e-880b-7309ed3834ae",
+      "request_id": "86828d60-6bcf-4a34-8e30-47f192e01c15",
+      "role": "inference",
+      "provider_id": "minimax",
+      "upstream_model": "minimax/MiniMax-M3.1-Flash",
+      "outcome": "complete",
+      "usage_complete": true,
+      "input_tokens": 366,
+      "output_tokens": 39
+    },
+    {
+      "attempt_id": "c0d04281-d260-4e2c-93ae-6a3313f3ba31",
+      "request_id": "86828d60-6bcf-4a34-8e30-47f192e01c15",
+      "role": "advisor",
+      "provider_id": "anthropic",
+      "upstream_model": "anthropic/gemini-3.8-flash-advisor",
+      "transport": "http://experts:4040",
+      "outcome": "complete",
+      "usage_complete": true,
+      "input_tokens": 1047,
+      "output_tokens": 311
+    },
+    {
+      "attempt_id": "b2cf4862-b909-48f0-a77f-72402631077a",
+      "request_id": "86828d60-6bcf-4a34-8e30-47f192e01c15",
+      "role": "inference",
+      "provider_id": "minimax",
+      "upstream_model": "minimax/MiniMax-M3.1-Flash",
+      "outcome": "complete",
+      "usage_complete": true,
+      "input_tokens": 47,
+      "output_tokens": 12
+    }
+  ],
+  "runtime": {
+    "gateway_staging_image": "sha256:e5a155b6237b9f17d14378ad92e1791f1535adbafa0531744dca5ee2d7c244ec",
+    "experts_image": "sha256:e5a155b6237b9f17d14378ad92e1791f1535adbafa0531744dca5ee2d7c244ec",
+    "staging_restarts": 0,
+    "experts_restarts": 0,
+    "production_image": "sha256:2d3076d83d415a2066532b4c69cf0921fe1667f0452e377a83ba53116390005d",
+    "production_restarts": 0,
+    "expert_sift_source_matches_worktree": true,
+    "expert_sift_sha256": "7f92983706f0c2e07981402a4fa0adaa52551cafc2a1ad603358cd866593c163",
+    "experts_callback_configured": "subroute.plugins.expert_sift.expert_sift_hook"
+  },
+  "sift_audit": {
+    "matching_sift_request_line_observed": false,
+    "experts_sift_request_lines_in_observed_12_minute_window": 0,
+    "callback_execution_and_request_attempt_pairing": "not independently observed",
+    "limitation": "The Expert call completed, but this container log window contained no Sift audit line. The outer target response does not expose the Expert response headers. No claim of live Sift audit correlation or compaction is made."
+  },
+  "provider_sequence": ["MiniMax target", "Experts HTTP hop for Gemini Advisor", "MiniMax target"],
+  "provider_receipt_count": 3,
+  "unmatched_or_fallback_provider_receipts": 0,
+  "acceptance": "partial: a forced Advisor-tool HTTP round trip and exact request-ID ledger cohort passed; natural optional-tool selection, live Sift audit correlation, and large-input compaction remain unverified"
+}
