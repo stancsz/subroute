@@ -116,18 +116,24 @@ def test_untrusted_auth_cannot_claim_valid_correlation_ids(monkeypatch, caplog):
                    for record in caplog.records)
 
 
-def test_litellm_master_key_http_auth_enables_expert_correlation(monkeypatch):
+def test_litellm_master_key_http_auth_enables_expert_correlation(monkeypatch, caplog):
     from fastapi import Depends, FastAPI, Request
     from fastapi.testclient import TestClient
+    import litellm
+    from litellm.caching.caching import DualCache
     from litellm.proxy import proxy_server
     from litellm.proxy.auth import user_api_key_auth as auth_module
-    from litellm.proxy._types import LitellmUserRoles
     from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
     from litellm.proxy.auth.user_api_key_auth import LITELLM_PROXY_MASTER_KEY_ALIAS
+    from litellm.proxy.utils import ProxyLogging
 
     master_key = "sk-fixture-experts-master"
     request_id, attempt_id = str(uuid.uuid4()), str(uuid.uuid4())
-    captured = []
+
+    class CountingRouter:
+        @staticmethod
+        def _count_pre_call_check_tokens(*, messages, input, request_kwargs):
+            return sum(len(str(message.get("content", ""))) for message in messages) // 4
 
     async def no_cache_key_object(**kwargs):
         return None
@@ -137,26 +143,39 @@ def test_litellm_master_key_http_auth_enables_expert_correlation(monkeypatch):
     monkeypatch.setattr(proxy_server, "prisma_client", None)
     monkeypatch.setattr(auth_module, "cache_key_object", no_cache_key_object)
 
-    async def capture_correlation(self, auth, cache, data, call_type):
-        captured.append((auth.user_role, auth.api_key, data.get("_subroute_sift_correlation")))
-        return data
-
-    monkeypatch.setattr(SiftLiteLLMHook, "async_pre_call_hook", capture_correlation)
-    app = FastAPI()
+    monkeypatch.setattr(proxy_server, "llm_router", None)
     hook = ExpertSiftHook()
+    monkeypatch.setattr(litellm, "callbacks", [hook])
+    monkeypatch.setattr(ProxyLogging, "_callback_capabilities_cache", {})
+    proxy = ProxyLogging(user_api_key_cache=DualCache())
+    hook.model_targets["gemini-3.8-flash-advisor"] = 512
+    messages = [
+        {"role": "user", "content": f"old context {index} " + "x" * 300}
+        for index in range(8)
+    ] + [{"role": "user", "content": "Keep this latest question."}]
+    caplog.set_level(logging.INFO, logger="LiteLLM Proxy")
+    app = FastAPI()
 
     @app.post("/v1/messages")
     async def experts_callback(request: Request, auth=Depends(user_api_key_auth)):
+        request_body = await request.json()
         data = {
-            "model": "gemini-3.8-flash-advisor",
-            "messages": [{"role": "user", "content": "Review this."}],
+            "model": request_body["model"],
+            "messages": request_body["messages"],
             "proxy_server_request": {"headers": dict(request.headers)},
         }
-        result = await hook.async_pre_call_hook(auth, None, data, "aanthropic_messages")
+        proxy_server.llm_router = CountingRouter()
+        try:
+            result = await proxy.pre_call_hook(
+                user_api_key_dict=auth, data=data, call_type="aanthropic_messages",
+            )
+        finally:
+            proxy_server.llm_router = None
         return {
             "role": auth.user_role.value,
             "api_key": auth.api_key,
             "correlation_removed": "_subroute_sift_correlation" not in result,
+            "latest_message_preserved": result["messages"][-1]["content"] == "Keep this latest question.",
             "reserved_headers_removed": not any(
                 name.lower().startswith("x-subroute-")
                 for name in result["proxy_server_request"]["headers"]
@@ -170,19 +189,23 @@ def test_litellm_master_key_http_auth_enables_expert_correlation(monkeypatch):
             "x-subroute-request-id": request_id,
             "x-subroute-attempt-id": attempt_id,
         },
-        json={"model": "gemini-3.8-flash-advisor", "messages": [{"role": "user", "content": "Review this."}]},
+        json={"model": "gemini-3.8-flash-advisor", "messages": messages},
     )
 
     assert response.status_code == 200, response.text
     assert response.json()["role"] == "proxy_admin"
     assert response.json()["api_key"] == LITELLM_PROXY_MASTER_KEY_ALIAS
     assert response.json()["correlation_removed"] is True
+    assert response.json()["latest_message_preserved"] is True
     assert response.json()["reserved_headers_removed"] is True
-    assert captured == [(
-        LitellmUserRoles.PROXY_ADMIN,
-        LITELLM_PROXY_MASTER_KEY_ALIAS,
-        {"request_id": request_id, "advisor_attempt_id": attempt_id},
-    )]
+    assert len([record for record in caplog.records if "sift_request" in record.getMessage()]) == 1
+    sift_line = next(record.getMessage() for record in caplog.records if "sift_request" in record.getMessage())
+    sift_fields = dict(part.split("=", 1) for part in sift_line.split() if "=" in part)
+    assert sift_fields["compacted"] == "true"
+    assert int(sift_fields["input_tokens"]) > int(sift_fields["forwarded_tokens"])
+    assert sift_fields["target"] == "512"
+    assert sift_fields["request_id"] == request_id
+    assert sift_fields["advisor_attempt_id"] == attempt_id
 
 
 @pytest.mark.parametrize("outcome", ["exception", "cancel"])
