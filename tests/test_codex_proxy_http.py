@@ -78,6 +78,8 @@ def _configured_proxy(
     upstream_chunks=None,
     provider_model_list=None,
     additional_custom_providers=(),
+    pre_call_callbacks=(),
+    use_master_key_auth=False,
 ):
     original_acompletion = litellm.acompletion
     upstream_models = []
@@ -138,6 +140,7 @@ def _configured_proxy(
             callbacks.append(codex_credential_refresher)
         if dynamic_routing_plugin is not None:
             callbacks.append(dynamic_routing_plugin)
+        callbacks.extend(pre_call_callbacks)
         if callbacks:
             stack.enter_context(patch.object(litellm, "callbacks", callbacks))
         litellm.utils.custom_llm_setup()
@@ -176,9 +179,10 @@ def _configured_proxy(
             fallbacks=[],
         )
         stack.enter_context(patch.object(proxy_server, "llm_router", router))
-        stack.enter_context(patch.dict(proxy_server.app.dependency_overrides, {
-            proxy_server.user_api_key_auth: lambda: UserAPIKeyAuth(api_key="fixture-key"),
-        }))
+        if not use_master_key_auth:
+            stack.enter_context(patch.dict(proxy_server.app.dependency_overrides, {
+                proxy_server.user_api_key_auth: lambda: UserAPIKeyAuth(api_key="fixture-key"),
+            }))
         yield TestClient(
             proxy_server.app,
             client=("127.0.0.1", 50000),
@@ -421,6 +425,79 @@ def test_messages_without_provider_usage_fails_with_a_bounded_gateway_error():
 
     assert response.status_code == 502, response.text
     assert "omitted usage required by the Anthropic Messages bridge" in response.text
+
+
+def test_real_litellm_messages_route_correlates_expert_call_and_strips_headers(monkeypatch, caplog):
+    import logging
+    import uuid
+
+    from litellm.proxy.auth import user_api_key_auth as auth_module
+    from litellm.proxy.utils import ProxyLogging
+
+    from subroute.plugins.expert_sift import ExpertSiftHook
+
+    master_key = "sk-fixture-experts-master"
+    request_id, attempt_id = str(uuid.uuid4()), str(uuid.uuid4())
+    model = "gemini-3.8-flash-advisor"
+    hook = ExpertSiftHook()
+    hook.model_targets[model] = 256
+    monkeypatch.setattr(ProxyLogging, "_callback_capabilities_cache", {})
+    monkeypatch.setattr(proxy_server, "master_key", master_key)
+    monkeypatch.setattr(proxy_server, "general_settings", {})
+    monkeypatch.setattr(proxy_server, "prisma_client", None)
+
+    async def no_cache_key_object(**kwargs):
+        return None
+
+    monkeypatch.setattr(auth_module, "cache_key_object", no_cache_key_object)
+    deployment = {
+        "model_name": model,
+        "litellm_params": {
+            "model": "codex-subscription/gpt-6-luna",
+            "api_base": "https://fixture.invalid/backend-api/codex",
+            "api_key": "fixture-key",
+            "extra_headers": {"ChatGPT-Account-ID": "fixture-account"},
+            "store": False,
+            "allowed_openai_params": ["reasoning_effort"],
+        },
+    }
+    messages = [
+        {"role": "user", "content": f"old context {index} " + "x" * 300}
+        for index in range(20)
+    ] + [{"role": "user", "content": "Keep this latest question."}]
+    caplog.set_level(logging.INFO, logger="LiteLLM Proxy")
+
+    with _configured_proxy(
+        provider_model_list=[deployment],
+        pre_call_callbacks=[hook],
+        use_master_key_auth=True,
+    ) as (client, upstream_models, upstream_credentials, _, _):
+        response = client.post(
+            "/v1/messages",
+            headers={
+                "anthropic-version": "2023-06-01",
+                "Authorization": f"Bearer {master_key}",
+                "x-subroute-request-id": request_id,
+                "x-subroute-attempt-id": attempt_id,
+            },
+            json={"model": model, "messages": messages, "max_tokens": 32},
+        )
+
+    assert response.status_code == 200, response.text
+    assert "fixture answer" in response.text
+    assert response.headers["x-sift-compacted"] == "true"
+    assert upstream_models == ["openai/responses/gpt-6-luna"]
+    assert len(upstream_credentials) == 1
+    provider_headers = upstream_credentials[0][1]
+    assert "ChatGPT-Account-ID" in provider_headers
+    assert not any(name.lower().startswith("x-subroute-") for name in provider_headers)
+    sift_lines = [record.getMessage() for record in caplog.records if "sift_request" in record.getMessage()]
+    assert len(sift_lines) == 1, sift_lines
+    sift_fields = dict(part.split("=", 1) for part in sift_lines[0].split() if "=" in part)
+    assert sift_fields["compacted"] == "true"
+    assert int(sift_fields["input_tokens"]) > int(sift_fields["forwarded_tokens"])
+    assert sift_fields["request_id"] == request_id
+    assert sift_fields["advisor_attempt_id"] == attempt_id
 
 
 def test_streamed_messages_do_not_emit_success_when_provider_usage_is_missing():
