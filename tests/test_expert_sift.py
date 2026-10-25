@@ -116,6 +116,75 @@ def test_untrusted_auth_cannot_claim_valid_correlation_ids(monkeypatch, caplog):
                    for record in caplog.records)
 
 
+def test_litellm_master_key_http_auth_enables_expert_correlation(monkeypatch):
+    from fastapi import Depends, FastAPI, Request
+    from fastapi.testclient import TestClient
+    from litellm.proxy import proxy_server
+    from litellm.proxy.auth import user_api_key_auth as auth_module
+    from litellm.proxy._types import LitellmUserRoles
+    from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+    from litellm.proxy.auth.user_api_key_auth import LITELLM_PROXY_MASTER_KEY_ALIAS
+
+    master_key = "sk-fixture-experts-master"
+    request_id, attempt_id = str(uuid.uuid4()), str(uuid.uuid4())
+    captured = []
+
+    async def no_cache_key_object(**kwargs):
+        return None
+
+    monkeypatch.setattr(proxy_server, "master_key", master_key)
+    monkeypatch.setattr(proxy_server, "general_settings", {})
+    monkeypatch.setattr(proxy_server, "prisma_client", None)
+    monkeypatch.setattr(auth_module, "cache_key_object", no_cache_key_object)
+
+    async def capture_correlation(self, auth, cache, data, call_type):
+        captured.append((auth.user_role, auth.api_key, data.get("_subroute_sift_correlation")))
+        return data
+
+    monkeypatch.setattr(SiftLiteLLMHook, "async_pre_call_hook", capture_correlation)
+    app = FastAPI()
+    hook = ExpertSiftHook()
+
+    @app.post("/v1/messages")
+    async def experts_callback(request: Request, auth=Depends(user_api_key_auth)):
+        data = {
+            "model": "gemini-3.8-flash-advisor",
+            "messages": [{"role": "user", "content": "Review this."}],
+            "proxy_server_request": {"headers": dict(request.headers)},
+        }
+        result = await hook.async_pre_call_hook(auth, None, data, "aanthropic_messages")
+        return {
+            "role": auth.user_role.value,
+            "api_key": auth.api_key,
+            "correlation_removed": "_subroute_sift_correlation" not in result,
+            "reserved_headers_removed": not any(
+                name.lower().startswith("x-subroute-")
+                for name in result["proxy_server_request"]["headers"]
+            ),
+        }
+
+    response = TestClient(app).post(
+        "/v1/messages",
+        headers={
+            "Authorization": f"Bearer {master_key}",
+            "x-subroute-request-id": request_id,
+            "x-subroute-attempt-id": attempt_id,
+        },
+        json={"model": "gemini-3.8-flash-advisor", "messages": [{"role": "user", "content": "Review this."}]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["role"] == "proxy_admin"
+    assert response.json()["api_key"] == LITELLM_PROXY_MASTER_KEY_ALIAS
+    assert response.json()["correlation_removed"] is True
+    assert response.json()["reserved_headers_removed"] is True
+    assert captured == [(
+        LitellmUserRoles.PROXY_ADMIN,
+        LITELLM_PROXY_MASTER_KEY_ALIAS,
+        {"request_id": request_id, "advisor_attempt_id": attempt_id},
+    )]
+
+
 @pytest.mark.parametrize("outcome", ["exception", "cancel"])
 def test_correlation_marker_is_cleared_when_sift_does_not_complete(monkeypatch, outcome):
     from litellm.proxy._types import LitellmUserRoles, UserAPIKeyAuth
