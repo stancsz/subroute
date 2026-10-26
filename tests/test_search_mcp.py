@@ -58,10 +58,10 @@ def test_fetch_extracts_html_and_marks_page_as_untrusted(monkeypatch):
     monkeypatch.setattr(search_mcp, "_validate_resolved_public_host", public_host)
     monkeypatch.setattr(search_mcp.httpx, "AsyncClient", Client)
     result = asyncio.run(search_mcp.fetch_public_page("https://example.com/docs"))
-    assert result.isError is False
-    assert result.structuredContent["text"] == "Useful docs\nPage text"
+    assert result.is_error is False
+    assert result.structured_content["text"] == "Useful docs\nPage text"
     assert "ignore me" not in result.content[0].text
-    assert "untrusted" in result.structuredContent["notice"]
+    assert "untrusted" in result.structured_content["notice"]
 
 
 def test_search_tool_supports_explicit_single_url_fetch_without_search(monkeypatch):
@@ -72,13 +72,11 @@ def test_search_tool_supports_explicit_single_url_fetch_without_search(monkeypat
         return search_mcp._error("test_complete", "fetch path reached")
 
     monkeypatch.setattr(search_mcp, "fetch_public_page", fetch)
-    result = asyncio.run(
-        search_mcp.create_server()._tool_manager.get_tool("web_search").run(
-            {"fetch_url": "https://docs.python.org/3/library/asyncio-task.html"}
-        )
-    )
+    result = asyncio.run(search_mcp.create_server().call_tool(
+        "web_search", {"fetch_url": "https://docs.python.org/3/library/asyncio-task.html"}
+    ))
     assert fetched == ["https://docs.python.org/3/library/asyncio-task.html"]
-    assert result.structuredContent["error"]["code"] == "test_complete"
+    assert result.structured_content["error"]["code"] == "test_complete"
 
 
 def test_search_tool_rejects_ambiguous_and_missing_operations(monkeypatch):
@@ -87,11 +85,10 @@ def test_search_tool_rejects_ambiguous_and_missing_operations(monkeypatch):
 
     monkeypatch.setattr(search_mcp, "fetch_public_page", unexpected)
     server = search_mcp.create_server()
-    tool = server._tool_manager.get_tool("web_search")
-    ambiguous = asyncio.run(tool.run({"queries": ["docs"], "fetch_url": "https://example.com/"}))
-    missing = asyncio.run(tool.run({}))
-    assert ambiguous.structuredContent["error"]["code"] == "ambiguous_operation"
-    assert missing.structuredContent["error"]["code"] == "missing_operation"
+    ambiguous = asyncio.run(server.call_tool("web_search", {"queries": ["docs"], "fetch_url": "https://example.com/"}))
+    missing = asyncio.run(server.call_tool("web_search", {}))
+    assert ambiguous.structured_content["error"]["code"] == "ambiguous_operation"
+    assert missing.structured_content["error"]["code"] == "missing_operation"
 
 
 @pytest.mark.parametrize(("status", "content_type", "chunks", "error"), [
@@ -119,8 +116,8 @@ def test_fetch_rejects_redirects_non_text_and_oversized_pages(monkeypatch, statu
     monkeypatch.setattr(search_mcp, "_validate_resolved_public_host", public_host)
     monkeypatch.setattr(search_mcp.httpx, "AsyncClient", Client)
     result = asyncio.run(search_mcp.fetch_public_page("https://example.com/"))
-    assert result.isError is True
-    assert result.structuredContent["error"]["code"] == error
+    assert result.is_error is True
+    assert result.structured_content["error"]["code"] == error
 
 
 def test_search_uses_loopback_without_environment_proxy_or_redirects(monkeypatch):
@@ -157,7 +154,7 @@ def test_search_uses_loopback_without_environment_proxy_or_redirects(monkeypatch
         search_mcp.search_gateway(["current docs"], "short", "http://127.0.0.1:4000", "local-secret")
     )
 
-    assert result.isError is False
+    assert result.is_error is False
     assert observed["url"] == "http://127.0.0.1:4000/v1/alpha/search"
     assert observed["client_options"] == {
         "timeout": 12,
@@ -166,7 +163,7 @@ def test_search_uses_loopback_without_environment_proxy_or_redirects(monkeypatch
     }
     assert observed["request"]["headers"]["Authorization"] == "Bearer local-secret"
     assert observed["request"]["json"]["commands"]["search_query"] == [{"q": "current docs"}]
-    assert result.structuredContent["results"][0]["url"] == "https://example.test/page"
+    assert result.structured_content["results"][0]["url"] == "https://example.test/page"
 
 
 def test_invalid_gateway_url_is_rejected_before_sending_credentials(monkeypatch):
@@ -182,8 +179,8 @@ def test_invalid_gateway_url_is_rejected_before_sending_credentials(monkeypatch)
         search_mcp.search_gateway(["query"], "medium", "http://attacker.example", "secret")
     )
 
-    assert result.isError is True
-    assert result.structuredContent["error"]["code"] == "invalid_gateway_url"
+    assert result.is_error is True
+    assert result.structured_content["error"]["code"] == "invalid_gateway_url"
     assert called is False
     assert "secret" not in result.content[0].text
 
@@ -215,9 +212,9 @@ def test_gateway_errors_are_redacted(monkeypatch, status_code, error_code):
         search_mcp.search_gateway(["query"], "short", "http://127.0.0.1:4000", "secret")
     )
 
-    assert result.isError is True
-    assert result.structuredContent["error"]["code"] == error_code
-    assert result.structuredContent["error"]["http_status"] == status_code
+    assert result.is_error is True
+    assert result.structured_content["error"]["code"] == error_code
+    assert result.structured_content["error"]["http_status"] == status_code
     assert "secret" not in result.content[0].text
 
 
@@ -247,8 +244,8 @@ def test_malformed_gateway_results_return_a_typed_error(monkeypatch):
         search_mcp.search_gateway(["query"], "short", "http://127.0.0.1:4000", None)
     )
 
-    assert result.isError is True
-    assert result.structuredContent["error"]["code"] == "invalid_gateway_response"
+    assert result.is_error is True
+    assert result.structured_content["error"]["code"] == "invalid_gateway_response"
 
 
 def test_empty_gateway_results_are_reported_as_search_error(monkeypatch):
@@ -277,8 +274,8 @@ def test_empty_gateway_results_are_reported_as_search_error(monkeypatch):
         search_mcp.search_gateway(["query"], "short", "http://127.0.0.1:4000", None)
     )
 
-    assert result.isError is True
-    assert result.structuredContent == {
+    assert result.is_error is True
+    assert result.structured_content == {
         "status": "error",
         "error": {
             "code": "empty_results",
@@ -320,8 +317,8 @@ def test_rendered_results_obey_output_limit(monkeypatch):
         search_mcp.search_gateway(["query"], "long", "http://127.0.0.1:4000", None)
     )
 
-    assert result.isError is False
-    assert result.structuredContent["truncated"] is True
+    assert result.is_error is False
+    assert result.structured_content["truncated"] is True
     assert len(result.content[0].text) <= 200
 
 

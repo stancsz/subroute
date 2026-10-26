@@ -242,7 +242,7 @@ def test_mcp_success_reports_litellm_retry_count_and_final_attempt_usage(tmp_pat
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
     result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
         "asset_path": "sample.wav", "question": "Listen", "focus": ["clarity"]}))
-    assert result.structuredContent["retry"] == {
+    assert result.structured_content["retry"] == {
         "automatic": True, "attempted_retries": 2, "max_retries": 2,
         "usage_scope": "final_attempt_only",
     }
@@ -252,12 +252,12 @@ def test_refusal_reports_exhausted_litellm_retries_without_claiming_success():
     result = failure("provider_content_filter",
         "provider_content_filter phase=after_attachment_reads LiteLLM Retried: 2 times provider_usage=10,2,12",
         [{"path": "a.wav"}], 400)
-    assert result.isError
-    assert result.structuredContent["status"] == "refused"
-    assert result.structuredContent["error"]["automatic_retry"] is True
-    assert result.structuredContent["error"]["retry_count"] == 2
-    assert result.structuredContent["error"]["provider_usage_scope"] == "last_attempt_only"
-    assert result.structuredContent["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+    assert result.is_error
+    assert result.structured_content["status"] == "refused"
+    assert result.structured_content["error"]["automatic_retry"] is True
+    assert result.structured_content["error"]["retry_count"] == 2
+    assert result.structured_content["error"]["provider_usage_scope"] == "last_attempt_only"
+    assert result.structured_content["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
 
 
 def test_gemini_retry_policy_is_scoped_to_content_policy_exceptions_and_group():
@@ -292,13 +292,13 @@ def test_mcp_provider_refusal_is_a_tool_error_without_retry(tmp_path, monkeypatc
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(transport), **kwargs))
     server = create_server(tmp_path, "http://fixture")
     result = asyncio.run(server.call_tool("analyze_audio", {"asset_path": "sample.wav", "question": "Describe", "focus": ["vocals"]}))
-    assert result.isError
-    assert result.structuredContent["status"] == "refused"
-    assert result.structuredContent["error"]["code"] == "provider_content_filter"
-    assert result.structuredContent["error"]["phase"] == "after_attachment_reads"
-    assert result.structuredContent["error"]["completed_reads"] == 1
-    assert result.structuredContent["error"]["expected_reads"] == 1
-    assert result.structuredContent["usage"] is None
+    assert result.is_error
+    assert result.structured_content["status"] == "refused"
+    assert result.structured_content["error"]["code"] == "provider_content_filter"
+    assert result.structured_content["error"]["phase"] == "after_attachment_reads"
+    assert result.structured_content["error"]["completed_reads"] == 1
+    assert result.structured_content["error"]["expected_reads"] == 1
+    assert result.structured_content["usage"] is None
     assert len(calls) == 1
 
 
@@ -322,7 +322,7 @@ def test_id3_prefix_without_audio_rejected_before_provider_work(tmp_path, monkey
     monkeypatch.setattr(httpx, "AsyncClient", forbidden)
     result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
         "asset_path": "fake.mp3", "question": "Listen", "focus": ["clarity"]}))
-    assert result.isError and result.structuredContent["error"]["code"] == "invalid_input"
+    assert result.is_error and result.structured_content["error"]["code"] == "invalid_input"
 
 
 def test_refused_usage_survives_the_public_error_message(tmp_path, monkeypatch):
@@ -334,8 +334,8 @@ def test_refused_usage_survives_the_public_error_message(tmp_path, monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
     result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
         "asset_path": "sample.wav", "question": "Listen", "focus": ["clarity"]}))
-    assert result.isError and result.structuredContent["status"] == "refused"
-    assert result.structuredContent["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 15}
+    assert result.is_error and result.structured_content["status"] == "refused"
+    assert result.structured_content["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 15}
 
 
 @pytest.mark.parametrize("marker,expected", [("completed_reads=2", 2), ("completed_reads=-1", None),
@@ -348,9 +348,9 @@ def test_refusal_completed_reads_requires_a_nonnegative_integer(tmp_path, monkey
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
     result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
         "asset_path": "sample.wav", "question": "Listen", "focus": ["clarity"]}))
-    reads = result.structuredContent["error"].get("completed_reads")
+    reads = result.structured_content["error"].get("completed_reads")
     assert reads == expected
-    assert result.structuredContent["error"].get("expected_reads") == (1 if expected is not None else None)
+    assert result.structured_content["error"].get("expected_reads") == (1 if expected is not None else None)
 
 
 @pytest.mark.parametrize("outcome,code", [
@@ -389,9 +389,9 @@ def test_mcp_failure_then_recovery_preserves_question_and_binary(tmp_path, monke
         second = await server.call_tool("analyze_audio", args)
         return first, second
     first, second = asyncio.run(run())
-    assert first.isError and first.structuredContent["error"]["code"] == code
-    assert not second.isError and second.structuredContent["status"] == "complete"
-    assert first.structuredContent["inputs"] == second.structuredContent["inputs"]
+    assert first.is_error and first.structured_content["error"]["code"] == code
+    assert not second.is_error and second.structured_content["status"] == "complete"
+    assert first.structured_content["inputs"] == second.structured_content["inputs"]
     assert len(calls) == 2
 
 
@@ -402,4 +402,4 @@ def test_mcp_rejects_unbounded_or_empty_prompt_before_provider_work(tmp_path, mo
     monkeypatch.setattr(httpx, "AsyncClient", forbidden)
     result = asyncio.run(create_server(tmp_path, "http://fixture").call_tool("analyze_audio", {
         "asset_path": "nonexistent.wav", "question": question, "focus": focus}))
-    assert result.isError and result.structuredContent["error"]["code"] == "invalid_input"
+    assert result.is_error and result.structured_content["error"]["code"] == "invalid_input"

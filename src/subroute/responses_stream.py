@@ -9,7 +9,6 @@ Retire when the client stream contract regressions pass on an upstream release.
 """
 
 from copy import deepcopy
-from importlib.metadata import version
 import uuid
 
 from litellm.types.utils import ModelResponse
@@ -22,7 +21,7 @@ def _plain(value):
 
 async def _thinking_source(source):
     """Keep opaque blocks for replay and expose their displayable summary."""
-    from litellm.llms.anthropic.experimental_pass_through.adapters.streaming_iterator import _CombinedChunkSplitter
+    from litellm.llms.anthropic.pass_through.adapters.streaming_iterator import _CombinedChunkSplitter
     try:
         async for chunk in source:
             choices = getattr(chunk, "choices", None) or []
@@ -126,9 +125,12 @@ async def _repair_events(source):
 
 
 def install_responses_stream_repair():
-    if version("litellm") not in {"1.101.0", "1.103.0"}:
-        return
     from litellm.responses.litellm_completion_transformation.streaming_iterator import LiteLLMCompletionStreamingIterator as Iterator
+    required_iterator = ("__init__", "__anext__", "_ensure_output_item_for_chunk",
+                         "create_output_content_part_done_event", "create_output_text_done_event",
+                         "create_output_item_done_event")
+    if any(not callable(getattr(Iterator, name, None)) for name in required_iterator):
+        raise RuntimeError("Installed LiteLLM Responses iterator lacks required lifecycle capabilities")
     if getattr(Iterator, "_subroute_item_repair", False):
         return
     Iterator._subroute_item_repair = True

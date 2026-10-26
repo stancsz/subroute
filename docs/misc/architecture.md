@@ -1,21 +1,23 @@
 # Architecture
 
+The hard design rule is **if upstream succeeds, downstream must succeed**. [AGENTS.md](../../AGENTS.md#hard-rules-preserve-upstream-success-and-pass-acceptance) defines the invariant and requires passing acceptance after every implementation; the [acceptance procedure](../operations/acceptance.md) defines proof. This describes intended ownership, not a claim that all deployed runtimes already satisfy it. Current gaps remain in [GOAL.md](../../GOAL.md).
+
 ```mermaid
 flowchart LR
     Clients[Codex / Claude Code / coding tools] --> Proxy[LiteLLM Proxy production :4000]
     Proxy --> Native[Native LiteLLM providers]
     Native --> OpenRouter[OpenRouter]
-    OpenRouter -->|auto fallback| GeminiAuto[Gemini 3.8 subscription]
-    GeminiAuto -->|auto fallback| CodexAuto[Codex Luna subscription]
+    Native --> Fallback[Configured LiteLLM target fallbacks]
     Proxy --> Compatible[OpenAI-compatible endpoints]
     Proxy --> Ollama[Native Ollama provider]
     Proxy -->|direct Gemini target| Antigravity[Antigravity CLI sidecar]
     Proxy -->|direct Codex target| Codex[Codex subscription]
-    Proxy --> Advisor[Advisor injection callback]
+    Proxy --> Advisor[Optional model-selected Advisor tool on Messages]
     Control[Local control plane /control] --> State[Atomic active_model.json]
     State --> Router[In-memory alias resolver]
     Router --> Proxy
     Advisor --> BuiltIn[LiteLLM AdvisorOrchestrationHandler]
+    BuiltIn --> Experts[Private Experts :4040 with Sift input boundary]
 ```
 
 LiteLLM Proxy is the only public protocol engine. Standard provider translation
@@ -33,12 +35,10 @@ LiteLLM owns:
 
 This repository owns:
 
-- a small, reviewable LiteLLM configuration, including the explicit `auto`
-  fallback chain MiniMax M3 → Gemini 3.8 Flash → Codex Luna
+- a small, reviewable LiteLLM configuration, including explicit target fallback chains
 - explicit public model aliases
-- fail-closed routing by default, with explicit target and Advisor fallback chains
-- acceptance tests that prevent protocol and provider abstractions from
-  growing back into the project
+- explicit routing and validation that preserve supported upstream semantics, with no fallback chain for Advisor calls
+- behavioral acceptance after every implementation, including gateway fault isolation, request/tool fidelity and completed client delivery
 - a callback that injects LiteLLM's built-in Advisor tool on the Anthropic
   Messages path whenever the captured policy contains an advisor selection
 - a loopback-only routing control plane that resolves `default`, or explicitly
@@ -47,13 +47,17 @@ This repository owns:
 The dynamic routing callback precedes the Advisor callback. A request for
 `default` resolves to the selected model; `auto` is a LiteLLM model group
 whose provider errors use the configured fallback chain. Explicit fallback
-chains also cover MiniMax, OpenRouter, and Xiaomi target aliases. Advisor
-failover uses a private Gemini alias plus GPT-6.1 Sol, so advisor errors do not
-change ordinary Gemini target behavior. Other direct model requests still fail
-closed. The same policy snapshot decides
-whether to consult an advisor. An empty advisor selection disables consultation. Rewrites carry requested and resolved model names, routing mode, and
-policy version as audit metadata. Existing in-flight requests are never
-retargeted.
+chains also cover configured MiniMax, OpenRouter and Xiaomi target aliases.
+Full/bare configured provider IDs resolve to selectable aliases; unknown or ambiguous names use the saved default. Private Advisor deployments are excluded.
+The same request-local policy snapshot selects the target and optional expert.
+The model chooses whether to invoke the advertised native Advisor tool on Messages; ordinary requests do not require expert availability. A chosen consultation has no retry/fallback chain. Preserve truthful tool failure semantics and bounded continuation; any framework path that turns optional work into an unrelated target failure remains a gateway gap until accepted.
+Rewrites carry requested/resolved names, routing mode and policy version as audit metadata. Existing in-flight requests are never retargeted.
+
+## Failure isolation
+
+Gateway transformations must not turn successful compatible upstream behavior into schema errors, lost content/limits, malformed tools, premature timeouts or incomplete client streams. LiteLLM owns the protocol engine; each necessary compatibility shim needs a demonstrated gap, regression and retirement condition. A fallback success is separate from preservation of the original attempt.
+
+Accounting, usage replay, logging and status presentation are observational. PostgreSQL failure, a full SQLite outbox or missing telemetry must not reject inference or replace a successful terminal response. Bound telemetry work and test its latency/failure paths. Authentication, signed identities and explicit security/budget rules remain enforced. Do not delete receipts, change routing or bypass credentials to conceal a failure.
 
 `/health/readiness` is the gateway/database readiness probe; LiteLLM `/health`
 checks each configured deployment and may report optional routes as unhealthy
@@ -73,7 +77,7 @@ or OpenAI-compatible seam. Antigravity's registered handler calls a separate
 CLI bridge service, which launches at most four external CLI processes at a
 time. It waits up to 0.5 seconds for a slot, then returns HTTP 429 at capacity.
 Timeout and client disconnect terminate the process group and wait for cleanup
-before releasing the slot. The gateway requires this Compose bridge. Its former
+before releasing the slot. Gemini transport uses this Compose bridge. Its former
 host-local direct-CLI fallback used different input framing and terminal-result
 rules and is no longer supported; local tests and Compose use the same bridge
 contract. Target requests use the target agent profile, including plain-text
@@ -82,9 +86,7 @@ Tool schemas support local fragment references only. Validation uses a registry
 without remote retrieval so caller schemas cannot start synchronous network work.
 By owner decision on 2026-09-26, this Compose-managed sidecar is an
 explicit exception: it preserves the personal CLI subscription, and Gemini
-API-key authentication is not allowed. Production and staging still share its
-credential, configuration, and cache volumes, so Antigravity state is not
-isolated between them. Codex
+API-key authentication is not allowed. The intended Compose recipe now gives production and staging separate Antigravity credential, configuration and cache volumes. Verify actual mounts rather than assuming a recipe change has been deployed. Codex
 subscription requests use a narrow `CustomLLM` adapter: it requests upstream streaming,
 assembles non-streaming Chat chunks
 with LiteLLM's native builder, and maps streamed Chat chunks into LiteLLM's
@@ -105,10 +107,7 @@ labels this `buffered-sse`; it does not promise progressive token delivery.
 
 Each request resolves one executor/advisor policy snapshot. Persisted advisor
 selection takes precedence over the ADVISOR_MODEL startup default. Production
-and staging use distinct mutable policy storage and PostgreSQL clusters within
-Docker Compose, but currently share the Antigravity sidecar's credential,
-configuration, and cache volumes. Static source/configuration remain shared
-and require review before a production restart.
+and staging use distinct mutable policy storage, PostgreSQL stores and Antigravity state volumes in the intended Docker Compose deployment. Staging and production use separate gateway image tags, while configured Codex/Experts/accounting credentials are intentionally shared. Inspect actual containers before claiming isolation or source parity: legacy mounts and container-layer hotfixes can differ from the Compose recipe. Deployment changes remain subject to the current user's authority.
 
 ## Gemini music-listening integration
 
@@ -125,6 +124,4 @@ The caller owns MCP execution; existing DAW controls own future edits/renders.
 
 ## Evidence boundary
 
-Config tests prove only the intended ownership boundary. LiteLLM startup proves
-only that the proxy can load. Coding-tool compatibility requires the real
-LeanRouter protocol fixtures and live Codex and Claude Code tool/stream tests.
+Config tests prove only the intended ownership boundary. LiteLLM startup/readiness proves only proxy/database availability. Each implementation must pass the affected behavioral acceptance on its final source. Real client/provider or deployment claims additionally require authorized task-shaped tool/stream acceptance in that runtime, including recreation for durable image changes. Missing evidence remains open; historical receipts and offline fixtures cannot certify current live compatibility.

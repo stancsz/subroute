@@ -1,5 +1,7 @@
 # Durable inference accounting
 
+Historical release evidence follows. For current and future work, the [standing reliability rules](../../AGENTS.md#hard-rules-preserve-upstream-success-and-pass-acceptance) and [acceptance procedure](../operations/acceptance.md) govern: observational accounting failures must not deny inference or replace successful output. The 2026-10-11 acceptance is scoped to that release, not current runtime parity or permission to restore fail-closed telemetry.
+
 Release acceptance verified, 2026-10-11. The owner authorized changes in Subroute and the sibling API gateway to address missing failed-attempt, internal advisor/compaction and interrupted-stream usage. Completion requires implementation, operator guides in both repositories, independent review and full live acceptance using real API requests. Offline fixtures alone are insufficient.
 
 Reuse the existing environment-specific PostgreSQL stores. Write a pending receipt before dispatch, preserve observed numeric facts without request/response bodies or credentials, and keep unreported usage unknown. Each framework deployment attempt and direct advisor/compaction call needs its own receipt. Cache hits must not be reported as new provider consumption. Cancellation must not replay inference or imply successful completion.

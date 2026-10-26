@@ -3,7 +3,7 @@ import base64
 
 import httpx
 import pytest
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent
 
 from subroute.image_mcp import create_server, decode_image
@@ -39,10 +39,8 @@ def test_mcp_image_tool_returns_inline_image_content(monkeypatch):
                                   json={"data": [{"b64_json": base64.b64encode(PNG).decode()}]})
 
     monkeypatch.setattr(image_mcp.httpx, "AsyncClient", Client)
-    server = create_server()
-    tool = server._tool_manager.get_tool("generate_image")
-    result = asyncio.run(tool.run({"prompt": " anime portrait "}, convert_result=True))
-    assert result == [ImageContent(type="image", data=base64.b64encode(PNG).decode(), mimeType="image/png")]
+    result = asyncio.run(create_server().call_tool("generate_image", {"prompt": " anime portrait "}))
+    assert result.content == [ImageContent(type="image", data=base64.b64encode(PNG).decode(), mimeType="image/png")]
 
 
 def test_mcp_image_tool_reports_upstream_failure_without_retry(monkeypatch):
@@ -55,13 +53,13 @@ def test_mcp_image_tool_reports_upstream_failure_without_retry(monkeypatch):
         async def post(self, *args, **kwargs): return httpx.Response(502, request=httpx.Request("POST", "http://localhost"))
 
     monkeypatch.setattr(image_mcp.httpx, "AsyncClient", Client)
-    tool = create_server()._tool_manager.get_tool("generate_image")
+    server = create_server()
     with pytest.raises(ToolError, match="HTTP 502"):
-        asyncio.run(tool.run({"prompt": "anime portrait"}, convert_result=True))
+        asyncio.run(server.call_tool("generate_image", {"prompt": "anime portrait"}))
 
 
 def test_mcp_image_tool_rejects_empty_and_overlong_prompt_without_dispatch():
-    tool = create_server()._tool_manager.get_tool("generate_image")
+    server = create_server()
     for prompt in ("  ", "x" * 8001):
         with pytest.raises(ToolError, match="1 to 8000"):
-            asyncio.run(tool.run({"prompt": prompt}, convert_result=True))
+            asyncio.run(server.call_tool("generate_image", {"prompt": prompt}))

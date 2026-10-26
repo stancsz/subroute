@@ -48,33 +48,24 @@ class ChildRepairTests(unittest.TestCase):
                 self.assertEqual(runner.gateway_key(), "test-key")
                 runner.subprocess.run.assert_not_called()
 
-    def test_staging_policy_explicitly_selects_qwen_and_preserves_locked_advisor(self):
-        response = mock.Mock()
-        response.json.return_value = {"advisor_model_locked": True}
+    def test_staging_policy_explicitly_selects_qwen_without_touching_advisor(self):
         client = mock.Mock()
-        client.get.return_value = response
         state = {"active_model": "mimo-v2.6-pro", "mode": "force",
                  "reasoning_effort": None, "fast_mode": False,
-                 "advisor_model": "gemini-subscription-argon",
-                 "advisor_reasoning_effort": None, "advisor_sensitivity": "frequent"}
+                 "advisor_model": "gemini-subscription-argon"}
 
         runner.set_policy(client, state, test=True)
 
-        client.get.assert_called_once_with("/api/routing-options")
         client.post.assert_called_once_with("/api/active-model", json={
             "model": "qwen3.8-27b", "mode": "alias",
             "reasoning_effort": None, "fast_mode": False,
         })
 
-    def test_staging_policy_disables_only_an_unlocked_advisor_and_restores_snapshot(self):
-        response = mock.Mock()
-        response.json.return_value = {"advisor_model_locked": False}
+    def test_staging_policy_preserves_advisor_during_run_and_restores_snapshot(self):
         client = mock.Mock()
-        client.get.return_value = response
         state = {"active_model": "mimo-v2.6-pro", "mode": "force",
                  "reasoning_effort": None, "fast_mode": False,
-                 "advisor_model": "gemini-subscription-argon",
-                 "advisor_reasoning_effort": "low", "advisor_sensitivity": "frequent"}
+                 "advisor_model": "gemini-subscription-argon"}
 
         runner.set_policy(client, state, test=True)
         runner.set_policy(client, state, test=False)
@@ -82,13 +73,9 @@ class ChildRepairTests(unittest.TestCase):
         self.assertEqual(client.post.call_args_list, [
             mock.call("/api/active-model", json={"model": "qwen3.8-27b", "mode": "alias",
                                                   "reasoning_effort": None, "fast_mode": False}),
-            mock.call("/api/advisor-model", json={"advisor_model": None, "reasoning_effort": None,
-                                                   "advisor_sensitivity": "frequent"}),
             mock.call("/api/active-model", json={"model": "mimo-v2.6-pro", "mode": "force",
                                                   "reasoning_effort": None, "fast_mode": False}),
-            mock.call("/api/advisor-model", json={"advisor_model": "gemini-subscription-argon",
-                                                   "reasoning_effort": "low",
-                                                   "advisor_sensitivity": "frequent"}),
+            mock.call("/api/advisor-model", json={"advisor_model": "gemini-subscription-argon"}),
         ])
 
     def test_child_budget_supports_a_normal_multi_file_task(self):

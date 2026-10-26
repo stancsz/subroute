@@ -16,12 +16,23 @@ def _target_model(model: str) -> str:
 
 def _request_options(optional_params: dict[str, Any]) -> dict[str, Any]:
     options = dict(optional_params)
+    limits = []
+    for field in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
+        value = options.pop(field, None)
+        if value is not None:
+            # The pinned Responses bridge raises smaller limits to 16. Reject
+            # them here instead of silently spending beyond the caller's cap.
+            if type(value) is not int or value < 16:
+                raise CustomLLMError(400, "Codex output limits must be integers of at least 16 tokens")
+            limits.append(value)
+    if limits:
+        options["max_completion_tokens"] = min(limits)
     # The ChatGPT subscription endpoint rejects these public OpenAI/LiteLLM
     # fields. Filter them only on this provider-bound request; keep the
     # caller's original Messages/Responses payload intact.
     for key in (
         "stream", "api_base", "api_key", "extra_headers", "timeout", "num_retries",
-        "max_tokens", "max_output_tokens", "user",
+        "user",
     ):
         options.pop(key, None)
     if options.get("service_tier") == "fast":
@@ -41,7 +52,7 @@ async def _codex_stream(
     timeout: Any,
     optional_params: dict[str, Any],
     *,
-    require_usage: bool = False,
+    require_usage: str | None = None,
 ) -> Any:
     request_options = _request_options(optional_params)
     if request_options.get("store") is None:
@@ -56,10 +67,9 @@ async def _codex_stream(
     reasoning.setdefault("summary", "auto")
     request_options["reasoning_effort"] = reasoning
     if require_usage:
-        # LiteLLM's Anthropic Messages bridge needs completion usage even when
-        # the caller requested a buffered (non-streaming) response. This
-        # adapter always streams upstream, so ask the provider adapter to keep
-        # the terminal provider usage chunk for that conversion.
+        # Anthropic Messages and Responses expose usage as part of successful
+        # completion. Ask the provider adapter to retain its terminal usage
+        # chunk so missing usage cannot be serialized as a false zero.
         stream_options = request_options.get("stream_options")
         request_options["stream_options"] = {
             **(stream_options if isinstance(stream_options, dict) else {}),
@@ -78,10 +88,14 @@ async def _codex_stream(
     )
 
 
-def _is_anthropic_messages_call(logging_obj: Any) -> bool:
+def _usage_requirement(logging_obj: Any) -> str | None:
     call_type = getattr(logging_obj, "call_type", None)
     call_type = getattr(call_type, "value", call_type)
-    return call_type in {"anthropic_messages", "aanthropic_messages"}
+    if call_type in {"anthropic_messages", "aanthropic_messages"}:
+        return "Anthropic Messages bridge"
+    if call_type in {"responses", "aresponses"}:
+        return "Responses bridge"
+    return None
 
 
 async def _close_stream(stream: Any) -> None:
@@ -228,10 +242,10 @@ class CodexSubscriptionLLM(CustomLLM):
     ) -> ModelResponse:
         if optional_params.get("gateway_image_request"):
             return await self._image_conversation(messages, optional_params)
-        require_usage = _is_anthropic_messages_call(logging_obj)
+        usage_requirement = _usage_requirement(logging_obj)
         stream = await _codex_stream(
             model, messages, api_base, api_key, headers or {}, timeout, optional_params,
-            require_usage=require_usage,
+            require_usage=usage_requirement,
         )
         chunks = []
         terminal_reason = None
@@ -262,10 +276,10 @@ class CodexSubscriptionLLM(CustomLLM):
             )
         if not provider_usage_seen:
             response.usage = None
-            if require_usage:
+            if usage_requirement:
                 raise CustomLLMError(
                     status_code=502,
-                    message="Codex provider omitted usage required by the Anthropic Messages bridge",
+                    message=f"Codex provider omitted usage required by the {usage_requirement}",
                 )
         response.model = _target_model(model)
         return response
@@ -301,10 +315,10 @@ class CodexSubscriptionLLM(CustomLLM):
             yield {"text": "", "is_finished": True, "finish_reason": result.choices[0].finish_reason,
                    "usage": result.usage.model_dump(exclude_none=True)}
             return
-        require_usage = _is_anthropic_messages_call(logging_obj)
+        usage_requirement = _usage_requirement(logging_obj)
         stream = await _codex_stream(
             model, messages, api_base, api_key, headers or {}, timeout, optional_params,
-            require_usage=require_usage,
+            require_usage=usage_requirement,
         )
         terminal_reason = None
         provider_usage_seen = False
@@ -319,10 +333,10 @@ class CodexSubscriptionLLM(CustomLLM):
                     status_code=502,
                     message="Codex stream ended without a terminal finish reason",
                 )
-            if require_usage and not provider_usage_seen:
+            if usage_requirement and not provider_usage_seen:
                 raise CustomLLMError(
                     status_code=502,
-                    message="Codex provider omitted usage required by the Anthropic Messages bridge",
+                    message=f"Codex provider omitted usage required by the {usage_requirement}",
                 )
         finally:
             await _close_stream(stream)

@@ -10,7 +10,7 @@ import secrets
 from urllib.parse import urlsplit
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecurityMiddleware, TransportSecuritySettings
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.applications import Starlette
@@ -125,8 +125,7 @@ def create_app(store: Store, settings: Settings):
     mcp_hosts = list(settings.hosts) + [h[:-2] for h in settings.hosts if h.endswith(":*")]
     security = TransportSecuritySettings(enable_dns_rebinding_protection=True,
                                          allowed_hosts=mcp_hosts, allowed_origins=[])
-    mcp = FastMCP("Subroute Relay", instructions=SUPERVISION, stateless_http=True, json_response=True,
-                  transport_security=security)
+    mcp = MCPServer("Subroute Relay", instructions=SUPERVISION)
 
     def board():
         snapshot = store.snapshot()
@@ -246,6 +245,9 @@ def create_app(store: Store, settings: Settings):
             # ValidationError may include submitted data; do not echo input.
             return JSONResponse({"error": str(exc) if isinstance(exc, Conflict) else "Invalid request"}, status_code=409 if isinstance(exc, Conflict) else 422)
 
+    mcp_app = mcp.streamable_http_app(json_response=True, stateless_http=True,
+                                      transport_security=security)
+
     @asynccontextmanager
     async def lifespan(_app):
         async with mcp.session_manager.run():
@@ -254,7 +256,7 @@ def create_app(store: Store, settings: Settings):
     app = Starlette(routes=[Route("/health", health), Route("/snapshot", snapshot),
         Route("/nodes/{node}/{action}", node_request, methods=["POST"]),
         Route("/nodes/{node}/tasks/{task}/{action}", node_request, methods=["POST"]),
-        Mount("/", mcp.streamable_http_app())], lifespan=lifespan)
+        Mount("/", mcp_app)], lifespan=lifespan)
     # The SDK's maintained Host checks also handle bracketed IPv6 hosts.
     app.add_middleware(AccessBoundary, settings=settings, transport_security=security)
     return app

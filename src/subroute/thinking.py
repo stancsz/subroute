@@ -11,7 +11,6 @@ LiteLLM continues to own provider adaptation and protocol streaming.
 
 from copy import deepcopy
 import json
-from importlib.metadata import version
 
 from litellm.llms.custom_llm import CustomLLMError
 from litellm.types.utils import Delta
@@ -148,7 +147,7 @@ async def _ordered_tool_deltas(source):
                     payload.choices[0].finish_reason = None
                     if hasattr(payload, "usage"):
                         payload.usage = None
-                    from litellm.llms.anthropic.experimental_pass_through.adapters.streaming_iterator import _CombinedChunkSplitter
+                    from litellm.llms.anthropic.pass_through.adapters.streaming_iterator import _CombinedChunkSplitter
                     for piece in _CombinedChunkSplitter._split_by_payload_kind(payload):
                         if calls:
                             suffix.append(piece)
@@ -219,20 +218,19 @@ async def _ordered_tool_deltas(source):
 
 
 def install_messages_tool_ordering():
-    """Patch the verified LiteLLM gap at its Chat chunk splitter, once.
+    """Patch verified Chat-to-Messages contract gaps at LiteLLM's chunk splitter.
 
-    1.101.0 / 1.103.0 close tool 0 as soon as tool 1 opens, then put tool 0's
-    remaining argument deltas into tool 1. There is no per-chunk callback
-    before this conversion (the deployment hook runs only on the final chunk).
-    Remove this version-bounded shim when the upstream interleaving regression
-    passes. Sync SDK calls keep LiteLLM's implementation; Subroute uses async.
+    LiteLLM owns protocol streaming and provider conversion. This adapter-layer
+    shim is enabled by the installed native capability, not a version list;
+    its contract tests cover thinking replay and tool ordering.
     """
-    if version("litellm") not in {"1.101.0", "1.103.0"}:
-        return
-    from litellm.llms.anthropic.experimental_pass_through.adapters import streaming_iterator
-    from litellm.llms.anthropic.experimental_pass_through.adapters.transformation import LiteLLMAnthropicMessagesAdapter
+    from litellm.llms.anthropic.pass_through.adapters import streaming_iterator
+    from litellm.llms.anthropic.pass_through.adapters.transformation import LiteLLMAnthropicMessagesAdapter
 
     base = streaming_iterator._CombinedChunkSplitter
+    required_splitter = ("_split", "_split_by_payload_kind", "__init__", "__anext__")
+    if any(not callable(getattr(base, name, None)) for name in required_splitter):
+        raise RuntimeError("Installed LiteLLM Messages stream splitter lacks required chunk capabilities")
     if getattr(base, "_subroute_tool_ordering", False):
         return
 

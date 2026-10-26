@@ -6,12 +6,12 @@ from importlib.metadata import version
 def install_tool_schema_counting_fix() -> None:
     """Count unconstrained arrays without changing the provider's schema.
 
-    LiteLLM 1.101.0/1.103.0 indexes array ``items`` unconditionally. JSON
+    LiteLLM 1.101.0/1.103.0/1.106.2 indexes array ``items`` unconditionally. JSON
     Schema permits its omission, meaning any item type. Use the formatter's
     existing ``any`` spelling for that case, including nested properties.
     Retire this shim when the deployed formatter supports omitted items.
     """
-    if version("litellm") not in {"1.101.0", "1.103.0"}:
+    if version("litellm") not in {"1.101.0", "1.103.0", "1.106.2"}:
         return
     from litellm.litellm_core_utils import token_counter
 

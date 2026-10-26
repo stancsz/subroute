@@ -1785,9 +1785,7 @@ class AutonomousPlanTests(unittest.TestCase):
                 return self.value
 
         active_model = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
-                        "advisor_model": None, "advisor_reasoning_effort": None,
-                        "advisor_sensitivity": "medium", "advisor_trigger": None,
-                        "advisor_classifier": None, "fast_mode": False}
+                        "advisor_model": "codex-gpt-6.1-sol-advisor", "fast_mode": False}
 
         class Client:
             def __enter__(self):
@@ -1861,9 +1859,7 @@ class AutonomousPlanTests(unittest.TestCase):
                 return self.value
 
         active = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
-                  "advisor_model": None, "advisor_reasoning_effort": None,
-                  "advisor_sensitivity": "medium", "advisor_trigger": None,
-                  "advisor_classifier": None, "fast_mode": False}
+                  "advisor_model": "codex-gpt-6.1-sol-advisor", "fast_mode": False}
 
         class Client:
             def __enter__(self):
@@ -1927,9 +1923,7 @@ class AutonomousPlanTests(unittest.TestCase):
             def json(self): return self.value
 
         active = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
-                  "advisor_model": None, "advisor_reasoning_effort": None,
-                  "advisor_sensitivity": "medium", "advisor_trigger": None,
-                  "advisor_classifier": None, "fast_mode": False}
+                  "advisor_model": "codex-gpt-6.1-sol-advisor", "fast_mode": False}
 
         class Client:
             def __enter__(self): return self
@@ -2018,9 +2012,7 @@ class AutonomousPlanTests(unittest.TestCase):
             def get(self, path):
                 if path == "/api/active-model":
                     return Response({"active_model": "qwen", "mode": "alias",
-                                     "reasoning_effort": "high", "advisor_model": None,
-                                     "advisor_reasoning_effort": None, "advisor_sensitivity": "medium",
-                                     "advisor_trigger": None, "advisor_classifier": None,
+                                     "reasoning_effort": "high", "advisor_model": "codex-gpt-6.1-sol-advisor",
                                      "fast_mode": False})
                 return Response({})
 
@@ -2712,9 +2704,7 @@ class AutonomousPlanTests(unittest.TestCase):
                 return self.value
 
         active = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
-                  "advisor_model": None, "advisor_reasoning_effort": None,
-                  "advisor_sensitivity": "medium", "advisor_trigger": None,
-                  "advisor_classifier": None, "fast_mode": False}
+                  "advisor_model": "codex-gpt-6.1-sol-advisor", "fast_mode": False}
 
         class Client:
             def __enter__(self):
@@ -2874,9 +2864,7 @@ with_lock.__exit__(None, None, None)
             "risks": [],
         }}
         active = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
-                  "advisor_model": None, "advisor_reasoning_effort": None,
-                  "advisor_sensitivity": "medium", "advisor_trigger": None,
-                  "advisor_classifier": None, "fast_mode": False}
+                  "advisor_model": "codex-gpt-6.1-sol-advisor", "fast_mode": False}
 
         class Response:
             def __init__(self, value):
@@ -2964,9 +2952,7 @@ with_lock.__exit__(None, None, None)
                 return self.value
 
         active = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
-                  "advisor_model": None, "advisor_reasoning_effort": None,
-                  "advisor_sensitivity": "medium", "advisor_trigger": None,
-                  "advisor_classifier": None, "fast_mode": False}
+                  "advisor_model": "codex-gpt-6.1-sol-advisor", "fast_mode": False}
 
         class Client:
             def __enter__(self):
@@ -3361,9 +3347,7 @@ with_lock.__exit__(None, None, None)
                 return self.value
 
         active = {"active_model": "qwen", "mode": "alias", "reasoning_effort": "high",
-                  "advisor_model": None, "advisor_reasoning_effort": None,
-                  "advisor_sensitivity": "medium", "advisor_trigger": None,
-                  "advisor_classifier": None, "fast_mode": False}
+                  "advisor_model": "codex-gpt-6.1-sol-advisor", "fast_mode": False}
 
         class Client:
             def __enter__(self):

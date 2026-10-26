@@ -3,7 +3,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 desktop/node_modules/
-.tmp-*.png
+.tmp-*
 *.egg-info/
 config/active_model.json
 .env
@@ -21,4 +21,3 @@ htmlcov/
 Thumbs.db
 
 # Pinned public encoder assets are fetched and hash-checked before image builds.
-models/advisor-ranker/

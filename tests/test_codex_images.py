@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from dataclasses import asdict
 
 import pytest
 from litellm.llms.custom_llm import CustomLLMError
@@ -66,6 +67,7 @@ def test_image_route_precedes_every_saved_policy(tmp_path, mode, model, active_m
     result = asyncio.run(plugin.async_pre_call_hook({}, None, data, "aimage_generation"))
     assert result["model"] == "codex-luna"
     assert result["image_generation_options"] == {"quality": "low", "size": "auto"}
+    assert result["metadata"]["gateway_policy"] == {**asdict(before), "advisor_model": None}
     assert control.snapshot() == before
 
 

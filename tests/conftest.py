@@ -1,9 +1,13 @@
 """Unit tests may use local fixture servers, never live provider sockets."""
 
 import ipaddress
+import os
 import socket
 
 import pytest
+
+# Keep LiteLLM imports deterministic and prevent remote model-cost refreshes in tests.
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "true"
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +25,7 @@ def no_live_provider_connections_in_unit_tests(request, monkeypatch):
                 local = False
             # Local ephemeral fixture servers are allowed. A running gateway
             # or subscription sidecar is still a live provider entry point.
-            deployed = local and address[1] in {4000, 4005, 4015, 11435}
+            deployed = local and address[1] in {4000, 4005, 4015, 4040, 11435}
             if not local or deployed:
                 pytest.fail("A unit test attempted a live network connection; mock the provider or use explicit live opt-in")
 

@@ -10,6 +10,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import os
@@ -110,7 +111,7 @@ def deployment_kind(kwargs: Mapping, call_type: Any) -> str:
     model, provider, _, _ = get_llm_provider(model=str(kwargs.get("model") or ""),
                                             custom_llm_provider=kwargs.get("custom_llm_provider"), api_base=kwargs.get("api_base"))
     if call in {"anthropic_messages", "aanthropic_messages"}:
-        from litellm.llms.anthropic.experimental_pass_through.messages.handler import _deployment_passes_through_anthropic_messages
+        from litellm.llms.anthropic.pass_through.messages.handler import _deployment_passes_through_anthropic_messages
         native = ProviderConfigManager.get_provider_anthropic_messages_config(model, LlmProviders(provider)) if provider in {item.value for item in LlmProviders} else None
         return "provider" if native is not None or _deployment_passes_through_anthropic_messages(kwargs.get("model_info")) else "bridge"
     if call in {"responses", "aresponses"}:
@@ -118,7 +119,7 @@ def deployment_kind(kwargs: Mapping, call_type: Any) -> str:
         # This helper recognizes the full openai/chat_completions/ prefix before
         # resolving the provider config. get_llm_provider strips that prefix.
         return "bridge" if _will_bridge_to_chat_completions(str(kwargs.get("model") or ""), provider,
-            bool(kwargs.get("use_chat_completions_api")), kwargs.get("model_info")) else "provider"
+            bool(kwargs.get("use_chat_completions_api")), kwargs.get("model_info"), kwargs.get("api_base")) else "provider"
     if call in {"completion", "acompletion"}:
         from litellm.main import responses_api_bridge_check
         from litellm.utils import peek_reasoning_summary_aliases
@@ -142,6 +143,7 @@ class Trace:
     parent_attempt_id: str | None = None
     api_path: str = "/local"
     role: str = "inference"
+    local_master: bool = False
 
 
 trace_context: ContextVar[Trace | None] = ContextVar("subroute_usage_trace", default=None)
@@ -150,6 +152,7 @@ direct_context: ContextVar["DirectAttempt | None"] = ContextVar("subroute_direct
 deployment_context: ContextVar["DirectAttempt | None"] = ContextVar("subroute_deployment_attempt", default=None)
 native_advisor_context: ContextVar[bool] = ContextVar("subroute_native_advisor_orchestration", default=False)
 native_advisor_parent_role: ContextVar[str | None] = ContextVar("subroute_native_advisor_parent_role", default=None)
+native_advisor_attempts: ContextVar[list["DirectAttempt"] | None] = ContextVar("subroute_native_advisor_attempts", default=None)
 
 
 def local_trace() -> Trace:
@@ -200,6 +203,45 @@ class ReceiptStore:
         self._db = db
         self._ready = False
         self._lock = asyncio.Lock()
+        self._outboxes = {}
+
+    def outbox(self, environment: str):
+        from .usage_outbox import UsageOutbox
+        path = os.getenv("SUBROUTE_USAGE_OUTBOX_PATH") or os.path.join("state", f"usage-outbox-{environment}.sqlite3")
+        root, ext = os.path.splitext(path)
+        path = f"{root}-{environment}{ext or '.sqlite3'}"
+        # Compose supplies distinct persistent paths for production and staging.
+        # Environment suffix also protects local/test use of a shared directory.
+        key = (path, environment)
+        if key not in self._outboxes:
+            self._outboxes[key] = UsageOutbox(path)
+        return self._outboxes[key]
+
+    async def replay(self, environment: str):
+        outbox = self.outbox(environment)
+        if not getattr(outbox, "_startup_checked", False):
+            await outbox.interrupt_pending()
+            outbox._startup_checked = True
+        try:
+            await self.ensure()
+            for receipt, revision, outcome, updated_at in await outbox.batch(environment):
+                await self.execute("""INSERT INTO subroute_usage_receipts
+                    (attempt_id,environment,request_id,parent_attempt_id,customer_id,key_id,outcome,revision,acked_revision,payload,updated_at)
+                    VALUES($1::uuid,$2,$3::uuid,$4::uuid,$5,$6,$7,$8,0,$9::jsonb,$10)
+                    ON CONFLICT(attempt_id) DO UPDATE SET
+                      outcome=CASE WHEN subroute_usage_receipts.outcome='pending' THEN EXCLUDED.outcome ELSE subroute_usage_receipts.outcome END,
+                      revision=greatest(subroute_usage_receipts.revision,EXCLUDED.revision),
+                      payload=CASE WHEN subroute_usage_receipts.revision<=EXCLUDED.revision
+                        THEN subroute_usage_receipts.payload || EXCLUDED.payload ELSE subroute_usage_receipts.payload END,
+                      updated_at=greatest(subroute_usage_receipts.updated_at,EXCLUDED.updated_at)""",
+                    receipt["attempt_id"], environment, receipt["request_id"], receipt.get("parent_attempt_id"),
+                    receipt.get("customer_id"), receipt["key_id"], outcome, revision, json.dumps(receipt), updated_at)
+                if outcome != "pending":
+                    await outbox.ack(receipt["attempt_id"], revision)
+            return True
+        except Exception as exc:
+            logger.info("usage outbox replay deferred error_type=%s", type(exc).__name__)
+            return False
 
     @property
     def db(self):
@@ -229,6 +271,7 @@ class ReceiptStore:
                 self._ready = True
 
     async def start(self, trace: Trace, model: str, provider: str, role: str, kind: str = "provider") -> str:
+        # Receipts are observational. A storage outage must not gate provider dispatch.
         attempt_id = str(uuid.uuid4())
         payload = {
             "attempt_id": attempt_id, "request_id": trace.request_id,
@@ -239,6 +282,15 @@ class ReceiptStore:
             "kind": kind, "source": "subroute", "created_at": now_ms(),
             "usage_complete": False,
         }
+        outbox = None
+        if trace.local_master:
+            try:
+                outbox = self.outbox(trace.environment)
+                await self.replay(trace.environment)
+                await outbox.put(payload, 1, "pending", payload["created_at"])
+            except Exception as exc:
+                logger.warning("durable usage storage unavailable environment=%s role=%s error_type=%s",
+                               trace.environment, role, type(exc).__name__)
         try:
             await self.ensure()
             await self.execute("""INSERT INTO subroute_usage_receipts
@@ -246,11 +298,22 @@ class ReceiptStore:
                 VALUES($1::uuid,$2,$3::uuid,$4::uuid,$5,$6,'pending',$7::jsonb,$8)""",
                 attempt_id, trace.environment, trace.request_id, trace.parent_attempt_id,
                 trace.customer_id, trace.key_id, json.dumps(payload), now_ms())
-        except Exception:
-            raise HTTPException(503, "Usage storage unavailable") from None
+        except Exception as exc:
+            logger.warning("usage receipt unavailable environment=%s role=%s error_type=%s",
+                           trace.environment, role, type(exc).__name__)
         return attempt_id
 
     async def update(self, attempt_id: str, facts: dict, outcome: str = "pending") -> bool:
+        # The current trace identifies master-owned calls, including direct advisor
+        # attempts. Persist observed numeric facts before attempting PostgreSQL.
+        trace = trace_context.get()
+        outbox_saved = False
+        if trace is not None and trace.local_master:
+            try:
+                outbox_saved = await self.outbox(trace.environment).update(attempt_id, facts, outcome)
+            except Exception as exc:
+                logger.warning("durable usage outbox write failed environment=%s error_type=%s",
+                               trace.environment, type(exc).__name__)
         try:
             await self.execute("""UPDATE subroute_usage_receipts SET
                 outcome=CASE WHEN outcome='pending' THEN $2 ELSE outcome END,
@@ -259,10 +322,19 @@ class ReceiptStore:
                 attempt_id, outcome, json.dumps(facts), now_ms())
             return True
         except Exception as exc:
-            logger.error("usage receipt write failed attempt_id=%s error_type=%s", attempt_id, type(exc).__name__)
-            return False
+            logger.warning("usage receipt write failed environment=%s error_type=%s",
+                           trace.environment if trace is not None else "unknown", type(exc).__name__)
+            return outbox_saved
 
     async def checkpoint(self, attempt_id: str, facts: dict):
+        trace = trace_context.get()
+        outbox_saved = False
+        if trace is not None and trace.local_master:
+            try:
+                outbox_saved = await self.outbox(trace.environment).update(attempt_id, facts)
+            except Exception as exc:
+                logger.warning("durable usage outbox checkpoint failed environment=%s error_type=%s",
+                               trace.environment, type(exc).__name__)
         try:
             await self.execute("""UPDATE subroute_usage_receipts SET payload=payload || $2::jsonb,
                 revision=revision+1,updated_at=$3 WHERE attempt_id=$1::uuid AND outcome='pending'
@@ -270,9 +342,10 @@ class ReceiptStore:
                 AND (updated_at<$4 OR NOT (payload ? 'input_tokens' OR payload ? 'output_tokens'))""",
                 attempt_id, json.dumps(facts), now_ms(), now_ms()-15_000)
             return True
-        except Exception:
-            logger.error("usage checkpoint write failed attempt_id=%s", attempt_id)
-            return False
+        except Exception as exc:
+            logger.warning("usage checkpoint write failed environment=%s error_type=%s",
+                           trace.environment if trace is not None else "unknown", type(exc).__name__)
+            return outbox_saved
 
     async def mirror_advisor_log(self, attempt_id: str | None = None) -> bool:
         """Make completed direct Advisor usage visible in LiteLLM's Logs UI.
@@ -381,8 +454,19 @@ class UsageAccounting(CustomLogger):
             trace = local_trace()
             # Only an auth object created by LiteLLM is authoritative. A
             # presented header alone is never proof on keyless loopback.
-            from litellm.proxy._types import UserAPIKeyAuth
-            if isinstance(user_api_key_dict, UserAPIKeyAuth) and user_api_key_dict.via_virtual_key and user_api_key_dict.api_key:
+            from litellm.proxy._types import UserAPIKeyAuth, LitellmUserRoles
+            from litellm.proxy.auth.user_api_key_auth import LITELLM_PROXY_MASTER_KEY_ALIAS
+            local_master = (isinstance(user_api_key_dict, UserAPIKeyAuth)
+                            and user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
+                            and user_api_key_dict.api_key == LITELLM_PROXY_MASTER_KEY_ALIAS)
+            if local_master:
+                supplied_call_id = headers.get("x-litellm-call-id")
+                try:
+                    request_id = str(uuid.UUID(supplied_call_id))
+                except (ValueError, TypeError, AttributeError):
+                    request_id = trace.request_id
+                trace = Trace(request_id, trace.environment, "local-master", api_path=local_api_path(path), local_master=True)
+            elif isinstance(user_api_key_dict, UserAPIKeyAuth) and user_api_key_dict.via_virtual_key and user_api_key_dict.api_key:
                 trace = Trace(trace.request_id, trace.environment,
                               "local-sha256:" + hashlib.sha256(user_api_key_dict.api_key.encode()).hexdigest(),
                               api_path=local_api_path(path))
@@ -400,6 +484,21 @@ class UsageAccounting(CustomLogger):
         call = getattr(call_type, "value", call_type)
         if call in {"search", "asearch"}:
             return kwargs
+        if call in {"anthropic_messages", "aanthropic_messages"}:
+            # LiteLLM invokes this hook for the intercepted public Messages
+            # request. It is orchestration, not a provider attempt; the native
+            # advisor executor's own hook records the actual provider call.
+            # Retire if LiteLLM stops invoking deployment hooks for this outer request.
+            from litellm.llms.anthropic.pass_through.messages.interceptors.advisor import AdvisorOrchestrationHandler
+            from litellm.litellm_core_utils.get_llm_provider_logic import get_llm_provider
+            _, provider, _, _ = get_llm_provider(
+                model=str(kwargs.get("model") or ""),
+                custom_llm_provider=kwargs.get("custom_llm_provider"),
+                api_base=kwargs.get("api_base"),
+            )
+            if AdvisorOrchestrationHandler().can_handle(kwargs.get("tools"), provider):
+                deployment_context.set(None)
+                return kwargs
         trace = trace_context.get() or local_trace()
         metadata = kwargs.get("litellm_metadata") or kwargs.get("metadata") or {}
         role = role_context.get() or trace.role
@@ -415,10 +514,28 @@ class UsageAccounting(CustomLogger):
         provider = str(kwargs.get("custom_llm_provider") or model.split("/", 1)[0])
         kind = deployment_kind(kwargs, call_type)
         ident = await self.store.start(trace, model, provider, role, kind)
-        deployment_context.set(DirectAttempt(ident, self.store))
+        attempt = DirectAttempt(ident, self.store)
+        deployment_context.set(attempt)
+        attempts = native_advisor_attempts.get()
+        if attempts is not None:
+            attempts.append(attempt)
         # Metadata is copied per attempt, never a shared fallback mutation.
         field = "litellm_metadata" if "litellm_metadata" in kwargs else "metadata"
         kwargs[field] = {**metadata, TAG: ident}
+        experts_base_url = os.getenv("EXPERTS_BASE_URL", "http://experts:4040")
+        if role == "advisor" and kwargs.get("api_base") == experts_base_url:
+            # Carry only per-attempt IDs over the private Advisor hop. The
+            # experts callback consumes these before provider dispatch.
+            configured_headers = kwargs.get("extra_headers")
+            internal_headers = {
+                name: value for name, value in (configured_headers.items() if isinstance(configured_headers, Mapping) else ())
+                if str(name).lower() not in {"x-subroute-request-id", "x-subroute-attempt-id"}
+            }
+            internal_headers.update({
+                "x-subroute-request-id": trace.request_id,
+                "x-subroute-attempt-id": ident,
+            })
+            kwargs["extra_headers"] = internal_headers
         logging_obj = kwargs.get("litellm_logging_obj")
         if logging_obj is not None:
             logging_obj.model_call_details[TAG] = ident
@@ -472,16 +589,21 @@ def install_stream_accounting():
 
     The installed deployment streaming hook runs only on the final chunk, after
     usage stripping. Its success callback receives an assembled response that
-    estimates missing usage. This narrow version-checked observation preserves
+    estimates missing usage. This narrow capability-checked observation preserves
     the framework's output and owns no protocol parsing or provider transport.
     Retire when LiteLLM exposes provider-origin usage and cancellation per chunk.
     """
-    from importlib.metadata import version
     from litellm.litellm_core_utils.streaming_handler import CustomStreamWrapper
     if getattr(CustomStreamWrapper, "_subroute_usage_observer", False):
         return
-    if version("litellm") not in {"1.101.0", "1.103.0"}:
-        raise RuntimeError("Review accounting hook behavior before changing LiteLLM version")
+    # LiteLLM version numbers are not a compatibility contract. Fail closed
+    # only when a hook this observer actually wraps disappears or can no longer
+    # be called with the arguments used below. Behavioral compatibility is
+    # exercised by the real Router/stream tests in test_usage_accounting.py.
+    _require_hook(CustomStreamWrapper, "chunk_creator", "self", "chunk")
+    _require_hook(CustomStreamWrapper, "__anext__", "self")
+    _require_hook(CustomStreamWrapper, "aclose", "self")
+    _require_hook(CustomStreamWrapper, "__init__", "self", "completion_stream", "model", "logging_obj")
     original_chunk = CustomStreamWrapper.chunk_creator
     original_next = CustomStreamWrapper.__anext__
     original_close = CustomStreamWrapper.aclose
@@ -597,21 +719,35 @@ def install_stream_accounting():
 
 
 def install_native_advisor_accounting():
-    from litellm.llms.anthropic.experimental_pass_through.messages.interceptors.advisor import AdvisorOrchestrationHandler
+    from litellm.llms.anthropic.pass_through.messages.interceptors.advisor import AdvisorOrchestrationHandler
     original = AdvisorOrchestrationHandler.handle
+    if getattr(original, "_subroute_usage_accounting_guard", False):
+        return
+    _require_hook(AdvisorOrchestrationHandler, "handle", "self")
 
     async def handle(self, *args, **kwargs):
         token = native_advisor_context.set(True)
+        attempts = []
+        attempts_token = native_advisor_attempts.set(attempts)
         trace = trace_context.get()
         parent = native_advisor_parent_role.set(role_context.get() or (trace.role if trace else "inference"))
         role_token = role_context.set(role_context.get())
         try:
             return await original(self, *args, **kwargs)
+        except asyncio.CancelledError:
+            # LiteLLM 1.106.2 omits failure hooks when buffered inner HTTP is
+            # cancelled. Retire this cleanup when native hooks settle those
+            # attempts. The store leaves completed records unchanged.
+            for attempt in attempts:
+                await attempt.store.update(attempt.ident, {"usage_complete": False}, "cancelled")
+            raise
         finally:
+            native_advisor_attempts.reset(attempts_token)
             role_context.reset(role_token)
             native_advisor_parent_role.reset(parent)
             native_advisor_context.reset(token)
 
+    handle._subroute_usage_accounting_guard = True
     AdvisorOrchestrationHandler.handle = handle
 
 
@@ -626,6 +762,10 @@ def install_native_stream_accounting():
     original_next = ResponsesAPIStreamingIterator.__anext__
     original_close = getattr(ResponsesAPIStreamingIterator, "aclose", None)
     original_messages = PassThroughStreamingHandler.chunk_processor
+    _require_hook(BaseResponsesAPIStreamingIterator, "_process_chunk", "self", "chunk")
+    _require_hook(ResponsesAPIStreamingIterator, "__anext__", "self")
+    _require_hook(PassThroughStreamingHandler, "chunk_processor",
+                  "response", "request_body", "litellm_logging_obj")
 
     def observation(details):
         ident = attempt_id(details)
@@ -782,13 +922,28 @@ def install_native_stream_accounting():
             outcome = "failed"
             raise
         finally:
-            await source.aclose()
-            await finish(observer, details, outcome)
+            try:
+                await source.aclose()
+            finally:
+                await finish(observer, details, outcome)
 
     BaseResponsesAPIStreamingIterator._process_chunk = process
     ResponsesAPIStreamingIterator.__anext__ = responses_next
     ResponsesAPIStreamingIterator.aclose = responses_close
     PassThroughStreamingHandler.chunk_processor = staticmethod(messages)
+
+
+def _require_hook(owner: type, name: str, *required_parameters: str) -> None:
+    """Reject framework drift that makes a required accounting hook unusable."""
+    hook = getattr(owner, name, None)
+    if not callable(hook):
+        raise RuntimeError(f"LiteLLM accounting hook unavailable: {owner.__name__}.{name}")
+    try:
+        parameters = inspect.signature(hook).parameters
+        if not set(required_parameters).issubset(parameters):
+            raise TypeError("required parameters missing")
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"LiteLLM accounting hook signature changed: {owner.__name__}.{name}") from exc
 
 
 @contextmanager
@@ -885,7 +1040,10 @@ def install_receipt_routes(app):
             for item in items:
                 if not isinstance(item, dict) or type(item.get("revision")) is not int or not 1 <= item["revision"] <= 2_147_483_647:
                     raise ValueError()
-                uuid.UUID(item["attempt_id"])
+                attempt_id = item.get("attempt_id")
+                if not isinstance(attempt_id, str):
+                    raise ValueError()
+                uuid.UUID(attempt_id)
             await usage_accounting.store.ack(environment, items)
             return {"ok": True}
         except (ValueError, TypeError, KeyError):

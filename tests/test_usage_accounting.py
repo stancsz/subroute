@@ -83,8 +83,8 @@ def test_signed_attribution_rejects_forgery_expiry_wrong_path_and_environment():
         with pytest.raises(HTTPException) as err:
             accounting.verify_grant(bad, secret, path)
         assert err.value.status_code == 401
-    trace = accounting.verify_grant(signed(secret, customer_id="客户 one"), secret, "/v1/chat/completions")
-    assert trace.customer_id == "客户 one"
+    trace = accounting.verify_grant(signed(secret, customer_id="å®¢æˆ· one"), secret, "/v1/chat/completions")
+    assert trace.customer_id == "å®¢æˆ· one"
     for payload in ([], None, "text", 7):
         encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
         invalid = encoded + "." + hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
@@ -158,49 +158,6 @@ def test_direct_local_inference_aliases_are_canonical_and_management_is_not_a_re
     asyncio.run(scenario())
 
 
-def test_advisor_and_compaction_roles_keep_observed_usage(store, monkeypatch):
-    from types import SimpleNamespace
-    from subroute.plugins import advisor_plugin
-    async def scenario():
-        trace = accounting.Trace(str(uuid.uuid4()), "production", "key-1", "customer-1")
-        accounting.trace_context.set(trace)
-
-        async def complete(*args, **kwargs):
-            return "advice", Usage(prompt_tokens=7, completion_tokens=2, total_tokens=9)
-        monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", complete)
-        await advisor_plugin.AdvisorPlugin._invoke_advisor("codex-luna-advisor", [{"role": "user", "content": "private prompt"}], "low")
-        compaction_roles = []
-        async def compact(**kwargs):
-            compaction_roles.append(accounting.role_context.get())
-            return SimpleNamespace(
-                choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="briefing"))],
-                usage=Usage(prompt_tokens=5, completion_tokens=2, total_tokens=7),
-            )
-        await advisor_plugin.AdvisorPlugin._mimo_compaction(
-            SimpleNamespace(acompletion=compact), [{"role": "user", "content": "private prior context"}],
-        )
-        assert compaction_roles == ["compaction"]
-        async def fail(*args, **kwargs):
-            await accounting.observe_direct({"response": {"usage": {"input_tokens": 11, "output_tokens": 3}}})
-            raise RuntimeError("private provider error with sk-secret")
-        monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", fail)
-        with pytest.raises(RuntimeError):
-            await advisor_plugin.AdvisorPlugin._invoke_advisor("codex-luna-advisor", [], None)
-        with pytest.raises(asyncio.CancelledError):
-            async with accounting.direct_attempt("gpt-6-luna", "codex-subscription", "advisor"):
-                await accounting.observe_direct({"usage": {"input_tokens": 5}})
-                raise asyncio.CancelledError()
-        rows = list(store.rows.values())
-        assert [row["role"] for row in rows] == ["advisor", "advisor", "advisor"]
-        assert [row["outcome"] for row in rows] == ["complete", "failed", "cancelled"]
-        assert rows[1]["facts"]["input_tokens"] == 11 and rows[1]["facts"]["usage_complete"] is False
-        assert rows[3]["facts"] == {"input_tokens": 5, "usage_complete": False}
-        assert store.mirrors == [next(ident for ident, row in store.rows.items() if row is rows[0])]
-        assert all(row["trace"] == trace for row in rows)
-        assert "private" not in str(rows) and "sk-secret" not in str(rows)
-    asyncio.run(scenario())
-
-
 def test_missing_cost_tokens_and_litellm_estimates_are_not_zero():
     assert accounting.usage_facts({"usage": None, "response_cost": 99}) == {}
     assert accounting.usage_facts({"usage": {"prompt_tokens": True, "completion_tokens": -1}}) == {}
@@ -251,6 +208,13 @@ def test_receipt_endpoints_separate_auth_bounded_ack_and_environment(store, monk
             for invalid in ([], None, "text", 7, {"receipts": [None]}):
                 assert (await client.post("/internal/accounting/ack?environment=staging", headers=headers,
                                          content=json.dumps(invalid))).status_code == 400
+            for attempt_id in (None, 7):
+                response = await client.post(
+                    "/internal/accounting/ack?environment=staging",
+                    headers=headers,
+                    json={"receipts": [{"attempt_id": attempt_id, "revision": 1}]},
+                )
+                assert response.status_code == 400
     asyncio.run(scenario())
 
 
@@ -340,7 +304,9 @@ def test_actual_framework_advisor_calls_keep_parent_identity_and_restore_executo
             await router.aanthropic_messages(model="fixture", max_tokens=10, messages=[{"role": "user", "content": "fixture"}],
                 tools=[{"type": "advisor_20260301", "name": "advisor", "model": "receipt-advisor-fixture/advice", "max_uses": 1}])
             await asyncio.sleep(0.2)
-            rows = [row for row in store.rows.values() if row["kind"] == "provider"]
+            all_rows = list(store.rows.values())
+            assert all(row["outcome"] == "complete" for row in all_rows), all_rows
+            rows = [row for row in all_rows if row["kind"] == "provider"]
             assert provider.calls == 3 and len(rows) == 3
             assert [row["role"] for row in rows] == ["inference", "advisor", "inference"]
             assert all(row["trace"] == trace and row["outcome"] == "complete" for row in rows)

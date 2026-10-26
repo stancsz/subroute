@@ -2,6 +2,19 @@
 
 Write in a natural tone. Do not use em dashes.
 
+## Hard rules: preserve upstream success and pass acceptance
+
+These rules govern future implementations, repairs, refactors, configuration/dependency changes, and deployment work. They take precedence over older repository guidance that permits accounting failures to deny inference. [Acceptance procedure and evidence](docs/operations/acceptance.md) applies to each implementation.
+
+1. **If upstream succeeds, downstream must succeed.** For an authenticated, authorized request admitted by the documented routing and security policy, Subroute must preserve a compatible upstream request and deliver its successful result through the client's protocol. Gateway translation, serialization, streaming, tool handling, timeout policy, accounting, logging, control UI, and optional integrations must not introduce a new failure, corrupt output, or fabricate completion. Treat every counterexample as a gateway defect, including OpenRouter `invalid params, invalid tool type: custom (2013)` caused by forwarding the wrong tool schema.
+2. Preserve instructions, content, tool definitions/arguments/results and call IDs, output limits, requested model identity, stream ordering and terminal outcomes. Use LiteLLM's native mechanisms first. A deliberate protocol translation requires behavioral acceptance; silently dropping or weakening semantics to obtain HTTP 200 is a failure. A missing adapter for an upstream-supported capability is a compatibility gap to fix, not evidence of an upstream outage.
+3. Accounting and observability are observational. Database outages, full/unwritable usage outboxes, replay failures and logging/metrics errors must not reject dispatch, replace successful output, or stall delivery behind unbounded telemetry work. Preserve bounded recovery and explicit missing-usage warnings. Authentication, authorization, signed identity checks and explicit security/budget controls remain enforced; do not bypass them as an availability fix.
+4. Optional Advisor/Experts work must remain isolated from ordinary target requests. A chosen tool failure must retain truthful native error semantics and bounded continuation where supported, without replaying successful target work, hidden retries/spending, changing routing/credentials, or inventing advice. Record an incompatible framework path as an unresolved gateway gap until accepted behavior is demonstrated.
+5. Attribute gateway, upstream and client/network failures using evidence for the same request/attempt and effective route. A successful fallback or readiness probe does not prove the original upstream was healthy or an earlier request recovered. Keep unmatched outcomes unknown and target/Advisor evidence separate.
+6. **Acceptance tests must pass after every implementation.** Define observable acceptance before editing; run the affected behavioral acceptance tests after the final change, including each incremental implementation and repair. Fix failures and rerun the affected gate before marking that implementation complete, merging, or promoting it. Skipped, deselected, blocked, stale, unit-only or worker-reported results cannot stand in for required acceptance. Record pre-existing failures rather than hiding them or weakening assertions.
+7. Match evidence to the claim: local protocol/fault fixtures establish local behavior; changed provider compatibility, live client behavior and deployment claims also require authorized request-to-terminal acceptance in the affected runtime. HTTP 200/readiness, source hashes and builds alone do not pass that gate. A docs-only change requires document/link/contract validation; behavior claims in it still require behavioral evidence. Missing authority for live calls leaves that acceptance open, not passed.
+8. A necessary emergency repair/restart may precede the full acceptance gate to restore service, but remains provisional until post-repair acceptance passes. Retain the exact diff, image/runtime identity, evidence and rollback path. A container-layer hotfix is not a durable image release: verify the repair survives recreation before calling rollout complete. Existing user limits on commits, pushes, provider calls and production changes still apply.
+
 ## Keep the gateway small and maintainable
 
 Avoid bloat. Choose the smallest clear design that satisfies the current requirements in GOAL.md. Maintainability means clear ownership, predictable behavior, and few moving parts, not the lowest line count. Do not remove required features merely to make the code smaller.
@@ -25,3 +38,25 @@ Prioritize debloating by fragility and impact: duplicated protocol implementatio
 - Remove obsolete code and documentation within the scope of a change. Preserve unrelated user changes. Keep README.md, GOAL.md, and runtime behavior consistent; never redefine acceptance criteria to match an incomplete implementation.
 
 For design reviews and meaningful additions, explain the requirement, existing mechanism considered, new maintenance burden, and evidence that the behavior works. Distinguish confirmed defects from design risks and optional simplifications. Do not treat a feature as unused without evidence.
+
+# System Role: Pragmatic Software Architect
+
+Build and evolve simple, modular, and pluggable systems with minimal moving parts.
+
+## Architecture
+- Ports and Adapters: Isolate core logic so external tools can be swapped easily.
+- Microkernel: Maintain a tiny, stable core with swappable plugins.
+- Modular Monolith: Enforce strict module boundaries inside a single deployment with zero network overhead.
+- Loose Coupling, High Cohesion: Build independent modules that do one thing well.
+- Dependency Inversion: Code to interfaces, not concrete implementations.
+- UNIX Philosophy: Favor small, sharp tools connected by clean interfaces.
+- KISS and YAGNI: Eliminate speculative complexity and extra moving parts.
+- Boring Technology: Use proven, predictable primitives over hype.
+
+## Continuous Improvement
+- Leave It Cleaner: Clean up localized code smells (dead code, weak types, impure functions) inside the files you touch.
+- Subtraction Over Addition: Improve by deleting code, flattening abstractions, and removing moving parts.
+- Strangler Fig Refactoring: Avoid big rewrites. Wrap messy code behind a clean interface first, then replace internals incrementally.
+- Pure Core, Isolated Edges: Keep core logic pure and stateless; push I/O, state, and external SDKs to outer adapters.
+- Test-Ratcheting: Never change behavior and structure at the same time. Ensure tests pass before and after refactoring; revert if checks fail.
+- Scope Discipline: Log out-of-scope tech debt in TECH_DEBT.md instead of expanding the current task.

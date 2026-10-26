@@ -1,0 +1,142 @@
+{
+  "verified_on": "2026-10-25",
+  "upstream_commit": "e8dc791ba76d99012a3cd43e6114c01faedeeb6a",
+  "normalization": "UTF-8 decode and encode; replace CRLF with LF only; no whitespace or content removal",
+  "upstream_source": "Local Git object in D:/github/Sift; standalone working tree was not modified.",
+  "runtime_source": {
+    "container": "subroute-experts-1",
+    "image_tag": "subroute-advisor-correlation:f7b82d8-local",
+    "image_id": "sha256:e5a155b6237b9f17d14378ad92e1791f1535adbafa0531744dca5ee2d7c244ec",
+    "started_at_utc": "2026-10-25T05:06:16.140471992Z",
+    "source_root": "/app",
+    "source_bind_mounts": [],
+    "comparison_command": "docker exec subroute-experts-1 sh -lc 'base64 -w0 /app/<file>'; decode base64, then apply the same normalization",
+    "scope_limit": "Normalized source files and selected process/config entries only. This does not prove Python module load paths, actual callback invocation, runtime behavior, provider acceptance, or a fresh standalone test run."
+  },
+  "runtime_container_parity": [
+    {
+      "container": "subroute-experts-1",
+      "image_id": "sha256:e5a155b6237b9f17d14378ad92e1791f1535adbafa0531744dca5ee2d7c244ec",
+      "started_at_utc": "2026-10-25T05:06:16.140471992Z",
+      "process_config": "/app/config/litellm.experts.yaml",
+      "configured_sift_callback": "subroute.plugins.expert_sift.expert_sift_hook",
+      "source_bind_mounts": [],
+      "normalized_sift_files_match_worktree": true
+    },
+    {
+      "container": "subroute-gateway-staging-1",
+      "image_id": "sha256:e5a155b6237b9f17d14378ad92e1791f1535adbafa0531744dca5ee2d7c244ec",
+      "started_at_utc": "2026-10-25T05:06:15.8931552Z",
+      "process_config": "/app/config/litellm.yaml",
+      "configured_sift_callback": null,
+      "source_bind_mounts": [],
+      "normalized_sift_files_match_worktree": true
+    },
+    {
+      "container": "subroute-gateway-1",
+      "image_id": "sha256:2d3076d83d415a2066532b4c69cf0921fe1667f0452e377a83ba53116390005d",
+      "started_at_utc": "2026-10-23T20:39:14.744126774Z",
+      "process_config": "/app/config/litellm.yaml",
+      "configured_sift_callback": null,
+      "source_bind_mounts": ["D:/github/subroute/src"],
+      "normalized_sift_files_match_worktree": true
+    }
+  ],
+  "related_gateway_files": [
+    {
+      "file": "src/subroute/usage_accounting.py",
+      "worktree_normalized_sha256": "cb43bc52a060061f83a6c05f8f621791665d454f8156268d0eb37b6d4e5e582b",
+      "runtime_normalized_sha256": "aca1c0565762b4c5d1c2382c37f492a0a10ea63fbb31ef276355ba5138553f9c",
+      "runtime_matches_worktree": false
+    },
+    {
+      "file": "src/subroute/plugins/expert_sift.py",
+      "worktree_normalized_sha256": "eb2fc602190d98348ccd4b3fe2b816975dda6fb949ccfad9788ed8d218fac430",
+      "runtime_normalized_sha256": "e8c67c1d3ef4a89f59584e768058e741eb8558cca6afda3046c53b182d1a3514",
+      "runtime_matches_worktree": false
+    }
+  ],
+  "files": [
+    {
+      "file": "src/sift/core.py",
+      "upstream_command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/core.py"
+      ],
+      "upstream_normalized_sha256": "b290fde061dc28016f2bcd3d65e25ab9820b43e5eec5103056c5adeab2db5238",
+      "worktree_normalized_sha256": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d",
+      "runtime_normalized_sha256": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d",
+      "runtime_normalized_sha256_by_container": {
+        "subroute-experts-1": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d",
+        "subroute-gateway-staging-1": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d",
+        "subroute-gateway-1": "537f68d1a6e2298974d649a05c6b7ff822890b0f73ac88e74acc0607c4ec719d"
+      },
+      "upstream_identical": false,
+      "runtime_matches_worktree": true
+    },
+    {
+      "file": "src/sift/litellm_proxy.py",
+      "upstream_command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/litellm_proxy.py"
+      ],
+      "upstream_normalized_sha256": "64c7ec7840242cabffc8c0e5f7bba690ee400f2001d324763cb1db1352fd39ae",
+      "worktree_normalized_sha256": "85681c1a9d5abf4a74f33c966026f0cdf6cb11244b735e4a4642f8aea310c321",
+      "runtime_normalized_sha256": "85681c1a9d5abf4a74f33c966026f0cdf6cb11244b735e4a4642f8aea310c321",
+      "runtime_normalized_sha256_by_container": {
+        "subroute-experts-1": "85681c1a9d5abf4a74f33c966026f0cdf6cb11244b735e4a4642f8aea310c321",
+        "subroute-gateway-staging-1": "85681c1a9d5abf4a74f33c966026f0cdf6cb11244b735e4a4642f8aea310c321",
+        "subroute-gateway-1": "85681c1a9d5abf4a74f33c966026f0cdf6cb11244b735e4a4642f8aea310c321"
+      },
+      "upstream_identical": false,
+      "runtime_matches_worktree": true
+    },
+    {
+      "file": "src/sift/litellm_responses.py",
+      "upstream_command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/litellm_responses.py"
+      ],
+      "upstream_normalized_sha256": "ff446f39476645c0d81f502a207213d36c6e34b21b97610549dba1eec2326edd",
+      "worktree_normalized_sha256": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e",
+      "runtime_normalized_sha256": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e",
+      "runtime_normalized_sha256_by_container": {
+        "subroute-experts-1": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e",
+        "subroute-gateway-staging-1": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e",
+        "subroute-gateway-1": "13c0542562fa59e3d024743e7e6ff9269de7788d287a1c337e058b00fb882b9e"
+      },
+      "upstream_identical": false,
+      "runtime_matches_worktree": true
+    },
+    {
+      "file": "src/sift/__init__.py",
+      "upstream_command": [
+        "git",
+        "-C",
+        "D:/github/Sift",
+        "show",
+        "e8dc791ba76d99012a3cd43e6114c01faedeeb6a:src/sift/__init__.py"
+      ],
+      "upstream_normalized_sha256": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159",
+      "worktree_normalized_sha256": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159",
+      "runtime_normalized_sha256": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159",
+      "runtime_normalized_sha256_by_container": {
+        "subroute-experts-1": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159",
+        "subroute-gateway-staging-1": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159",
+        "subroute-gateway-1": "74b30a8090226747751229da906315ae3319605cf7dd71ee51adab234eb0f159"
+      },
+      "upstream_identical": true,
+      "runtime_matches_worktree": true
+    }
+  ],
+  "tests": "The normalized source comparison was followed by a focused gateway boundary run: 76 passed across expert Sift, ordinary target preservation, Advisor, active-cycle recovery, and accounting protocol tests. Output: .runs/goal-simplicity-20261023/sift-boundary-20261025/tests-sift-boundary-002609.txt. No standalone Sift suite, provider request, image change, or deployment was performed."
+}

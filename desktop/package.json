@@ -9,9 +9,9 @@
     "test": "node --test"
   },
   "devDependencies": {
-    "electron": "44.4.5"
+    "electron": "45.0.0"
   },
   "allowScripts": {
-    "electron@44.4.5": true
+    "electron@45.0.0": true
   }
 }

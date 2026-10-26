@@ -15,6 +15,7 @@ import litellm
 from litellm import Router
 from litellm.proxy import proxy_server
 from litellm.proxy._types import UserAPIKeyAuth
+import pytest
 
 from subroute.handlers.codex_subscription import codex_subscription_handler
 from subroute.plugins.codex_credentials import (
@@ -76,8 +77,14 @@ def _configured_proxy(
     omit_provider_usage=False,
     dynamic_routing_plugin=None,
     upstream_chunks=None,
+    stream_failure_mode=None,
     provider_model_list=None,
+    fallbacks=None,
+    raise_server_exceptions=True,
     additional_custom_providers=(),
+    enable_pre_call_checks=False,
+    dispatch_recorder=None,
+    additional_callbacks=(),
 ):
     original_acompletion = litellm.acompletion
     upstream_models = []
@@ -86,6 +93,8 @@ def _configured_proxy(
     upstream_request_options = []
 
     async def fake_upstream_or_dispatch(**kwargs):
+        if dispatch_recorder is not None:
+            dispatch_recorder.append(kwargs.get("model"))
         if kwargs.get("model", "").startswith("openai/responses/"):
             assert kwargs["stream"] is True
             upstream_models.append(kwargs["model"])
@@ -94,7 +103,27 @@ def _configured_proxy(
             upstream_request_options.append({
                 "store": kwargs.get("store"),
                 "stream_options": kwargs.get("stream_options"),
+                "messages": kwargs.get("messages"),
+                "instructions": kwargs.get("instructions"),
+                "input": kwargs.get("input"),
             })
+            if stream_failure_mode and kwargs.get("model") == "openai/responses/gpt-6-luna":
+                def failing_chunks():
+                    if stream_failure_mode == "after_output":
+                        yield {
+                            "id": "chatcmpl-partial",
+                            "object": "chat.completion.chunk",
+                            "created": 1,
+                            "model": "gpt-6-luna",
+                            "choices": [{
+                                "index": 0,
+                                "delta": {"role": "assistant", "content": "partial answer"},
+                                "finish_reason": None,
+                            }],
+                        }
+                    raise httpx.ReadError("fixture provider stream reset")
+
+                return FakeStream(failing_chunks())
             if incomplete_stream:
                 return FakeStream([{
                     "id": "chatcmpl-incomplete",
@@ -133,7 +162,7 @@ def _configured_proxy(
             "custom_handler": codex_subscription_handler,
         }, *additional_custom_providers]))
         stack.enter_context(patch.object(litellm, "acompletion", fake_upstream_or_dispatch))
-        callbacks = []
+        callbacks = list(additional_callbacks)
         if credential_callback:
             callbacks.append(codex_credential_refresher)
         if dynamic_routing_plugin is not None:
@@ -173,7 +202,8 @@ def _configured_proxy(
         router = Router(
             model_list=model_list,
             num_retries=0,
-            fallbacks=[],
+            fallbacks=fallbacks or [],
+            enable_pre_call_checks=enable_pre_call_checks,
         )
         stack.enter_context(patch.object(proxy_server, "llm_router", router))
         stack.enter_context(patch.dict(proxy_server.app.dependency_overrides, {
@@ -182,6 +212,7 @@ def _configured_proxy(
         yield TestClient(
             proxy_server.app,
             client=("127.0.0.1", 50000),
+            raise_server_exceptions=raise_server_exceptions,
         ), upstream_models, upstream_credentials, upstream_stream_options, upstream_request_options
 
 
@@ -207,6 +238,71 @@ def _request(protocol: str, stream: bool):
     }
 
 
+@pytest.mark.parametrize("protocol", ["chat", "responses"])
+def test_default_advisor_skill_prompt_reaches_target_over_public_route(protocol):
+    from subroute.plugins.advisor_plugin import AdvisorPlugin, TARGET_SYSTEM_PROMPT
+
+    path, payload = _request(protocol, False)
+    if protocol == "chat":
+        payload["messages"].insert(0, {"role": "system", "content": "Keep this."})
+    else:
+        payload["instructions"] = "Keep this."
+    with _configured_proxy(additional_callbacks=[AdvisorPlugin()]) as (
+        client, upstream_models, _, _, upstream_request_options,
+    ):
+        response = client.post(path, json=payload)
+
+    assert response.status_code == 200, response.text
+    assert upstream_models == ["openai/responses/gpt-6-luna"]
+    forwarded = upstream_request_options[0]
+    if protocol == "chat":
+        assert forwarded["messages"][0] == {"role": "system", "content": TARGET_SYSTEM_PROMPT}
+        assert forwarded["messages"][1] == {"role": "system", "content": "Keep this."}
+        assert forwarded["messages"][2] == {"role": "user", "content": "say hello"}
+    else:
+        assert forwarded["messages"][0] == {
+            "role": "system", "content": f"{TARGET_SYSTEM_PROMPT}\n\nKeep this.",
+        }
+        assert forwarded["messages"][1] == {"role": "user", "content": "say hello"}
+
+
+@pytest.mark.parametrize("protocol", ["chat", "responses", "messages"])
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("requested,target", [
+    ("codex-luna", "gpt-6-luna"),
+    ("codex-gpt-6.1-sol", "gpt-6.1-sol"),
+])
+def test_configured_model_names_pass_through_to_litellm(tmp_path, protocol, stream, requested, target):
+    from subroute.plugins.dynamic_router import DynamicRoutingPlugin, RoutingControlPlane
+
+    control = RoutingControlPlane(
+        Path(__file__).parents[1] / "config/litellm.yaml", tmp_path / "policy.json")
+    control.update("codex-gpt-6.1-sol", "off")
+    path, payload = _request(protocol, stream)
+    payload["model"] = requested
+    with _configured_proxy(dynamic_routing_plugin=DynamicRoutingPlugin(control)) as (client, upstream_models, *_):
+        response = client.post(path, json=payload, headers={"anthropic-version": "2023-06-01"})
+    assert response.status_code == 200, response.text
+    assert "fixture answer" in response.text
+    assert requested in response.text
+    assert upstream_models == [f"openai/responses/{target}"]
+
+
+def test_passthrough_does_not_rewrite_unknown_model_to_saved_target(tmp_path):
+    from subroute.plugins.dynamic_router import DynamicRoutingPlugin, RoutingControlPlane
+
+    control = RoutingControlPlane(
+        Path(__file__).parents[1] / "config/litellm.yaml", tmp_path / "policy.json")
+    control.update("codex-gpt-6.1-sol", "off")
+    path, payload = _request("chat", False)
+    payload["model"] = "unconfigured-future-model"
+    with _configured_proxy(dynamic_routing_plugin=DynamicRoutingPlugin(control)) as (client, upstream_models, *_):
+        response = client.post(path, json=payload, headers={"anthropic-version": "2023-06-01"})
+    assert response.status_code == 400
+    assert "unconfigured-future-model" in response.text
+    assert upstream_models == []
+
+
 def verify_litellm_proxy_http_routes():
     with _configured_proxy() as (client, upstream_models, _, upstream_stream_options, upstream_request_options):
         headers = {"anthropic-version": "2023-06-01"}
@@ -227,7 +323,9 @@ def verify_litellm_proxy_http_routes():
 
         assert len(upstream_models) == 6
         assert set(upstream_models) == {"openai/responses/gpt-6-luna"}
-        assert upstream_stream_options[4:6] == [
+        assert upstream_stream_options[2:6] == [
+            {"include_usage": True},
+            {"include_usage": True},
             {"include_usage": True},
             {"include_usage": True},
         ]
@@ -236,6 +334,36 @@ def verify_litellm_proxy_http_routes():
 
 def test_litellm_proxy_http_routes_serve_codex_protocols():
     verify_litellm_proxy_http_routes()
+
+
+@pytest.mark.parametrize("protocol", ["chat", "responses", "messages"])
+def test_proxy_rejects_over_capacity_before_provider_dispatch(protocol):
+    dispatches = []
+    model = {
+        "model_name": "codex-luna",
+        "model_info": {"context_window": 1, "max_input_tokens": 1},
+        "litellm_params": {
+            "model": "codex-subscription/gpt-6-luna",
+            "api_base": "https://fixture.invalid/backend-api/codex",
+            "api_key": "fixture-key",
+            "store": False,
+        },
+    }
+    with _configured_proxy(
+        provider_model_list=[model],
+        enable_pre_call_checks=True,
+        dispatch_recorder=dispatches,
+    ) as (client, *_):
+        path, payload = _request(protocol, stream=False)
+        response = client.post(
+            path,
+            json=payload,
+            headers={"anthropic-version": "2023-06-01"},
+        )
+
+    assert response.status_code >= 400, (protocol, response.text)
+    assert "litellm.ContextWindowExceededError" in response.text, (protocol, response.text)
+    assert dispatches == [], (protocol, dispatches)
 
 
 def test_native_codex_responses_keeps_lite_input_and_reasoning_defaults():
@@ -436,8 +564,88 @@ def test_streamed_messages_do_not_emit_success_when_provider_usage_is_missing():
     assert "message_stop" not in response.text
 
 
+@pytest.mark.parametrize("stream", [False, True])
+def test_responses_without_provider_usage_do_not_report_false_zero_usage(stream):
+    with _configured_proxy(omit_provider_usage=True) as (client, _, _, _, _):
+        response = client.post("/v1/responses", json={
+            "model": "codex-luna",
+            "input": "say hello",
+            "store": False,
+            "stream": stream,
+        })
+
+    assert "omitted usage required by the Responses bridge" in response.text
+    if stream:
+        assert "response.completed" not in response.text
+    else:
+        assert response.status_code == 502, response.text
+        body = response.json()
+        assert body.get("usage") is None
+
+
 def test_proxy_stream_does_not_report_success_without_terminal_upstream_chunk():
     verify_incomplete_stream_through_proxy()
+
+
+@pytest.mark.parametrize(
+    ("failure_mode", "expected_models", "expected_content", "must_not_complete"),
+    [
+        (
+            "before_output",
+            ["openai/responses/gpt-6-luna", "openai/responses/gpt-6.1-sol"],
+            "fixture answer",
+            False,
+        ),
+        (
+            "after_output",
+            ["openai/responses/gpt-6-luna"],
+            "partial answer",
+            True,
+        ),
+    ],
+)
+def test_public_responses_stream_fallback_runs_only_before_output(
+    failure_mode, expected_models, expected_content, must_not_complete,
+):
+    from subroute.plugins.dynamic_router import _install_responses_fallback_boundary
+
+    _install_responses_fallback_boundary()
+    model_list = [
+        {
+            "model_name": name,
+            "litellm_params": {
+                "model": f"codex-subscription/{upstream_model}",
+                "api_base": "https://fixture.invalid/backend-api/codex",
+                "api_key": "fixture-key",
+                "extra_headers": {"ChatGPT-Account-ID": "fixture-account"},
+                "store": False,
+                "allowed_openai_params": ["reasoning_effort"],
+            },
+        }
+        for name, upstream_model in (
+            ("codex-luna", "gpt-6-luna"),
+            ("codex-fallback", "gpt-6.1-sol"),
+        )
+    ]
+    with _configured_proxy(
+        provider_model_list=model_list,
+        fallbacks=[{"codex-luna": ["codex-fallback"]}],
+        stream_failure_mode=failure_mode,
+        raise_server_exceptions=False,
+    ) as (client, upstream_models, *_):
+        response = client.post(
+            "/v1/responses",
+            json={
+                "model": "codex-luna",
+                "input": "say hello",
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert expected_content in response.text, response.text
+    assert upstream_models == expected_models
+    assert ("response.completed" not in response.text) is must_not_complete
 
 
 if __name__ == "__main__":

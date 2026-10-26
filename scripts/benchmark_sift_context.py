@@ -8,7 +8,8 @@ import litellm
 import tiktoken
 
 from sift.core import compact_messages
-from subroute.sift_plugin import RAW_INTAKE_LIMIT
+# Historical offline benchmark bound, not a normal gateway intake promise.
+RAW_INTAKE_LIMIT = 4_194_304
 
 
 def main():

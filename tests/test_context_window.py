@@ -1,18 +1,22 @@
 """Exercise the installed LiteLLM checks, without making provider calls."""
 
+import asyncio
+import json
 from pathlib import Path
 
 import litellm
-import asyncio
 import pytest
 import yaml
 
 
 def router():
-    settings = yaml.safe_load((Path(__file__).parents[1] / "config/litellm.yaml").read_text())
+    root = Path(__file__).parents[1]
+    settings = yaml.safe_load((root / "config/litellm.yaml").read_text())
+    active_model = json.loads((root / "config/active_model.json").read_text())["active_model"]
+    deployment = next(item for item in settings["model_list"] if item["model_name"] == active_model)
     return litellm.Router(model_list=[{
         "model_name": "context-fixture",
-        "model_info": settings["model_list"][0]["model_info"],
+        "model_info": deployment["model_info"],
         "litellm_params": {"model": "openai/gpt-4o", "api_key": "fixture-only"},
     }], enable_pre_call_checks=True, num_retries=0, fallbacks=[])
 
@@ -52,40 +56,3 @@ def test_native_counter_includes_instruction_and_tool_overhead(protocol):
     }]
     full_count = r._count_pre_call_check_tokens(messages=messages, input=response_input, request_kwargs=extras)
     assert full_count > count + 1000
-
-
-def test_oversized_advisor_copy_is_skipped_without_blocking_target_route(monkeypatch):
-    from litellm.proxy import proxy_server
-    from subroute.plugins import advisor_plugin
-
-    r = router()
-    # Keep this request small; use the native fixture limit to exercise ordering.
-    r.model_list[0]["model_info"]["max_input_tokens"] = 1000
-    monkeypatch.setattr(proxy_server, "llm_router", r)
-    monkeypatch.setattr(r, "get_configured_token_limits", lambda model: (1000, None))
-
-    async def unexpected_consultation(*args, **kwargs):
-        pytest.fail("An oversized advisor copy reached the provider")
-
-    from subroute.advisor_ranker import AdvisorRequestRanker
-    from subroute.advisor_frequency import AdvisorFrequencyGate
-    async def score(self, prompt):
-        return .9
-    monkeypatch.setattr(AdvisorRequestRanker, "rank", score)
-    monkeypatch.setattr(AdvisorFrequencyGate, "choose", lambda self, *args: {
-        "consult": True, "score": .9, "target_rate": .5,
-        "selected_count": 1, "eligible_count": 1,
-    })
-    monkeypatch.setattr(advisor_plugin, "call_codex_streaming_collect", unexpected_consultation)
-    data = {
-        "model": "codex-luna", "messages": [{"role": "user", "content": "ok"}],
-        "system": " policy" * 2000,
-        "metadata": {"gateway_policy": {"advisor_model": "codex-luna-advisor"}},
-    }
-    result = asyncio.run(advisor_plugin.AdvisorPlugin().async_pre_call_hook(
-        None, None, data, "aanthropic_messages",
-    ))
-    assert result is data
-    assert data["metadata"]["gateway_advisor"]["status"] == "skipped"
-    assert data["metadata"]["gateway_advisor"]["reason"] == "advisor_context_compaction_failed"
-    assert data["metadata"]["gateway_advisor_compaction"]["status"] == "failed"

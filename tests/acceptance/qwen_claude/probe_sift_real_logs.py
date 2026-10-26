@@ -71,8 +71,7 @@ def main() -> int:
         finally:
             set_policy(client, before, test=False)
             after = client.get("/api/active-model").json()
-            keys = ("active_model", "mode", "reasoning_effort", "advisor_model", "advisor_reasoning_effort",
-                    "advisor_trigger", "advisor_sensitivity", "advisor_classifier")
+            keys = ("active_model", "mode", "reasoning_effort", "advisor_model", "fast_mode")
             assert all(after[name] == before[name] for name in keys), "staging policy was not restored"
     print(json.dumps(results, ensure_ascii=False, indent=2))
     return 0 if len(results) == len(cases) and all(

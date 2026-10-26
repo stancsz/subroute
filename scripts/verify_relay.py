@@ -216,9 +216,9 @@ async def _verify_live(url, operator_key, machine_keys, scratch, compose, proces
                 await session.initialize()
                 async def call(name, **arguments):
                     result = await session.call_tool(name, arguments)
-                    if result.isError:
+                    if result.is_error:
                         raise RuntimeError("Live MCP operation failed: " + name)
-                    return result.structuredContent or json.loads(result.content[0].text)
+                    return result.structured_content or json.loads(result.content[0].text)
 
                 goal = await call("goal_create", objective="Same-host live Subroute Relay acceptance with real Claude Code sessions",
                     acceptance="Two isolated Python modules pass unittest; separate real review sessions inspect and run tests; parent independently reruns tests; all four task receipts are successful",
@@ -350,9 +350,9 @@ async def verify(url, operator_key, machine_keys, scratch, compose):
                 await session.initialize()
                 async def call(name, **arguments):
                     result = await session.call_tool(name, arguments)
-                    if result.isError:
+                    if result.is_error:
                         raise RuntimeError("MCP acceptance operation failed: " + name)
-                    return result.structuredContent or json.loads(result.content[0].text)
+                    return result.structured_content or json.loads(result.content[0].text)
 
                 tools = {tool.name for tool in (await session.list_tools()).tools}
                 assert "consult_advisor" in tools
@@ -466,9 +466,9 @@ async def verify_supervisor_fixture(url, operator_key, scratch):
                 async with ClientSession(receive, send) as session:
                     await session.initialize()
                     result = await session.call_tool(name, arguments)
-                    if result.isError:
+                    if result.is_error:
                         raise RuntimeError("Supervisor fixture MCP operation failed: " + name)
-                    return result.structuredContent or json.loads(result.content[0].text)
+                    return result.structured_content or json.loads(result.content[0].text)
 
     script = scratch / "supervisor_fixture_cli.py"
     state_dir = scratch / "supervisor-state"
@@ -492,12 +492,12 @@ async def main():
             async with ClientSession(receive, send) as session:
                 await session.initialize()
                 board = await session.call_tool('fleet_status', {})
-                assert not board.isError
-                snapshot = board.structuredContent or json.loads(board.content[0].text)
+                assert not board.is_error
+                snapshot = board.structured_content or json.loads(board.content[0].text)
                 goal = next(g for g in snapshot['goals'] if g['status'] == 'active')
                 changed = await session.call_tool('goal_set_state', {'goal_id': goal['id'], 'state': 'paused',
                     'evidence': 'Provider-free supervisor acceptance fixture observed the scripted blocker.'})
-                assert not changed.isError
+                assert not changed.is_error
 
 mode = sys.argv[1]
 try:

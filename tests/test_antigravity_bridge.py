@@ -164,6 +164,60 @@ def test_response_text_rejects_failed_agent_turn_with_reason():
         bridge._response_text(payload)
 
 
+@pytest.mark.parametrize(
+    "terminal,expected_status,expected_detail",
+    [
+        ({"status": "ERROR", "error": "API error (attempt 8): RESOURCE_EXHAUSTED (code 429): Individual quota reached"}, 429,
+         "RESOURCE_EXHAUSTED (code 429)"),
+        ({"status": "ERROR", "error": "provider process failed"}, 502, "provider process failed"),
+    ],
+)
+def test_terminal_provider_error_maps_only_explicit_quota_429_to_http_429(
+    monkeypatch, terminal, expected_status, expected_detail,
+):
+    stdout = json.dumps({"event": "result", "result": terminal})
+    server, thread, base_url = _start_bridge_server(monkeypatch, lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        bridge, "_run_agy",
+        lambda *args, **kwargs: subprocess.CompletedProcess([], 0, stdout, ""),
+    )
+    request_id = "a" * 32
+    try:
+        response = httpx.post(
+            f"{base_url}/v1/completions",
+            json={"model": "fixture", "prompt": "hello"},
+            headers={"X-Subroute-Request-ID": request_id},
+        )
+        assert response.status_code == expected_status
+        assert expected_detail in response.json()["detail"]
+        assert response.headers["X-Subroute-Request-ID"] == request_id
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_successful_answer_may_mention_quota_and_429_without_status_translation(monkeypatch):
+    content = "RESOURCE_EXHAUSTED (code 429) describes a quota error, but this is explanatory text."
+    stdout = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "num_turns": 1, "response": content,
+        "usage": {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3},
+    }})
+    server, thread, base_url = _start_bridge_server(monkeypatch, lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        bridge, "_run_agy",
+        lambda *args, **kwargs: subprocess.CompletedProcess([], 0, stdout, ""),
+    )
+    try:
+        response = httpx.post(f"{base_url}/v1/completions", json={"model": "fixture", "prompt": "hello"})
+        assert response.status_code == 200
+        assert response.json()["content"] == content
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_response_text_rejects_missing_terminal_event_even_with_partial_text():
     payload = '{"event":"step_update","step_update":{"text_delta":"partial"}}'
 
@@ -490,12 +544,30 @@ def test_cli_timeout_kills_and_reaps_process(monkeypatch):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="Compose process-group cleanup requires POSIX")
-def test_timeout_reaps_descendants_even_after_cli_parent_exits():
+def test_timeout_reaps_descendants_even_after_cli_parent_exits(tmp_path):
+    ready = tmp_path / "descendant-ready"
+    terminated = tmp_path / "descendant-terminated"
+    descendant = (
+        "import signal,sys,time; from pathlib import Path; "
+        "stopped=Path(sys.argv[1]); "
+        "signal.signal(signal.SIGTERM, lambda *_: (stopped.write_text('terminated'), sys.exit(0))); "
+        "Path(sys.argv[2]).write_text('ready'); time.sleep(30)"
+    )
+    parent = (
+        "import os,subprocess,sys,time\n"
+        "subprocess.Popen([sys.executable, '-c', sys.argv[3], sys.argv[1], sys.argv[2]])\n"
+        "deadline=time.monotonic()+2\n"
+        "while not os.path.exists(sys.argv[2]) and time.monotonic()<deadline:\n"
+        "    time.sleep(0.01)\n"
+        "if not os.path.exists(sys.argv[2]):\n"
+        "    raise SystemExit('descendant did not start')"
+    )
     command = [sys.executable, "-c", (
-        "import subprocess,sys; sys.stdin.read(); "
-        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(3)'])"
-    )]
+        parent
+    ), str(terminated), str(ready), descendant]
     started = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
-        bridge._run_agy(command, "prompt", timeout=0.3)
+        bridge._run_agy(command, "prompt", timeout=0.5)
+    assert ready.read_text() == "ready"
+    assert terminated.read_text() == "terminated", "descendant survived process-group termination"
     assert time.monotonic() - started < 2, "orphan inherited pipes outlived the CLI deadline"

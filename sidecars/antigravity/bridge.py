@@ -50,6 +50,10 @@ class ProviderRefused(RuntimeError):
         super().__init__(f"provider_content_filter phase={self.phase} conversation_id={result.get('conversation_id', 'unknown')}")
 
 
+class ProviderRateLimited(RuntimeError):
+    """The CLI terminal result explicitly reports an upstream quota 429."""
+
+
 def _reject_refusal(result: dict[str, Any], completed_reads: int | None = None) -> None:
     # AGY 1.2.11 wraps this provider-generated refusal in SUCCESS. Match its
     # known diagnostic only, not ordinary model answers saying "I cannot".
@@ -178,6 +182,8 @@ def _terminal_result(stdout: str) -> dict[str, Any]:
         status = str(result.get("status") or "unknown")
         reason = result.get("error")
         detail = f": {str(reason)[:300]}" if isinstance(reason, str) and reason else ""
+        if isinstance(reason, str) and re.search(r"\bRESOURCE_EXHAUSTED\s*\(code\s+429\)", reason):
+            raise ProviderRateLimited(f"Antigravity CLI ended with status {status}{detail}")
         raise RuntimeError(f"Antigravity CLI ended with status {status}{detail}")
     return result
 
@@ -439,6 +445,9 @@ class Handler(BaseHTTPRequestHandler):
                                               "phase": exc.phase, "conversation_id": exc.result.get("conversation_id"),
                                               "completed_reads": exc.completed_reads,
                                               "provider_usage": exc.result.get("usage")})
+        except ProviderRateLimited as exc:
+            logger.warning("AGY provider rate limited request_id=%s model=%r error=%s", request_id, model, str(exc)[:300])
+            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"detail": str(exc)})
         except RuntimeError as exc:
             logger.warning("AGY request failed request_id=%s model=%r error=%s", request_id, model, str(exc)[:300])
             self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc)})

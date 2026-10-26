@@ -109,6 +109,7 @@ def test_nonstreaming_collects_native_chat_stream_with_tool_usage_and_terminal_s
     assert captured["store"] is False
     assert "max_tokens" not in captured
     assert "max_output_tokens" not in captured
+    assert captured["max_completion_tokens"] == 64
     assert "user" not in captured
     assert captured["store"] is False
     assert response.model == "gpt-6-luna"
@@ -141,6 +142,23 @@ def test_anthropic_calls_request_usage_from_the_forced_codex_stream(monkeypatch)
 
     monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
     logging_obj = type("Logging", (), {"call_type": "anthropic_messages"})()
+    response = call_handler(logging_obj=logging_obj)
+
+    assert captured["stream_options"] == {"include_usage": True}
+    assert response.usage.total_tokens == 6
+
+
+@pytest.mark.parametrize("call_type", ["responses", "aresponses"])
+def test_responses_calls_request_provider_usage_from_the_codex_stream(monkeypatch, call_type):
+    captured = {}
+    stream = FakeStream(tool_call_chunks())
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return stream
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    logging_obj = type("Logging", (), {"call_type": call_type})()
     response = call_handler(logging_obj=logging_obj)
 
     assert captured["stream_options"] == {"include_usage": True}
@@ -476,6 +494,7 @@ def test_litellm_responses_dispatch_preserves_roleless_tool_history(monkeypatch)
     assert nested_call["stream"] is True
     assert "max_tokens" not in nested_call
     assert "max_output_tokens" not in nested_call
+    assert nested_call["max_completion_tokens"] == 64
     assert nested_call["reasoning_effort"] == {"effort": "high", "summary": "auto"}
     assert "user" not in nested_call
     assert response.status == "completed"

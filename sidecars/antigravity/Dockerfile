@@ -1,11 +1,11 @@
-FROM --platform=$BUILDPLATFORM python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS build
+FROM --platform=$BUILDPLATFORM python:3.13-slim@sha256:57b29a7c050c4e679e4bea572e14b3965cf4b5839de2da49d55e49ffc4024f39 AS build
 
 ARG TARGETARCH
 ARG DEBIAN_SNAPSHOT=20260925T000000Z
-ARG AGY_VERSION=1.2.11
+ARG AGY_VERSION=1.4.6
 # Official release asset digests for AGY_VERSION; update these with the version.
-ARG AGY_SHA256_AMD64=c91c62c5e6fa954f5a7e1d7b9ad417d749db4aa60a4ba0b3d604dec1b645d190
-ARG AGY_SHA256_ARM64=01513bc61f9592353045ba801ebb407fbccb8984fcbfde591bc6b681b24e92bc
+ARG AGY_SHA256_AMD64=513c74ad3e70323839a65d8dccc6f9977b0903e5facd914cbb06be283c2bb640
+ARG AGY_SHA256_ARM64=ef88c996178b55a3c5416f2c8b67a9c343ac0a62c900e7b7158ee2ff1135ad96
 
 # The CLI otherwise self-updates after the build has verified the pinned asset.
 ENV AGY_CLI_DISABLE_AUTO_UPDATE=true
@@ -35,7 +35,7 @@ COPY sidecars/antigravity/entrypoint.sh /tmp/entrypoint.sh
 RUN sed -i 's/\r$//' /tmp/entrypoint.sh \
     && install -D -m 0755 /tmp/entrypoint.sh /out/entrypoint.sh
 
-FROM python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
+FROM python:3.13-slim@sha256:57b29a7c050c4e679e4bea572e14b3965cf4b5839de2da49d55e49ffc4024f39
 
 ENV AGY_CLI_DISABLE_AUTO_UPDATE=true
 ENV PATH=/root/.local/bin:${PATH}

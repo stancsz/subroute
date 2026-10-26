@@ -138,12 +138,12 @@ class Acceptance:
                     async def call(name, *, reject=False, **arguments):
                         result = await session.call_tool(name, arguments)
                         if reject:
-                            assert result.isError, "Forbidden transition unexpectedly succeeded: " + name
+                            assert result.is_error, "Forbidden transition unexpectedly succeeded: " + name
                             return None
-                        if result.isError:
+                        if result.is_error:
                             detail = " ".join(c.text for c in result.content if hasattr(c, "text"))
                             raise AssertionError("MCP operation failed: " + name + ": " + self.redact(detail[:1000]))
-                        return result.structuredContent or json.loads(result.content[0].text)
+                        return result.structured_content or json.loads(result.content[0].text)
                     yield call
 
     async def status(self, call, ident, wanted, timeout=35):

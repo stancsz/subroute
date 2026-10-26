@@ -1,5 +1,7 @@
 # Product direction
 
+Two standing engineering requirements govern every increment: **if upstream succeeds, downstream must succeed**, and **acceptance tests must pass after every implementation**. [AGENTS.md](../../AGENTS.md#hard-rules-preserve-upstream-success-and-pass-acceptance) owns the contract; the [acceptance procedure](../operations/acceptance.md) defines completion evidence. They are requirements to verify, not an assertion that all current routes are already accepted.
+
 The Badlands public API uses Subroute for a dedicated on-demand Luna advisor and
 image generation, while ordinary public inference runs through OpenRouter with
 native MiMo coding-plan fallback. [Dedicated advisor operation](../misc/badlands-dedicated-advisor.md)

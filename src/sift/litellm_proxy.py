@@ -17,6 +17,7 @@ from typing import Any, Mapping
 from fastapi import HTTPException
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.litellm_core_utils.core_helpers import get_or_create_metadata_bucket
+from litellm.proxy._types import ProxyException
 
 from .core import CompactionError, compact_messages
 
@@ -26,6 +27,8 @@ _PROTOCOLS = {
     "acompletion": "openai",
     "anthropic_messages": "anthropic",
     "aanthropic_messages": "anthropic",
+    "responses": "openai",
+    "aresponses": "openai",
 }
 
 
@@ -176,6 +179,9 @@ def compact_proxy_request(
         return total
 
     effective_target = target
+    correlation = data.get("_subroute_sift_correlation")
+    request_id = correlation.get("request_id", "-") if isinstance(correlation, dict) else "-"
+    attempt_id = correlation.get("advisor_attempt_id", "-") if isinstance(correlation, dict) else "-"
     try:
         try:
             result = compact_messages(
@@ -197,9 +203,9 @@ def compact_proxy_request(
             "late_instruction": 422,
         }.get(error.code, 400)
         logging.getLogger("LiteLLM Proxy").warning(
-            "sift_compaction_failed protocol=%s reason=%s input_tokens=%d target=%d raw_limit=%d",
+            "sift_compaction_failed protocol=%s reason=%s input_tokens=%d target=%d raw_limit=%d request_id=%s advisor_attempt_id=%s",
             protocol, error.code, raw_input_tokens if raw_input_tokens is not None else -1,
-            target, raw_limit,
+            target, raw_limit, request_id, attempt_id,
         )
         raise HTTPException(status, detail={"error": {
             "type": "invalid_request_error",
@@ -224,11 +230,11 @@ def compact_proxy_request(
     }}
     output_limit = data.get("max_output_tokens", data.get("max_completion_tokens", data.get("max_tokens")))
     logging.getLogger("LiteLLM Proxy").info(
-        "sift_request protocol=%s compacted=%s active_tool_results_compacted=%d input_tokens=%d forwarded_tokens=%d target=%d output_limit=%d",
+        "sift_request protocol=%s compacted=%s active_tool_results_compacted=%d input_tokens=%d forwarded_tokens=%d target=%d output_limit=%d request_id=%s advisor_attempt_id=%s",
         call_type, str(result.audit["compacted"]).lower(),
         result.audit.get("active_tool_results_compacted", 0), result.audit["input_tokens"],
         result.audit["forwarded_tokens"],
-        target, output_limit if type(output_limit) is int else -1,
+        target, output_limit if type(output_limit) is int else -1, request_id, attempt_id,
     )
     return output
 
@@ -236,15 +242,18 @@ def compact_proxy_request(
 class SiftLiteLLMHook(CustomLogger):
     """LiteLLM Proxy callback for explicitly configured chat model names."""
 
-    def __init__(self, model_targets: Mapping[str, int], *, raw_limit: int = 4_000_000) -> None:
+    def __init__(self, model_targets: Mapping[str, int], *, raw_limit: int = 4_000_000, max_target: int | None = None) -> None:
         super().__init__()
         if not model_targets or any(
             not isinstance(name, str) or not name or type(target) is not int or target <= 0
             for name, target in model_targets.items()
         ) or type(raw_limit) is not int or raw_limit < max(model_targets.values()):
             raise ValueError("invalid Sift model targets or raw limit")
+        if max_target is not None and (type(max_target) is not int or max_target < max(model_targets.values()) or max_target > raw_limit):
+            raise ValueError("invalid Sift relaxation ceiling")
         self.model_targets = dict(model_targets)
         self.raw_limit = raw_limit
+        self.max_target = max_target
         self._slots = threading.BoundedSemaphore(2)
 
     @staticmethod
@@ -268,7 +277,15 @@ class SiftLiteLLMHook(CustomLogger):
         slot until it finishes. A cancelled caller's queued worker skips work.
         """
         if not self._slots.acquire(blocking=False):
-            raise HTTPException(429, detail="Sift is busy", headers={"Retry-After": "1"})
+            # LiteLLM 1.106.2 drops HTTPException.headers in its Messages error
+            # conversion. Retire this adapter when that conversion preserves them.
+            raise ProxyException(
+                message="Sift is busy",
+                type="invalid_request_error",
+                param=None,
+                code=429,
+                headers={"Retry-After": "1"},
+            )
         abandoned = threading.Event()
 
         def run() -> dict | None:
@@ -313,7 +330,7 @@ class SiftLiteLLMHook(CustomLogger):
         if router is None:
             raise HTTPException(503, detail="Sift token counter is unavailable")
 
-        return await self._compact(router, data, call_type=call_type, target=target)
+        return await self._compact(router, data, call_type=call_type, target=target, max_target=self.max_target)
 
     async def async_post_call_response_headers_hook(
         self, data: dict, user_api_key_dict: Any, response: object,

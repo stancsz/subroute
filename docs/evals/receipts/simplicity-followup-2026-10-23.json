@@ -1,0 +1,664 @@
+{
+  "messages_64": {
+    "client": {
+      "result": "failed",
+      "attempted_post_count": 1,
+      "preflight_state": {
+        "active_model": "mimo-v2.6-pro",
+        "mode": "force",
+        "advisor_model": "gemini-subscription",
+        "reasoning_effort": null,
+        "fast_mode": false
+      },
+      "after_state": {
+        "active_model": "mimo-v2.6-pro",
+        "mode": "force",
+        "advisor_model": "gemini-subscription",
+        "reasoning_effort": null,
+        "fast_mode": false
+      },
+      "before_after_state_equal": true,
+      "request": {
+        "status": 200,
+        "request_shape": {
+          "model": "default",
+          "stream": true,
+          "max_tokens": 64,
+          "tools_count": 0,
+          "tool_choice": {
+            "type": "none"
+          }
+        },
+        "expected_marker": false,
+        "message_start": true,
+        "terminal": "message_stop",
+        "stop_reason": "max_tokens",
+        "tool_use_detected": false,
+        "usage": {
+          "input_tokens": 138,
+          "output_tokens": 64
+        },
+        "safe_headers": {
+          "x-litellm-attempted-retries": "0",
+          "x-litellm-attempted-fallbacks": "0"
+        },
+        "result": "terminal_marker_or_tool_use_mismatch",
+        "elapsed_seconds": 4.45
+      },
+      "elapsed_seconds": 5.034
+    },
+    "accounting": {
+      "client_exit_code": 1,
+      "client_result": "failed",
+      "policy_bytes_unchanged": true,
+      "staging_lifecycle_unchanged": true,
+      "production_and_experts_lifecycle_unchanged": true,
+      "attempt_receipts": [
+        {
+          "attempt_id": "670f8187-229e-4240-8886-26497704039d",
+          "request_id": "13aefad9-fdff-488e-a5a3-9a814ab32c8d",
+          "outcome": "complete",
+          "role": "inference",
+          "kind": "provider",
+          "api_path": "/v1/messages",
+          "upstream_model": "openai/mimo-v2.6-pro",
+          "provider_id": "openai",
+          "usage_complete": true
+        },
+        {
+          "attempt_id": "7cf77bbe-06ef-4ef5-acd9-4429c861e8f4",
+          "request_id": "13aefad9-fdff-488e-a5a3-9a814ab32c8d",
+          "outcome": "complete",
+          "role": "inference",
+          "kind": "bridge",
+          "api_path": "/v1/messages",
+          "upstream_model": "openai/mimo-v2.6-pro",
+          "provider_id": "openai",
+          "usage_complete": true
+        }
+      ],
+      "expert_attempts_observed": 0,
+      "artifact_sha256": "f3a84b9236ee726c98bb2705bd03c1f212178b60c2179ce6a629059c1426a111",
+      "provider_identity_claim": "receipt-scoped only; no assumption from public model name",
+      "messages_live": "one explicit tool_choice none request; no expert budget acceptance"
+    }
+  },
+  "messages_256": {
+    "client": {
+      "result": "passed",
+      "attempted_post_count": 1,
+      "preflight_state": {
+        "active_model": "mimo-v2.6-pro",
+        "mode": "force",
+        "advisor_model": "gemini-subscription",
+        "reasoning_effort": null,
+        "fast_mode": false
+      },
+      "after_state": {
+        "active_model": "mimo-v2.6-pro",
+        "mode": "force",
+        "advisor_model": "gemini-subscription",
+        "reasoning_effort": null,
+        "fast_mode": false
+      },
+      "before_after_state_equal": true,
+      "request": {
+        "status": 200,
+        "request_shape": {
+          "model": "default",
+          "stream": true,
+          "max_tokens": 256,
+          "tools_count": 0,
+          "tool_choice": {
+            "type": "none"
+          }
+        },
+        "expected_marker": true,
+        "message_start": true,
+        "terminal": "message_stop",
+        "stop_reason": "end_turn",
+        "tool_use_detected": false,
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 21
+        },
+        "safe_headers": {
+          "x-litellm-attempted-retries": "0",
+          "x-litellm-attempted-fallbacks": "0"
+        },
+        "result": "passed",
+        "elapsed_seconds": 2.34
+      },
+      "elapsed_seconds": 2.386
+    },
+    "accounting": {
+      "client_exit_code": 0,
+      "client_result": "passed",
+      "policy_bytes_unchanged": true,
+      "staging_lifecycle_unchanged": true,
+      "production_and_experts_lifecycle_unchanged": true,
+      "attempt_receipts": [
+        {
+          "attempt_id": "9975fb0a-6c84-4c91-ab0c-2c0e6d597645",
+          "request_id": "cd86c908-d6d2-4130-ab7a-529517a2af19",
+          "outcome": "complete",
+          "role": "inference",
+          "kind": "provider",
+          "api_path": "/v1/messages",
+          "upstream_model": "openai/mimo-v2.6-pro",
+          "provider_id": "openai",
+          "usage_complete": true
+        },
+        {
+          "attempt_id": "3771a1c7-5a40-4488-bb06-79374c73ee92",
+          "request_id": "cd86c908-d6d2-4130-ab7a-529517a2af19",
+          "outcome": "complete",
+          "role": "inference",
+          "kind": "bridge",
+          "api_path": "/v1/messages",
+          "upstream_model": "openai/mimo-v2.6-pro",
+          "provider_id": "openai",
+          "usage_complete": true
+        }
+      ],
+      "expert_attempts_observed": 0,
+      "artifact_sha256": "c80556f42d6cd2841b37a366e1410dbdc7d9e16442aded868d53135a79d124c2",
+      "provider_identity_claim": "receipt-scoped only; no assumption from public model name",
+      "messages_live": "one explicit tool_choice none request; no expert budget acceptance"
+    }
+  },
+  "expert_live": {
+    "mode": "live",
+    "selected_aliases": [
+      "codex-luna-advisor",
+      "gemini-3.8-flash-advisor"
+    ],
+    "result": "AUDIT_UNAVAILABLE_OR_FAILED",
+    "calls": [
+      {
+        "alias": "codex-luna-advisor",
+        "status": 200,
+        "finish_reason": "stop",
+        "terminal": true,
+        "marker": true,
+        "usage_as_reported": {
+          "completion_tokens": 7,
+          "prompt_tokens": 15693,
+          "total_tokens": 15700
+        },
+        "input_tokens_as_reported": 15693,
+        "payload_before_sha256": "ce7e567544bd26cc9fb5ef542ea4ecac4c9f14ecd16d76361a1c6a51ef5acb34",
+        "payload_after_sha256": "ce7e567544bd26cc9fb5ef542ea4ecac4c9f14ecd16d76361a1c6a51ef5acb34",
+        "payload_before_bytes": 189378,
+        "payload_after_bytes": 189378,
+        "payload_unchanged": true,
+        "sift_headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33213",
+          "x-sift-estimated-forwarded-tokens": "15863"
+        },
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "audit_valid": true,
+        "usage_available": true
+      },
+      {
+        "alias": "gemini-3.8-flash-advisor",
+        "status": 200,
+        "finish_reason": "stop",
+        "terminal": true,
+        "marker": false,
+        "usage_as_reported": {
+          "completion_tokens": 283,
+          "prompt_tokens": 19460,
+          "total_tokens": 19743
+        },
+        "input_tokens_as_reported": 19460,
+        "payload_before_sha256": "d35cc30b3e6ecf37591740b8fd768c75a8b9cb30d624bf4c5a5df5c38c4ff402",
+        "payload_after_sha256": "d35cc30b3e6ecf37591740b8fd768c75a8b9cb30d624bf4c5a5df5c38c4ff402",
+        "payload_before_bytes": 189356,
+        "payload_after_bytes": 189356,
+        "payload_unchanged": true,
+        "sift_headers": {
+          "x-sift-compacted": "true",
+          "x-sift-estimated-input-tokens": "33213",
+          "x-sift-estimated-forwarded-tokens": "15863"
+        },
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "audit_valid": true,
+        "usage_available": true
+      }
+    ]
+  },
+  "expert_execution": {
+    "exit_code": 1,
+    "harness_sha256": "2702881e381a9fe7f6ef191b8dbc5f0c5ceaeebb8f3a153617f7b662f660eb30",
+    "image": "sha256:24f4c0d751fedaf65f97811712ce8a16b8025831f2e85cdfda351f6c0edabff7",
+    "container_id": "0f1ce6745808b420a91b4315c4bcb938f66851a8888c59e771ab771d3b4967b7",
+    "supervisor_bound_seconds": 95,
+    "lifecycle_unchanged": true,
+    "credentials_printed": false,
+    "retry_count": 0
+  },
+  "expert_offline": {
+    "mode": "offline",
+    "result": "PASS",
+    "aliases": 9,
+    "cases": [
+      {
+        "alias": "gemini-3.8-flash-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189356,
+        "payload_sha256": "d35cc30b3e6ecf37591740b8fd768c75a8b9cb30d624bf4c5a5df5c38c4ff402",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "gemini-3.7-flash-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189356,
+        "payload_sha256": "921d29a9457d431630067ccfebee5c9f6ccb6c078873d5bb747f7aa2e2eb486e",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "gemini-3.6-flash-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189356,
+        "payload_sha256": "9f1d936553c77606a304063af9b8feb372c2e3768c52328d5ba2bf25e252ff1e",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "gemini-3.1-pro-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189354,
+        "payload_sha256": "b8b6bbb83b1c213f4b04b338bc0df70a5b4fc81e0d4450a569457f5b8188756c",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "gemini-4-argon-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189354,
+        "payload_sha256": "2fa06a818dd525cc6e17257b9d65316ebb7dab92d6623320cd110e720a53af95",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "codex-luna-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189350,
+        "payload_sha256": "1c5539de71b6da2564d99383b201bff1da463b5bc044190a124e916ed2ac2441",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "codex-sol-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189349,
+        "payload_sha256": "fe488172cb3732df6b9199cdb255c2d0af7e262f425e7d03724263bfbb7ca583",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "codex-astra-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189351,
+        "payload_sha256": "400053905608f52e4de465a913282109d85aabde7a80a1466c9c76a2ab65e339",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      },
+      {
+        "alias": "codex-gpt-6.1-sol-advisor",
+        "input_tokens": 33213,
+        "forwarded_tokens": 15863,
+        "compacted": true,
+        "payload_bytes": 189357,
+        "payload_sha256": "def78b21ec3347930b8ab17a055731ec380a3d345433a16c2299d3cc5ff7180d",
+        "original_payload_unchanged": true,
+        "private_copy": true
+      }
+    ],
+    "target": 25600,
+    "count_origin": "native Router estimate, not provider usage",
+    "ordinary_alias_unchanged": true
+  },
+  "cancellation_http_fixture": {
+    "result": "passed",
+    "live_requests": 0,
+    "cases": [
+      {
+        "case": "error500",
+        "passed": true,
+        "issues": [],
+        "provider_calls": 1,
+        "expert_calls": 0,
+        "observations": [
+          {
+            "index": 0,
+            "request_id": "031b95f4-b80e-450e-a1fb-a907d9e8192a",
+            "client_outcome": "InternalServerError",
+            "native_context_restored": true,
+            "parent_context_restored": true
+          }
+        ],
+        "rows": [
+          {
+            "kind": "bridge",
+            "role": "inference",
+            "request_id": "031b95f4-b80e-450e-a1fb-a907d9e8192a",
+            "outcome": "failed",
+            "facts": {}
+          },
+          {
+            "kind": "provider",
+            "role": "inference",
+            "request_id": "031b95f4-b80e-450e-a1fb-a907d9e8192a",
+            "outcome": "failed",
+            "facts": {}
+          }
+        ]
+      },
+      {
+        "case": "cancel",
+        "passed": true,
+        "issues": [],
+        "provider_calls": 1,
+        "expert_calls": 0,
+        "observations": [
+          {
+            "index": 0,
+            "request_id": "49de4739-e72e-4b83-aba0-a5e965d98f47",
+            "client_outcome": "CancelledError",
+            "native_context_restored": true,
+            "parent_context_restored": true
+          }
+        ],
+        "rows": [
+          {
+            "kind": "bridge",
+            "role": "inference",
+            "request_id": "49de4739-e72e-4b83-aba0-a5e965d98f47",
+            "outcome": "cancelled",
+            "facts": {
+              "usage_complete": false
+            }
+          },
+          {
+            "kind": "provider",
+            "role": "inference",
+            "request_id": "49de4739-e72e-4b83-aba0-a5e965d98f47",
+            "outcome": "cancelled",
+            "facts": {
+              "usage_complete": false
+            }
+          }
+        ]
+      },
+      {
+        "case": "overlap",
+        "passed": true,
+        "issues": [],
+        "provider_calls": 2,
+        "expert_calls": 0,
+        "observations": [
+          {
+            "index": 0,
+            "request_id": "273b23b5-7a8b-4ad6-811a-9ede12bbd97a",
+            "client_outcome": "success",
+            "native_context_restored": true,
+            "parent_context_restored": true
+          },
+          {
+            "index": 1,
+            "request_id": "c68f5d22-be16-4314-bcac-a482e64cc09d",
+            "client_outcome": "success",
+            "native_context_restored": true,
+            "parent_context_restored": true
+          }
+        ],
+        "rows": [
+          {
+            "kind": "bridge",
+            "role": "inference",
+            "request_id": "273b23b5-7a8b-4ad6-811a-9ede12bbd97a",
+            "outcome": "complete",
+            "facts": {
+              "input_tokens": 7,
+              "output_tokens": 3,
+              "usage_complete": true
+            }
+          },
+          {
+            "kind": "bridge",
+            "role": "inference",
+            "request_id": "c68f5d22-be16-4314-bcac-a482e64cc09d",
+            "outcome": "complete",
+            "facts": {
+              "input_tokens": 7,
+              "output_tokens": 3,
+              "usage_complete": true
+            }
+          },
+          {
+            "kind": "provider",
+            "role": "inference",
+            "request_id": "273b23b5-7a8b-4ad6-811a-9ede12bbd97a",
+            "outcome": "complete",
+            "facts": {
+              "input_tokens": 7,
+              "output_tokens": 3,
+              "total_tokens": 10,
+              "usage_complete": true
+            }
+          },
+          {
+            "kind": "provider",
+            "role": "inference",
+            "request_id": "c68f5d22-be16-4314-bcac-a482e64cc09d",
+            "outcome": "complete",
+            "facts": {
+              "input_tokens": 7,
+              "output_tokens": 3,
+              "total_tokens": 10,
+              "usage_complete": true
+            }
+          }
+        ]
+      },
+      {
+        "case": "overlap_cancel",
+        "passed": true,
+        "issues": [],
+        "provider_calls": 2,
+        "expert_calls": 0,
+        "observations": [
+          {
+            "index": 0,
+            "request_id": "34320153-fc65-4521-9e3d-ab2c89279468",
+            "client_outcome": "CancelledError",
+            "native_context_restored": true,
+            "parent_context_restored": true
+          },
+          {
+            "index": 1,
+            "request_id": "b3218fe4-b15b-4a61-81b1-aa9164ba0307",
+            "client_outcome": "success",
+            "native_context_restored": true,
+            "parent_context_restored": true
+          }
+        ],
+        "rows": [
+          {
+            "kind": "bridge",
+            "role": "inference",
+            "request_id": "34320153-fc65-4521-9e3d-ab2c89279468",
+            "outcome": "cancelled",
+            "facts": {
+              "usage_complete": false
+            }
+          },
+          {
+            "kind": "bridge",
+            "role": "inference",
+            "request_id": "b3218fe4-b15b-4a61-81b1-aa9164ba0307",
+            "outcome": "complete",
+            "facts": {
+              "input_tokens": 7,
+              "output_tokens": 3,
+              "usage_complete": true
+            }
+          },
+          {
+            "kind": "provider",
+            "role": "inference",
+            "request_id": "34320153-fc65-4521-9e3d-ab2c89279468",
+            "outcome": "cancelled",
+            "facts": {
+              "usage_complete": false
+            }
+          },
+          {
+            "kind": "provider",
+            "role": "inference",
+            "request_id": "b3218fe4-b15b-4a61-81b1-aa9164ba0307",
+            "outcome": "complete",
+            "facts": {
+              "input_tokens": 7,
+              "output_tokens": 3,
+              "total_tokens": 10,
+              "usage_complete": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "selected_cancellation_http_fixture": {
+    "result": "passed",
+    "live_requests": 0,
+    "provider_calls": 3,
+    "expert_calls": 1,
+    "completed_rows_preserved": 4,
+    "context_restored": true,
+    "rows": [
+      {
+        "kind": "bridge",
+        "role": "inference",
+        "outcome": "complete",
+        "facts": {
+          "input_tokens": 7,
+          "output_tokens": 3,
+          "usage_complete": true
+        }
+      },
+      {
+        "kind": "provider",
+        "role": "inference",
+        "outcome": "complete",
+        "facts": {
+          "input_tokens": 7,
+          "output_tokens": 3,
+          "total_tokens": 10,
+          "usage_complete": true
+        }
+      },
+      {
+        "kind": "bridge",
+        "role": "advisor",
+        "outcome": "complete",
+        "facts": {
+          "input_tokens": 7,
+          "output_tokens": 3,
+          "usage_complete": true
+        }
+      },
+      {
+        "kind": "provider",
+        "role": "advisor",
+        "outcome": "complete",
+        "facts": {
+          "input_tokens": 7,
+          "output_tokens": 3,
+          "total_tokens": 10,
+          "usage_complete": true
+        }
+      },
+      {
+        "kind": "bridge",
+        "role": "inference",
+        "outcome": "cancelled",
+        "facts": {
+          "usage_complete": false
+        }
+      },
+      {
+        "kind": "provider",
+        "role": "inference",
+        "outcome": "cancelled",
+        "facts": {
+          "usage_complete": false
+        }
+      }
+    ]
+  },
+  "rollout": {
+    "gateway-staging": {
+      "service": "gateway-staging",
+      "container": {
+        "id": "47d0365e9a8d63e8fa19e40e248c3675c15fa0385b64b97a9c495cca566cdc5b",
+        "image": "sha256:24f4c0d751fedaf65f97811712ce8a16b8025831f2e85cdfda351f6c0edabff7",
+        "started": "2026-10-24T01:10:31.42021079Z",
+        "restart_count": 0
+      },
+      "image": "sha256:24f4c0d751fedaf65f97811712ce8a16b8025831f2e85cdfda351f6c0edabff7",
+      "readiness": 200,
+      "liveness": 200,
+      "auth_without_key": 401,
+      "auth_with_key": 200,
+      "other_lifecycles_unchanged": true,
+      "saved_policy_preserved": true,
+      "baked_source_and_configs_verified": true,
+      "provider_calls": 0,
+      "live_acceptance": "pending"
+    },
+    "experts": {
+      "service": "experts",
+      "container": {
+        "id": "0f1ce6745808b420a91b4315c4bcb938f66851a8888c59e771ab771d3b4967b7",
+        "image": "sha256:24f4c0d751fedaf65f97811712ce8a16b8025831f2e85cdfda351f6c0edabff7",
+        "started": "2026-10-24T01:11:53.062326114Z",
+        "restart_count": 0
+      },
+      "image": "sha256:24f4c0d751fedaf65f97811712ce8a16b8025831f2e85cdfda351f6c0edabff7",
+      "readiness": 200,
+      "liveness": 200,
+      "auth_without_key": 401,
+      "auth_with_key": 200,
+      "other_lifecycles_unchanged": true,
+      "saved_policy_preserved": true,
+      "baked_source_and_configs_verified": true,
+      "provider_calls": 0,
+      "live_acceptance": "pending"
+    }
+  },
+  "scope": "Exact nonlive suite covers clean selected source; deployed integration image preserves unrelated original working-tree outbox code and is separately identified by hashed image/source manifests. Expert whole-harness result remains failed: Gemini exact-marker false. No inferred answer content/cause."
+}

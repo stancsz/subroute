@@ -174,9 +174,6 @@ def gateway_key() -> str:
 
 
 def set_policy(client: httpx.Client, state: dict, *, test: bool) -> None:
-    advisor_locked = False
-    if test:
-        advisor_locked = client.get("/api/routing-options").json().get("advisor_model_locked") is True
     routing = {
         "model": MODEL if test else state["active_model"],
         "mode": "alias" if test else state["mode"],
@@ -184,16 +181,11 @@ def set_policy(client: httpx.Client, state: dict, *, test: bool) -> None:
         "fast_mode": state.get("fast_mode", False),
     }
     client.post("/api/active-model", json=routing).raise_for_status()
-    # A locked account Advisor cannot be disabled for the staging run. Leave
-    # that policy untouched rather than sending an invalid null update.
-    if test and advisor_locked:
+    # Advisor remains selected in policy; the target decides whether to call
+    # the optional Messages tool. There is no automatic consultation toggle.
+    if test:
         return
-    advisor = {
-        "advisor_model": None if test else state["advisor_model"],
-        "reasoning_effort": None if test else state["advisor_reasoning_effort"],
-        "advisor_sensitivity": state["advisor_sensitivity"],
-    }
-    client.post("/api/advisor-model", json=advisor).raise_for_status()
+    client.post("/api/advisor-model", json={"advisor_model": state["advisor_model"]}).raise_for_status()
 
 
 def task_source_names(name: str) -> tuple[str, ...]:
@@ -1004,9 +996,7 @@ def main() -> int:
         finally:
             set_policy(client, before, test=False)
             after = client.get("/api/active-model").json()
-            keys = ("active_model", "mode", "reasoning_effort", "advisor_model",
-                    "advisor_reasoning_effort", "advisor_trigger", "advisor_sensitivity",
-                    "advisor_classifier", "fast_mode")
+            keys = ("active_model", "mode", "reasoning_effort", "advisor_model", "fast_mode")
             assert all(after[key] == before[key] for key in keys), "staging policy was not restored"
     summary = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),

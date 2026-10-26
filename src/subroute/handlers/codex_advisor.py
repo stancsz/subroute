@@ -258,7 +258,10 @@ async def call_codex_streaming_collect(
     timeout: float = 60.0,
     *,
     reasoning_effort: str | None = None,
+    max_output_tokens: int | None = None,
 ) -> tuple[str, Usage]:
+    if max_output_tokens is not None and (type(max_output_tokens) is not int or max_output_tokens < 1):
+        raise ValueError("Codex advisor max_output_tokens must be a positive integer")
     access_token, account_id = read_codex_credentials()
     target_model = MODELS.get(model_name, model_name)
     input_items = build_responses_input(messages)
@@ -278,6 +281,8 @@ async def call_codex_streaming_collect(
     }
     if reasoning_effort is not None:
         payload["reasoning"] = {"effort": reasoning_effort}
+    if max_output_tokens is not None:
+        payload["max_output_tokens"] = max_output_tokens
 
     deltas: list[str] = []
     terminal = None
@@ -345,8 +350,17 @@ class CodexAdvisorLLM(CustomLLM):
             raise CustomLLMError(status_code=400, message="Codex advisor does not support tools")
 
         try:
+            output_limit = optional_params.get("max_output_tokens", kwargs.get("max_output_tokens"))
+            if output_limit is None:
+                output_limit = optional_params.get(
+                    "max_tokens",
+                    kwargs.get("max_tokens", optional_params.get("max_completion_tokens", kwargs.get("max_completion_tokens"))),
+                )
             content, usage = await call_codex_streaming_collect(
-                model, messages, reasoning_effort=optional_params.get("reasoning_effort")
+                model,
+                messages,
+                reasoning_effort=optional_params.get("reasoning_effort"),
+                max_output_tokens=output_limit,
             )
         except ValueError as exc:
             raise CustomLLMError(status_code=400, message=str(exc)) from exc

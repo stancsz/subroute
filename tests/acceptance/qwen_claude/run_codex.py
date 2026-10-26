@@ -96,8 +96,7 @@ def main() -> int:
         finally:
             set_policy(client, before, test=False)
             after = client.get("/api/active-model").json()
-            fields = ("active_model", "mode", "reasoning_effort", "fast_mode", "advisor_model",
-                      "advisor_reasoning_effort", "advisor_trigger", "advisor_sensitivity", "advisor_classifier")
+            fields = ("active_model", "mode", "reasoning_effort", "fast_mode", "advisor_model")
             assert all(before.get(field) == after.get(field) for field in fields), "staging policy not restored"
     seconds = round(time.perf_counter() - start, 2)
     end_utc = datetime.now(timezone.utc).isoformat()

@@ -3016,9 +3016,7 @@ def run_request(workspace: Path, request: str, validators: list[list[str]], *,
         finally:
             dispatch.set_policy(client, before, test=False)
             after = client.get("/api/active-model").json()
-            keys = ("active_model", "mode", "reasoning_effort", "advisor_model",
-                    "advisor_reasoning_effort", "advisor_trigger", "advisor_sensitivity",
-                    "advisor_classifier", "fast_mode")
+            keys = ("active_model", "mode", "reasoning_effort", "advisor_model", "fast_mode")
             if not all(after.get(name) == before.get(name) for name in keys):
                 raise RuntimeError("staging policy restoration could not be verified")
     state["state_file"] = str(state_file)

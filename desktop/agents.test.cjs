@@ -24,24 +24,24 @@ test("builds isolated launch profiles without touching agent homes", async () =>
     assert.equal(codexCatalog.models[0].support_verbosity, true);
     assert.equal(codexCatalog.models[0].default_verbosity, "low");
     assert.equal(codexCatalog.models[0].multi_agent_version, "v2");
-    assert.equal(codexCatalog.models[0].context_window, 4000000);
-    assert.equal(codexCatalog.models[0].max_context_window, 4000000);
+    assert.equal(codexCatalog.models[0].context_window, 256000);
+    assert.equal(codexCatalog.models[0].max_context_window, 256000);
     assert.equal(codexCatalog.models[0].effective_context_window_percent, 100);
-    assert.equal(codexCatalog.models[0].auto_compact_token_limit, 1000000);
-    assert.match(codexConfig, /model_context_window = 4000000/);
-    assert.match(codexConfig, /model_auto_compact_token_limit = 1000000/);
+    assert.equal(codexCatalog.models[0].auto_compact_token_limit, 204800);
+    assert.match(codexConfig, /model_context_window = 256000/);
+    assert.match(codexConfig, /model_auto_compact_token_limit = 204800/);
     assert.match(codexConfig, /model_auto_compact_token_limit_scope = "total"/);
-    assert.ok(codex.args.includes("model_context_window=4000000"));
-    assert.ok(codex.args.includes("model_auto_compact_token_limit=1000000"));
+    assert.ok(codex.args.includes("model_context_window=256000"));
+    assert.ok(codex.args.includes("model_auto_compact_token_limit=204800"));
     assert.ok(codex.args.includes('model_auto_compact_token_limit_scope="total"'));
     assert.match(hermesConfig, /base_url: "http:\/\/127.0.0.1:4000\/v1"/);
     assert.equal(hermes.env.HERMES_HOME, path.join(launchHome, "hermes"));
-    assert.match(hermesConfig, /context_length: 4000000/);
-    assert.match(hermesConfig, /threshold: 0\.25/);
-    assert.match(hermesConfig, /threshold_tokens: 1000000/);
+    assert.match(hermesConfig, /context_length: 256000/);
+    assert.match(hermesConfig, /threshold: 0\.8/);
+    assert.match(hermesConfig, /threshold_tokens: 204800/);
     assert.match(dshPatch, /subroute\.settings\.yaml/);
     assert.match(dshPatch, /disabled: false/);
-    assert.match(dshPatch, /thresholdRatio: 0\.25/);
+    assert.match(dshPatch, /thresholdRatio: 0\.8/);
     assert.equal(dsh.env.DSH_HOME, path.join(launchHome, "dsh"));
   } finally {
     await fs.rm(launchHome, { recursive: true, force: true });
@@ -56,17 +56,17 @@ test("routes every launch through Subroute with a full-window compaction budget"
     assert.equal(claude.env.ANTHROPIC_BASE_URL, gateway);
     assert.equal(claude.env.ANTHROPIC_MODEL, "auto");
     assert.equal(claude.env.CLAUDE_CODE_SUBAGENT_MODEL, "auto");
-    assert.equal(claude.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, "4000000");
-    assert.equal(claude.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "4000000");
-    assert.equal(claude.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, "25");
+    assert.equal(claude.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, "256000");
+    assert.equal(claude.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "256000");
+    assert.equal(claude.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, "80");
     assert.equal(claude.env.DISABLE_AUTO_COMPACT, "");
     assert.equal(claude.env.DISABLE_COMPACT, "");
 
     const opencode = await prepareLaunch("opencode", gateway, launchHome);
     const settings = JSON.parse(opencode.env.OPENCODE_CONFIG_CONTENT);
     const limits = settings.provider.subroute.models.auto.limit;
-    assert.equal(limits.context, 4000000);
-    assert.equal(limits.input - settings.compaction.reserved, 1000000);
+    assert.equal(limits.context, 256000);
+    assert.equal(limits.input - settings.compaction.reserved, 204800);
     assert.equal(settings.compaction.auto, true);
     assert.equal(settings.compaction.prune, false);
     assert.equal(opencode.env.OPENCODE_DISABLE_AUTOCOMPACT, "");
@@ -76,15 +76,15 @@ test("routes every launch through Subroute with a full-window compaction budget"
     assert.equal(openclaw.env.OPENCLAW_STATE_DIR, path.join(launchHome, "openclaw"));
     assert.equal(claw.models.providers.subroute.baseUrl, `${gateway}/v1`);
     assert.equal(claw.agents.defaults.model.primary, "subroute/auto");
-    assert.equal(claw.models.providers.subroute.models[0].contextWindow, 4000000);
+    assert.equal(claw.models.providers.subroute.models[0].contextWindow, 256000);
     const clawSettings = JSON.parse(await fs.readFile(path.join(claw.agents.list[0].agentDir, "settings.json"), "utf8"));
-    assert.equal(claw.models.providers.subroute.models[0].contextWindow - clawSettings.compaction.reserveTokens, 1000000);
+    assert.equal(claw.models.providers.subroute.models[0].contextWindow - clawSettings.compaction.reserveTokens, 204800);
     assert.equal(clawSettings.compaction.enabled, true);
     assert.equal(claw.agents.defaults.compaction.enabled, true);
 
     const dsh = await prepareLaunch("dsh", gateway, launchHome);
     const dshSettings = await fs.readFile(path.join(dsh.env.DSH_HOME, "subroute.settings.yaml"), "utf8");
-    assert.match(dshSettings, /contextWindow: 4000000/);
+    assert.match(dshSettings, /contextWindow: 256000/);
   } finally {
     await fs.rm(launchHome, { recursive: true, force: true });
   }

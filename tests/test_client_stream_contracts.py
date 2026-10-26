@@ -214,7 +214,11 @@ def test_responses_reasoning_can_resume_without_reusing_closed_items(format_plug
     chunks = [{"id": "chatcmpl-transition", "object": "chat.completion.chunk", "created": 1, "model": "fixture",
                "choices": [{"index": 0, "delta": delta, "finish_reason": None}]} for delta in deltas]
     chunks[0]["choices"][0]["delta"]["role"] = "assistant"
-    chunks.append({"id": "chatcmpl-transition", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+    chunks.append({
+        "id": "chatcmpl-transition",
+        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    })
     with _configured_proxy(upstream_chunks=chunks, dynamic_routing_plugin=format_plugin) as (client, *_):
         path, payload = _request("responses", True)
         response = client.post(path, json=payload)

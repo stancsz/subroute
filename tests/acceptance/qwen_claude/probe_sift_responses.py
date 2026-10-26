@@ -74,8 +74,7 @@ def main() -> int:
         finally:
             set_policy(client, before, test=False)
             after = client.get("/api/active-model").json()
-            fields = ("active_model", "mode", "reasoning_effort", "fast_mode", "advisor_model",
-                      "advisor_reasoning_effort", "advisor_trigger", "advisor_sensitivity", "advisor_classifier")
+            fields = ("active_model", "mode", "reasoning_effort", "fast_mode", "advisor_model")
             assert all(before.get(field) == after.get(field) for field in fields)
     return 0 if all(
         row["terminal"] == "response.completed" and row["status"] == "completed"
