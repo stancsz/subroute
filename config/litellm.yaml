@@ -83,7 +83,7 @@ model_list:
       <<: *context_policy
       advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 3.8 Flash"
-      provider: Gemini
+      provider: Antigravity
       source_id: gemini-subscription
       access: Subscription
       reasoning_efforts: [low, medium, high]
@@ -98,7 +98,7 @@ model_list:
       <<: *context_policy
       advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 4 Argon"
-      provider: Gemini
+      provider: Antigravity
       source_id: gemini-subscription
       access: Subscription
       reasoning_efforts: [low, medium, high]
@@ -113,7 +113,7 @@ model_list:
       <<: *context_policy
       advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 3.7 Flash"
-      provider: Gemini
+      provider: Antigravity
       source_id: gemini-subscription
       access: Subscription
       capabilities: [text, tools, buffered-sse]
@@ -128,7 +128,7 @@ model_list:
       <<: *context_policy
       advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 3.6 Flash"
-      provider: Gemini
+      provider: Antigravity
       source_id: gemini-subscription
       access: Subscription
       capabilities: [text, tools, buffered-sse]
@@ -143,7 +143,7 @@ model_list:
       <<: *context_policy
       advisor_max_input_tokens: 32000
       display_name: Gemini 3.1 Pro
-      provider: Gemini
+      provider: Antigravity
       source_id: gemini-subscription
       access: Subscription
       capabilities: [text, tools, buffered-sse]
@@ -151,6 +151,49 @@ model_list:
       reasoning_efforts: [low, high]
     litellm_params:
       model: antigravity/gemini-3.1-pro
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: antigravity-claude-opus-5-5
+    model_info:
+      <<: *context_policy
+      display_name: "Claude Opus 5.5"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      reasoning_efforts: [low, medium, high]
+      capabilities: [text, tools, buffered-sse]
+    litellm_params:
+      model: antigravity/agy-opus-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: antigravity-claude-sonnet-5-5
+    model_info:
+      <<: *context_policy
+      display_name: "Claude Sonnet 5.5"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      reasoning_efforts: [low, medium, high]
+      capabilities: [text, tools, buffered-sse]
+    litellm_params:
+      model: antigravity/agy-sonnet-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
+  # The dynamic catalog names are admitted by the local control plane.
+  - model_name: catalog-openai/*
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params:
+      model: codex-subscription/*
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers: {ChatGPT-Account-ID: refreshed-at-dispatch, User-Agent: "OpenAI-Codex/0.166.0"}
+      allowed_openai_params: [reasoning_effort]
+      store: false
+
+  - model_name: catalog-antigravity/*
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params:
+      model: antigravity/catalog--*
       allowed_openai_params: [reasoning_effort]
 
   # The CustomLLM uses LiteLLM's OpenAI Responses adapter for the upstream
@@ -162,7 +205,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Sol"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
@@ -181,7 +224,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Astra"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
@@ -200,11 +243,30 @@ model_list:
       display_name: "OpenAI: GPT-6.1 Sol"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [tools, streaming]
     litellm_params:
       model: codex-subscription/gpt-6.1-sol
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
+      store: false
+
+  - model_name: codex-gpt-6.1-terra
+    model_info:
+      <<: *context_policy
+      display_name: "OpenAI: GPT-6.1 Terra"
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: codex-subscription/gpt-6.1-terra
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:
@@ -219,7 +281,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Luna"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max]
       capabilities: [tools, streaming, image-generation]
     litellm_params:
@@ -241,7 +303,7 @@ model_list:
       display_name: Default target
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max]
       capabilities: [tools, streaming]
     litellm_params:
@@ -264,7 +326,7 @@ model_list:
       display_name: "OpenAI: GPT-6.1 Sol"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [text]
       selectable: false
@@ -279,7 +341,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Sol"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [text]
       selectable: false
@@ -294,7 +356,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Astra"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
       capabilities: [text]
       selectable: false
@@ -309,7 +371,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Luna"
       provider: OpenAI
       source_id: openai-subscription
-      access: Codex subscription
+      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max]
       capabilities: [text]
       selectable: false
@@ -318,9 +380,145 @@ model_list:
       model: codex-advisor/gpt-6-luna
       allowed_openai_params: [reasoning_effort]
 
+  - model_name: codex-gpt-6.1-terra-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "gpt-6.1-terra"
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Subscription
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-6.1-terra
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: codex-gpt-5.6-luna-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "gpt-5.6-luna"
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Subscription
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-luna
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: codex-gpt-5.6-sol-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "gpt-5.6-sol"
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Subscription
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-sol
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: codex-gpt-5.6-terra-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "gpt-5.6-terra"
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Subscription
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-terra
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-gemini-4-argon-medium-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "gemini-4-argon-medium"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-4-argon-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-gemini-3.8-flash-medium-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "gemini-3.8-flash-medium"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-3.8-flash-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-opus-5-5-medium-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "claude-opus-5-5-medium"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/agy-opus-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-sonnet-5-5-medium-advisor
+    model_info:
+      <<: *advisor_context_policy
+      display_name: "claude-sonnet-5-5-medium"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/agy-sonnet-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
   # Private Anthropic Messages transports used only by LiteLLM's optional
   # model-selected Advisor tool. The 4040 experts service owns Sift and the
   # actual 32K provider admission limit; do not add a larger context here.
+  - model_name: experts/codex-gpt-6.1-terra-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/codex-gpt-6.1-terra-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/codex-gpt-5.6-luna-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/codex-gpt-5.6-luna-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/codex-gpt-5.6-sol-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/codex-gpt-5.6-sol-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/codex-gpt-5.6-terra-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/codex-gpt-5.6-terra-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/agy-gemini-4-argon-medium-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/agy-gemini-4-argon-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/agy-gemini-3.8-flash-medium-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/agy-gemini-3.8-flash-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/agy-opus-5-5-medium-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/agy-opus-5-5-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/agy-sonnet-5-5-medium-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/agy-sonnet-5-5-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
   - model_name: experts/codex-gpt-6.1-sol-advisor
     model_info: {selectable: false, disable_background_health_check: true}
     litellm_params: {model: "anthropic/codex-gpt-6.1-sol-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
@@ -648,6 +846,14 @@ router_settings:
     - codex-luna-advisor: []
     # A failed 4040 consultation is final. Never spend the ordinary executor
     # chain when the optional expert tool is unavailable.
+    - experts/codex-gpt-6.1-terra-advisor: []
+    - experts/codex-gpt-5.6-luna-advisor: []
+    - experts/codex-gpt-5.6-sol-advisor: []
+    - experts/codex-gpt-5.6-terra-advisor: []
+    - experts/agy-gemini-4-argon-medium-advisor: []
+    - experts/agy-gemini-3.8-flash-medium-advisor: []
+    - experts/agy-opus-5-5-medium-advisor: []
+    - experts/agy-sonnet-5-5-medium-advisor: []
     - experts/codex-gpt-6.1-sol-advisor: []
     - experts/codex-sol-advisor: []
     - experts/codex-astra-advisor: []

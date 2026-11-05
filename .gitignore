@@ -6,6 +6,7 @@ desktop/node_modules/
 .tmp-*.png
 *.egg-info/
 config/active_model.json
+config/active_model.catalog.json
 .env
 /tmp/
 

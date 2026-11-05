@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -143,6 +144,7 @@ class Trace:
     parent_attempt_id: str | None = None
     api_path: str = "/local"
     role: str = "inference"
+    local_master: bool = False
 
 
 trace_context: ContextVar[Trace | None] = ContextVar("subroute_usage_trace", default=None)
@@ -196,12 +198,74 @@ def verify_grant(value: str, secret: str, path: str) -> Trace:
         raise HTTPException(401, "Invalid accounting grant") from None
 
 
+
+# Telemetry must never wait indefinitely behind SQLite locks or database I/O.
+_TELEMETRY_DEADLINE_SECONDS = 1.0
+
+
+def _bounded_receipt_operation(fn):
+    @wraps(fn)
+    async def bounded(*args, **kwargs):
+        try:
+            async with asyncio.timeout(_TELEMETRY_DEADLINE_SECONDS):
+                return await fn(*args, **kwargs)
+        except TimeoutError:
+            logger.warning("usage telemetry timed out operation=%s; usage may be incomplete", fn.__name__)
+            return False
+    return bounded
+
+
 class ReceiptStore:
     """Use the proxy's generated Prisma connection, with bounded SQL calls."""
     def __init__(self, db: Any = None):
         self._db = db
         self._ready = False
         self._lock = asyncio.Lock()
+        self._outboxes = {}
+        self._outbox_startup_lock = asyncio.Lock()
+
+    def outbox(self, environment: str):
+        from .usage_outbox import UsageOutbox
+        path = os.getenv("SUBROUTE_USAGE_OUTBOX_PATH") or os.path.join("state", f"usage-outbox-{environment}.sqlite3")
+        root, ext = os.path.splitext(path)
+        path = f"{root}-{environment}{ext or '.sqlite3'}"
+        # Compose supplies distinct persistent paths for production and staging.
+        # Environment suffix also protects local/test use of a shared directory.
+        key = (path, environment)
+        if key not in self._outboxes:
+            self._outboxes[key] = UsageOutbox(path)
+        return self._outboxes[key]
+
+    async def _prepare_outbox(self, outbox):
+        if not getattr(outbox, "_startup_checked", False):
+            async with self._outbox_startup_lock:
+                if not getattr(outbox, "_startup_checked", False):
+                    await outbox.interrupt_pending()
+                    outbox._startup_checked = True
+
+    async def replay(self, environment: str):
+        outbox = self.outbox(environment)
+        await self._prepare_outbox(outbox)
+        try:
+            await self.ensure()
+            for receipt, revision, outcome, updated_at in await outbox.batch(environment):
+                await self.execute("""INSERT INTO subroute_usage_receipts
+                    (attempt_id,environment,request_id,parent_attempt_id,customer_id,key_id,outcome,revision,acked_revision,payload,updated_at)
+                    VALUES($1::uuid,$2,$3::uuid,$4::uuid,$5,$6,$7,$8,0,$9::jsonb,$10)
+                    ON CONFLICT(attempt_id) DO UPDATE SET
+                      outcome=CASE WHEN subroute_usage_receipts.outcome='pending' THEN EXCLUDED.outcome ELSE subroute_usage_receipts.outcome END,
+                      revision=greatest(subroute_usage_receipts.revision,EXCLUDED.revision),
+                      payload=CASE WHEN subroute_usage_receipts.revision<=EXCLUDED.revision
+                        THEN subroute_usage_receipts.payload || EXCLUDED.payload ELSE subroute_usage_receipts.payload END,
+                      updated_at=greatest(subroute_usage_receipts.updated_at,EXCLUDED.updated_at)""",
+                    receipt["attempt_id"], environment, receipt["request_id"], receipt.get("parent_attempt_id"),
+                    receipt.get("customer_id"), receipt["key_id"], outcome, revision, json.dumps(receipt), updated_at)
+                if outcome != "pending":
+                    await outbox.ack(receipt["attempt_id"], revision)
+            return True
+        except Exception as exc:
+            logger.info("usage outbox replay deferred error_type=%s", type(exc).__name__)
+            return False
 
     @property
     def db(self):
@@ -231,6 +295,7 @@ class ReceiptStore:
                 self._ready = True
 
     async def start(self, trace: Trace, model: str, provider: str, role: str, kind: str = "provider") -> str:
+        # Receipts are observational. A storage outage must not gate provider dispatch.
         attempt_id = str(uuid.uuid4())
         payload = {
             "attempt_id": attempt_id, "request_id": trace.request_id,
@@ -241,18 +306,48 @@ class ReceiptStore:
             "kind": kind, "source": "subroute", "created_at": now_ms(),
             "usage_complete": False,
         }
+        async def persist():
+            outbox = None
+            if trace.local_master:
+                try:
+                    outbox = self.outbox(trace.environment)
+                    await self._prepare_outbox(outbox)
+                    await outbox.put(payload, 1, "pending", payload["created_at"])
+                    await self.replay(trace.environment)
+                except Exception as exc:
+                    logger.warning("durable usage storage unavailable environment=%s role=%s error_type=%s",
+                                   trace.environment, role, type(exc).__name__)
+            try:
+                await self.ensure()
+                await self.execute("""INSERT INTO subroute_usage_receipts
+                    (attempt_id,environment,request_id,parent_attempt_id,customer_id,key_id,outcome,payload,updated_at)
+                    VALUES($1::uuid,$2,$3::uuid,$4::uuid,$5,$6,'pending',$7::jsonb,$8)""",
+                    attempt_id, trace.environment, trace.request_id, trace.parent_attempt_id,
+                    trace.customer_id, trace.key_id, json.dumps(payload), now_ms())
+            except Exception as exc:
+                logger.warning("usage receipt unavailable environment=%s role=%s error_type=%s",
+                               trace.environment, role, type(exc).__name__)
         try:
-            await self.ensure()
-            await self.execute("""INSERT INTO subroute_usage_receipts
-                (attempt_id,environment,request_id,parent_attempt_id,customer_id,key_id,outcome,payload,updated_at)
-                VALUES($1::uuid,$2,$3::uuid,$4::uuid,$5,$6,'pending',$7::jsonb,$8)""",
-                attempt_id, trace.environment, trace.request_id, trace.parent_attempt_id,
-                trace.customer_id, trace.key_id, json.dumps(payload), now_ms())
-        except Exception:
-            raise HTTPException(503, "Usage storage unavailable") from None
+            async with asyncio.timeout(_TELEMETRY_DEADLINE_SECONDS):
+                await persist()
+        except TimeoutError:
+            logger.warning("usage telemetry timed out operation=start; usage may be incomplete")
         return attempt_id
 
+    @_bounded_receipt_operation
     async def update(self, attempt_id: str, facts: dict, outcome: str = "pending") -> bool:
+        if outcome == "complete" and facts.get("usage_complete") is not True:
+            logger.warning("provider completed without complete usage attempt_id=%s", attempt_id)
+        # The current trace identifies master-owned calls, including direct advisor
+        # attempts. Persist observed numeric facts before attempting PostgreSQL.
+        trace = trace_context.get()
+        outbox_saved = False
+        if trace is not None and trace.local_master:
+            try:
+                outbox_saved = await self.outbox(trace.environment).update(attempt_id, facts, outcome)
+            except Exception as exc:
+                logger.warning("durable usage outbox write failed environment=%s error_type=%s",
+                               trace.environment, type(exc).__name__)
         try:
             await self.execute("""UPDATE subroute_usage_receipts SET
                 outcome=CASE WHEN outcome='pending' THEN $2 ELSE outcome END,
@@ -261,10 +356,20 @@ class ReceiptStore:
                 attempt_id, outcome, json.dumps(facts), now_ms())
             return True
         except Exception as exc:
-            logger.error("usage receipt write failed attempt_id=%s error_type=%s", attempt_id, type(exc).__name__)
-            return False
+            logger.warning("usage receipt write failed environment=%s error_type=%s",
+                           trace.environment if trace is not None else "unknown", type(exc).__name__)
+            return outbox_saved
 
+    @_bounded_receipt_operation
     async def checkpoint(self, attempt_id: str, facts: dict):
+        trace = trace_context.get()
+        outbox_saved = False
+        if trace is not None and trace.local_master:
+            try:
+                outbox_saved = await self.outbox(trace.environment).update(attempt_id, facts)
+            except Exception as exc:
+                logger.warning("durable usage outbox checkpoint failed environment=%s error_type=%s",
+                               trace.environment, type(exc).__name__)
         try:
             await self.execute("""UPDATE subroute_usage_receipts SET payload=payload || $2::jsonb,
                 revision=revision+1,updated_at=$3 WHERE attempt_id=$1::uuid AND outcome='pending'
@@ -272,10 +377,12 @@ class ReceiptStore:
                 AND (updated_at<$4 OR NOT (payload ? 'input_tokens' OR payload ? 'output_tokens'))""",
                 attempt_id, json.dumps(facts), now_ms(), now_ms()-15_000)
             return True
-        except Exception:
-            logger.error("usage checkpoint write failed attempt_id=%s", attempt_id)
-            return False
+        except Exception as exc:
+            logger.warning("usage checkpoint write failed environment=%s error_type=%s",
+                           trace.environment if trace is not None else "unknown", type(exc).__name__)
+            return outbox_saved
 
+    @_bounded_receipt_operation
     async def mirror_advisor_log(self, attempt_id: str | None = None) -> bool:
         """Make completed direct Advisor usage visible in LiteLLM's Logs UI.
 
@@ -383,8 +490,19 @@ class UsageAccounting(CustomLogger):
             trace = local_trace()
             # Only an auth object created by LiteLLM is authoritative. A
             # presented header alone is never proof on keyless loopback.
-            from litellm.proxy._types import UserAPIKeyAuth
-            if isinstance(user_api_key_dict, UserAPIKeyAuth) and user_api_key_dict.via_virtual_key and user_api_key_dict.api_key:
+            from litellm.proxy._types import UserAPIKeyAuth, LitellmUserRoles
+            from litellm.proxy.auth.user_api_key_auth import LITELLM_PROXY_MASTER_KEY_ALIAS
+            local_master = (isinstance(user_api_key_dict, UserAPIKeyAuth)
+                            and user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
+                            and user_api_key_dict.api_key == LITELLM_PROXY_MASTER_KEY_ALIAS)
+            if local_master:
+                supplied_call_id = headers.get("x-litellm-call-id")
+                try:
+                    request_id = str(uuid.UUID(supplied_call_id))
+                except (ValueError, TypeError, AttributeError):
+                    request_id = trace.request_id
+                trace = Trace(request_id, trace.environment, "local-master", api_path=local_api_path(path), local_master=True)
+            elif isinstance(user_api_key_dict, UserAPIKeyAuth) and user_api_key_dict.via_virtual_key and user_api_key_dict.api_key:
                 trace = Trace(trace.request_id, trace.environment,
                               "local-sha256:" + hashlib.sha256(user_api_key_dict.api_key.encode()).hexdigest(),
                               api_path=local_api_path(path))
@@ -440,6 +558,20 @@ class UsageAccounting(CustomLogger):
         # Metadata is copied per attempt, never a shared fallback mutation.
         field = "litellm_metadata" if "litellm_metadata" in kwargs else "metadata"
         kwargs[field] = {**metadata, TAG: ident}
+        experts_base_url = os.getenv("EXPERTS_BASE_URL", "http://experts:4040")
+        if role == "advisor" and kwargs.get("api_base") == experts_base_url:
+            # Carry only per-attempt IDs over the private Advisor hop. The
+            # experts callback consumes these before provider dispatch.
+            configured_headers = kwargs.get("extra_headers")
+            internal_headers = {
+                name: value for name, value in (configured_headers.items() if isinstance(configured_headers, Mapping) else ())
+                if str(name).lower() not in {"x-subroute-request-id", "x-subroute-attempt-id"}
+            }
+            internal_headers.update({
+                "x-subroute-request-id": trace.request_id,
+                "x-subroute-attempt-id": ident,
+            })
+            kwargs["extra_headers"] = internal_headers
         logging_obj = kwargs.get("litellm_logging_obj")
         if logging_obj is not None:
             logging_obj.model_call_details[TAG] = ident
@@ -486,19 +618,6 @@ class UsageAccounting(CustomLogger):
 
 
 usage_accounting = UsageAccounting()
-
-
-def _require_hook(owner: type, name: str, *required_parameters: str) -> None:
-    """Reject framework drift that makes a required accounting hook unusable."""
-    hook = getattr(owner, name, None)
-    if not callable(hook):
-        raise RuntimeError(f"LiteLLM accounting hook unavailable: {owner.__name__}.{name}")
-    try:
-        parameters = inspect.signature(hook).parameters
-        if not set(required_parameters).issubset(parameters):
-            raise TypeError("required parameters missing")
-    except (TypeError, ValueError) as exc:
-        raise RuntimeError(f"LiteLLM accounting hook signature changed: {owner.__name__}.{name}") from exc
 
 
 def install_stream_accounting():
@@ -637,8 +756,10 @@ def install_stream_accounting():
 
 def install_native_advisor_accounting():
     from litellm.llms.anthropic.pass_through.messages.interceptors.advisor import AdvisorOrchestrationHandler
-    _require_hook(AdvisorOrchestrationHandler, "handle", "self")
     original = AdvisorOrchestrationHandler.handle
+    if getattr(original, "_subroute_usage_accounting_guard", False):
+        return
+    _require_hook(AdvisorOrchestrationHandler, "handle", "self")
 
     async def handle(self, *args, **kwargs):
         token = native_advisor_context.set(True)
@@ -662,6 +783,7 @@ def install_native_advisor_accounting():
             native_advisor_parent_role.reset(parent)
             native_advisor_context.reset(token)
 
+    handle._subroute_usage_accounting_guard = True
     AdvisorOrchestrationHandler.handle = handle
 
 
@@ -836,13 +958,28 @@ def install_native_stream_accounting():
             outcome = "failed"
             raise
         finally:
-            await source.aclose()
-            await finish(observer, details, outcome)
+            try:
+                await source.aclose()
+            finally:
+                await finish(observer, details, outcome)
 
     BaseResponsesAPIStreamingIterator._process_chunk = process
     ResponsesAPIStreamingIterator.__anext__ = responses_next
     ResponsesAPIStreamingIterator.aclose = responses_close
     PassThroughStreamingHandler.chunk_processor = staticmethod(messages)
+
+
+def _require_hook(owner: type, name: str, *required_parameters: str) -> None:
+    """Reject framework drift that makes a required accounting hook unusable."""
+    hook = getattr(owner, name, None)
+    if not callable(hook):
+        raise RuntimeError(f"LiteLLM accounting hook unavailable: {owner.__name__}.{name}")
+    try:
+        parameters = inspect.signature(hook).parameters
+        if not set(required_parameters).issubset(parameters):
+            raise TypeError("required parameters missing")
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"LiteLLM accounting hook signature changed: {owner.__name__}.{name}") from exc
 
 
 @contextmanager
@@ -939,7 +1076,10 @@ def install_receipt_routes(app):
             for item in items:
                 if not isinstance(item, dict) or type(item.get("revision")) is not int or not 1 <= item["revision"] <= 2_147_483_647:
                     raise ValueError()
-                uuid.UUID(item["attempt_id"])
+                attempt_id = item.get("attempt_id")
+                if not isinstance(attempt_id, str):
+                    raise ValueError()
+                uuid.UUID(attempt_id)
             await usage_accounting.store.ack(environment, items)
             return {"ok": True}
         except (ValueError, TypeError, KeyError):

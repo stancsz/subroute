@@ -128,6 +128,118 @@ model_list:
       reasoning_effort: low
       allowed_openai_params: [reasoning_effort]
 
+  - model_name: codex-gpt-6.1-terra-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "gpt-6.1-terra"
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-6.1-terra
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: codex-gpt-5.6-luna-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "gpt-5.6-luna"
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-luna
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: codex-gpt-5.6-sol-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "gpt-5.6-sol"
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-sol
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: codex-gpt-5.6-terra-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "gpt-5.6-terra"
+      capabilities: [text, vision]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: codex-advisor/gpt-5.6-terra
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-gemini-4-argon-medium-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "gemini-4-argon-medium"
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-4-argon-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-gemini-3.8-flash-medium-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "gemini-3.8-flash-medium"
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/gemini-3.8-flash-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-opus-5-5-medium-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "claude-opus-5-5-medium"
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/agy-opus-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: agy-sonnet-5-5-medium-advisor
+    model_info:
+      max_input_tokens: 32000
+      context_window: 32000
+      auto_compact_token_limit: 25600
+      compaction_scope: input
+      display_name: "claude-sonnet-5-5-medium"
+      capabilities: [text]
+      selectable: false
+      advisor_selectable: true
+    litellm_params:
+      model: antigravity/agy-sonnet-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
 router_settings:
   enable_pre_call_checks: true
   # An expert consultation succeeds once or fails visibly. Never retry or fall

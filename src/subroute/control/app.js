@@ -31,6 +31,25 @@ async function request(path, options) {
   return payload;
 }
 
+document.querySelector("#refresh-models").addEventListener("click", async event => {
+  const button = event.currentTarget, status = document.querySelector("#model-catalog");
+  button.disabled = true; status.textContent = "Refreshing provider catalogs…";
+  try {
+    const result = await request("/api/model-catalog/refresh", { method: "POST" });
+    status.replaceChildren();
+    for (const [key, label] of [["openai", "OpenAI"], ["gemini", "Antigravity"]]) {
+      const line = document.createElement("p"), provider = result[key];
+      line.textContent = provider?.state === "ready" ? `${label}: ${provider.models.join(" · ") || "No models returned"}` : provider?.state === "stale" ? `${label}: ${provider.models.join(" · ")} (previous results; ${provider.detail || "refresh failed"})` : `${label}: ${provider?.detail || "Refresh unavailable"}`;
+      status.append(line);
+    }
+    const note = document.createElement("p");
+    note.textContent = "Available models are shown in the routing menus. Check each provider’s refresh status above.";
+    status.append(note);
+    await renderRouting();
+  } catch (error) { status.textContent = `Model refresh failed: ${error.message}`; }
+  finally { button.disabled = false; }
+});
+
 function setGatewayStatus(online) {
   const pill = document.querySelector(".connection-pill");
   document.querySelector("#gateway-status").textContent = online ? "Gateway online" : "Gateway unavailable";
@@ -79,7 +98,7 @@ function renderEfforts(select, choices, model, selected, helpId) {
   select.value = efforts.includes(selected) ? selected : "";
   let help = !model ? "Choose a configured provider and model." : !choice?.configured ? "This saved route needs provider configuration before it can be used." : !efforts.length ? (choice.reasoning_note || "This route has no verified reasoning effort control.") : `${choice.access}. Lower effort favors speed; higher effort allows more reasoning.`;
   if (efforts.length && choice.reasoning_note) help += ` ${choice.reasoning_note}`;
-  if (model?.startsWith("gemini-subscription") && !advisor) help += " Text and schema-constrained tool calls; client tools are not run by the subscription. SSE is buffered until completion; vision is unsupported. Output limits are backend-managed; client token caps are not enforced.";
+  if ((model?.startsWith("gemini-subscription") || model?.startsWith("antigravity-") || model?.startsWith("catalog-antigravity/")) && !advisor) help += " Text and schema-constrained tool calls; client tools are not run by the subscription. SSE is buffered until completion; vision is unsupported. Output limits are backend-managed; client token caps are not enforced.";
   if (routeMode.value === "off") help = "Routing is off. The client chooses the model and reasoning.";
   document.querySelector(helpId).textContent = help;
 }

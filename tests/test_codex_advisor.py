@@ -297,12 +297,24 @@ def test_dedicated_experts_allows_all_current_advisors_without_fallback():
     config = yaml.safe_load((Path(__file__).parents[1] / "config/litellm.experts.yaml").read_text())
     models = {item["model_name"]: item for item in config["model_list"]}
     assert set(models) == {
+        "codex-gpt-6.1-terra-advisor",
+        "codex-gpt-5.6-luna-advisor",
+        "codex-gpt-5.6-sol-advisor",
+        "codex-gpt-5.6-terra-advisor",
+        "agy-gemini-4-argon-medium-advisor",
+        "agy-gemini-3.8-flash-medium-advisor",
+        "agy-opus-5-5-medium-advisor",
+        "agy-sonnet-5-5-medium-advisor",
         "codex-luna-advisor", "codex-sol-advisor", "codex-astra-advisor",
         "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
         "gemini-3.1-pro-advisor", "gemini-3.6-flash-advisor",
         "gemini-3.7-flash-advisor", "gemini-3.8-flash-advisor",
     }
     for name, item in models.items():
+        if name.startswith("agy-"):
+            assert item["litellm_params"]["model"].startswith("antigravity/")
+            assert item["model_info"]["capabilities"] == ["text"]
+            continue
         if name.startswith("gemini-"):
             expected = {
                 "gemini-4-argon-advisor": "antigravity/gemini-4-argon-low",
@@ -315,7 +327,7 @@ def test_dedicated_experts_allows_all_current_advisors_without_fallback():
             assert item["model_info"]["capabilities"] == ["text"]
             continue
         assert "vision" in item["model_info"]["capabilities"]
-        assert item["litellm_params"]["model"].startswith("codex-advisor/gpt-6")
+        assert item["litellm_params"]["model"].startswith(("codex-advisor/gpt-6", "codex-advisor/gpt-5.6"))
     assert models["codex-luna-advisor"]["litellm_params"]["reasoning_effort"] == "low"
     assert config["router_settings"]["num_retries"] == 0
     assert config["router_settings"]["fallbacks"] == []

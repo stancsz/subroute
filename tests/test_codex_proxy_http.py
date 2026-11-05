@@ -78,6 +78,8 @@ def _configured_proxy(
     upstream_chunks=None,
     provider_model_list=None,
     additional_custom_providers=(),
+    enable_pre_call_checks=False,
+    additional_callbacks=(),
 ):
     original_acompletion = litellm.acompletion
     upstream_models = []
@@ -133,7 +135,7 @@ def _configured_proxy(
             "custom_handler": codex_subscription_handler,
         }, *additional_custom_providers]))
         stack.enter_context(patch.object(litellm, "acompletion", fake_upstream_or_dispatch))
-        callbacks = []
+        callbacks = list(additional_callbacks)
         if credential_callback:
             callbacks.append(codex_credential_refresher)
         if dynamic_routing_plugin is not None:
@@ -174,6 +176,7 @@ def _configured_proxy(
             model_list=model_list,
             num_retries=0,
             fallbacks=[],
+            enable_pre_call_checks=enable_pre_call_checks,
         )
         stack.enter_context(patch.object(proxy_server, "llm_router", router))
         stack.enter_context(patch.dict(proxy_server.app.dependency_overrides, {

@@ -21,6 +21,12 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
         assert settings["router_settings"]["enable_pre_call_checks"] is True
         for deployment in settings["model_list"]:
             info = deployment["model_info"]
+            if deployment["model_name"] in {"catalog-openai/*", "catalog-antigravity/*"}:
+                # A discovered model's capacity cannot be inferred from a shared wildcard.
+                assert "max_input_tokens" not in info
+                assert "context_window" not in info
+                assert "auto_compact_token_limit" not in info
+                continue
             if deployment["model_name"].startswith("experts/"):
                 assert info["selectable"] is False
                 assert "max_input_tokens" not in info
@@ -108,8 +114,17 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     )
     assert antigravity_env["GEMINI_FORCE_FILE_STORAGE"] == "true"
     assert set(services["postgres"]["volumes"]).isdisjoint(services["postgres-staging"]["volumes"])
-    assert prod["image"] == staging["image"]
-    assert prod["build"] == staging["build"]
+    assert prod["image"] == "subroute-gateway:local"
+    assert staging["image"] == "subroute-gateway:staging"
+    assert prod["build"] == staging["build"] == services["experts-staging"]["build"]
+    assert services["experts-staging"]["image"] == staging["image"]
+    assert set(prod["networks"]) == {"production"}
+    assert set(staging["networks"]) == {"staging"}
+    assert set(services["experts-staging"]["networks"]) == {"staging"}
+    assert "experts" in services["experts-staging"]["networks"]["staging"]["aliases"]
+    assert set(antigravity["networks"]) == {"production", "staging"}
+    assert prod_env["ANTIGRAVITY_BRIDGE_URL"] == stage_env["ANTIGRAVITY_BRIDGE_URL"] == "http://antigravity:4015"
+    assert prod_env["EXPERTS_BASE_URL"] == stage_env["EXPERTS_BASE_URL"] == "http://experts:4040"
     assert prod["image"] == services["experts"]["image"]
     assert prod["build"] == services["experts"]["build"]
     assert "./config:/app/config:ro" not in services["experts"]["volumes"]
@@ -301,7 +316,10 @@ def test_subscription_channels_stay_behind_litellm():
     assert by_name["codex-gpt-6.1-sol"]["model_info"]["display_name"] == "OpenAI: GPT-6.1 Sol"
     assert "codex-terra" not in by_name
     assert "codex-reserve" not in by_name
-    assert not any("gpt-5" in deployment["litellm_params"]["model"] for deployment in by_name.values())
+    assert {name for name, deployment in by_name.items() if "gpt-5" in deployment["litellm_params"]["model"]} == {
+        "codex-gpt-5.6-luna-advisor", "codex-gpt-5.6-sol-advisor", "codex-gpt-5.6-terra-advisor",
+        "experts/codex-gpt-5.6-luna-advisor", "experts/codex-gpt-5.6-sol-advisor", "experts/codex-gpt-5.6-terra-advisor",
+    }
     assert by_name["codex-gpt-6.1-sol-advisor"]["litellm_params"]["model"] == "codex-advisor/gpt-6.1-sol"
     assert by_name["codex-sol-advisor"]["litellm_params"]["model"] == (
         "codex-advisor/gpt-6-sol"
@@ -387,6 +405,14 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
         {"codex-sol-advisor": []},
         {"codex-astra-advisor": []},
         {"codex-luna-advisor": []},
+        {"experts/codex-gpt-6.1-terra-advisor": []},
+        {"experts/codex-gpt-5.6-luna-advisor": []},
+        {"experts/codex-gpt-5.6-sol-advisor": []},
+        {"experts/codex-gpt-5.6-terra-advisor": []},
+        {"experts/agy-gemini-4-argon-medium-advisor": []},
+        {"experts/agy-gemini-3.8-flash-medium-advisor": []},
+        {"experts/agy-opus-5-5-medium-advisor": []},
+        {"experts/agy-sonnet-5-5-medium-advisor": []},
         {"experts/codex-gpt-6.1-sol-advisor": []},
         {"experts/codex-sol-advisor": []},
         {"experts/codex-astra-advisor": []},
@@ -452,6 +478,14 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     ]
     assert "depends_on" not in experts
     assert {model["model_name"] for model in expert_models} == {
+        "codex-gpt-6.1-terra-advisor",
+        "codex-gpt-5.6-luna-advisor",
+        "codex-gpt-5.6-sol-advisor",
+        "codex-gpt-5.6-terra-advisor",
+        "agy-gemini-4-argon-medium-advisor",
+        "agy-gemini-3.8-flash-medium-advisor",
+        "agy-opus-5-5-medium-advisor",
+        "agy-sonnet-5-5-medium-advisor",
         "codex-sol-advisor", "codex-astra-advisor", "codex-luna-advisor",
         "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
         "gemini-3.8-flash-advisor", "gemini-3.7-flash-advisor",
@@ -461,6 +495,8 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
     assert {
         model["litellm_params"]["model"] for model in expert_models
     } == {
+        "codex-advisor/gpt-6.1-terra", "codex-advisor/gpt-5.6-luna", "codex-advisor/gpt-5.6-sol", "codex-advisor/gpt-5.6-terra",
+        "antigravity/gemini-4-argon-medium", "antigravity/gemini-3.8-flash-medium", "antigravity/agy-opus-5-5-medium", "antigravity/agy-sonnet-5-5-medium",
         "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
         "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
         "antigravity/gemini-4-argon-low", "antigravity/gemini-3.8-flash",

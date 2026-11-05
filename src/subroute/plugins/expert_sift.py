@@ -8,6 +8,14 @@ from sift.litellm_proxy import SiftLiteLLMHook
 
 
 EXPERT_MODELS = (
+    "codex-gpt-6.1-terra-advisor",
+    "codex-gpt-5.6-luna-advisor",
+    "codex-gpt-5.6-sol-advisor",
+    "codex-gpt-5.6-terra-advisor",
+    "agy-gemini-4-argon-medium-advisor",
+    "agy-gemini-3.8-flash-medium-advisor",
+    "agy-opus-5-5-medium-advisor",
+    "agy-sonnet-5-5-medium-advisor",
     "codex-gpt-6.1-sol-advisor",
     "codex-sol-advisor",
     "codex-astra-advisor",
@@ -22,6 +30,10 @@ EXPERT_SIFT_TARGET = 25_600
 EXPERT_INPUT_LIMIT = 32_000
 CODEX_EXPERT_OUTPUT_LIMIT = 1_024
 CODEX_EXPERT_MODELS = frozenset({
+    "codex-gpt-6.1-terra-advisor",
+    "codex-gpt-5.6-luna-advisor",
+    "codex-gpt-5.6-sol-advisor",
+    "codex-gpt-5.6-terra-advisor",
     "codex-gpt-6.1-sol-advisor",
     "codex-sol-advisor",
     "codex-astra-advisor",
@@ -89,13 +101,14 @@ class ExpertSiftHook(SiftLiteLLMHook):
         if not any(data.get(key) is not None for key in (
             "reasoning_effort", "reasoning", "output_config", "thinking",
         )):
+            effort = "medium" if model.startswith("agy-") and model.endswith("-medium-advisor") else "low"
             if call_type in {"responses", "aresponses"}:
-                data["reasoning"] = {"effort": "low"}
+                data["reasoning"] = {"effort": effort}
             elif call_type in {"anthropic_messages", "aanthropic_messages"}:
                 data["thinking"] = {"type": "adaptive"}
-                data["output_config"] = {"effort": "low"}
+                data["output_config"] = {"effort": effort}
             else:
-                data["reasoning_effort"] = "low"
+                data["reasoning_effort"] = effort
 
         # Sift's selector is text-only. Preserve supported multimodal payloads
         # exactly and let the expert model's native 32K admission decide them.

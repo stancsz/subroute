@@ -20,6 +20,10 @@ ADVISOR_TOOL_DESCRIPTION = (
 )
 SUPPORTED_CALL_TYPES = frozenset({"anthropic_messages", "aanthropic_messages"})
 ADVISOR_MODEL_NAMES = {
+    "codex-gpt-6.1-terra-advisor": "gpt-6.1-terra",
+    "codex-gpt-5.6-luna-advisor": "gpt-5.6-luna",
+    "codex-gpt-5.6-sol-advisor": "gpt-5.6-sol",
+    "codex-gpt-5.6-terra-advisor": "gpt-5.6-terra",
     "codex-gpt-6.1-sol-advisor": "gpt-6.1-sol",
     "codex-sol-advisor": "gpt-6-sol",
     "codex-astra-advisor": "gpt-6-astra",
@@ -27,6 +31,10 @@ ADVISOR_MODEL_NAMES = {
 }
 EXPERT_TOOL_ROUTES = {
     **{alias: alias for alias in ADVISOR_MODEL_NAMES},
+    "agy-gemini-4-argon-medium-advisor": "agy-gemini-4-argon-medium-advisor",
+    "agy-gemini-3.8-flash-medium-advisor": "agy-gemini-3.8-flash-medium-advisor",
+    "agy-opus-5-5-medium-advisor": "agy-opus-5-5-medium-advisor",
+    "agy-sonnet-5-5-medium-advisor": "agy-sonnet-5-5-medium-advisor",
     "gemini-subscription": "gemini-3.8-flash-advisor",
     "gemini-subscription-argon": "gemini-4-argon-advisor",
     "gemini-subscription-3.7-flash": "gemini-3.7-flash-advisor",

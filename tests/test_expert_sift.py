@@ -222,3 +222,13 @@ def test_multimodal_expert_request_is_preserved_for_native_admission(monkeypatch
     assert asyncio.run(hook.async_pre_call_hook({}, None, request, "aanthropic_messages")) is request
     assert request["messages"] is original_messages
     assert "max_tokens" not in request
+
+
+@pytest.mark.parametrize("model", ["agy-opus-5-5-medium-advisor", "agy-sonnet-5-5-medium-advisor", "agy-gemini-4-argon-medium-advisor", "agy-gemini-3.8-flash-medium-advisor"])
+def test_medium_expert_route_preserves_medium_effort(monkeypatch, model):
+    async def compact(self, *args, **kwargs):
+        return args[2]
+    monkeypatch.setattr(SiftLiteLLMHook, "async_pre_call_hook", compact)
+    request = {"model": model, "messages": [{"role": "user", "content": "Review"}]}
+    result = asyncio.run(ExpertSiftHook().async_pre_call_hook({}, None, request, "aanthropic_messages"))
+    assert result["output_config"] == {"effort": "medium"}

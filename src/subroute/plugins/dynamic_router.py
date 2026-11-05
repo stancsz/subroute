@@ -360,9 +360,86 @@ class RoutingControlPlane:
         self.state_path = state_path
         self._lock = threading.RLock()
         self.choices = _load_choices(config_path)
+        from subroute.provider_catalog import read_catalog
+        try:
+            self.catalog = read_catalog(state_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            logger.warning("Unable to read provider catalog; saved dynamic selections require repair")
+            self.catalog = {"openai": [], "gemini": [], "openai_current": [], "gemini_current": [], "openai_efforts": {}}
+            # The saved selection is already control-plane state. Preserve it
+            # when only the supplementary inventory has been damaged.
+            try:
+                from subroute.provider_catalog import _validated_models
+                saved = json.loads(state_path.read_text(encoding="utf-8"))["active_model"]
+                for prefix, provider in (("catalog-openai/", "openai"), ("catalog-antigravity/", "gemini")):
+                    if isinstance(saved, str) and saved.startswith(prefix):
+                        value = saved.removeprefix(prefix)
+                        if provider == "gemini":
+                            value = bytes.fromhex(value).decode("ascii")
+                        self.catalog[provider] = _validated_models([value])
+                        self.catalog[f"{provider}_current"] = list(self.catalog[provider])
+            except (OSError, ValueError, UnicodeDecodeError, KeyError, TypeError, json.JSONDecodeError):
+                pass
+        self._publish_catalog_choices()
         self.allowed_models = frozenset(choice.model_id for choice in self.choices if choice.selectable)
         self.advisor_models = frozenset(choice.model_id for choice in self.choices if choice.advisor_selectable)
         self._state = self._load_or_create_state()
+
+    def _publish_catalog_choices(self) -> None:
+        from subroute.provider_catalog import catalog_alias
+        static = tuple(choice for choice in self.choices if not choice.model_id.startswith(("catalog-openai/", "catalog-antigravity/")))
+        deployments = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))["model_list"]
+        configured_codex = {
+            entry.get("litellm_params", {}).get("model", "").removeprefix("codex-subscription/"): choice
+            for entry in deployments for choice in static
+            if entry.get("model_name") == choice.model_id
+            and isinstance(entry.get("litellm_params", {}).get("model"), str)
+            and entry["litellm_params"]["model"].startswith("codex-subscription/")
+            and choice.selectable
+        }
+        dynamic = tuple(
+            replace(configured_codex[model], model_id=catalog_alias(provider, model),
+                    display_name=model, access="Subscription", advisor_selectable=False)
+            if provider == "openai" and model in configured_codex else
+            ModelChoice(model_id=catalog_alias(provider, model), display_name=model,
+                        capabilities=("text",), provider=label, source_id=source,
+                        access="Subscription")
+            for provider, label, source in (
+                ("openai", "OpenAI", "openai-subscription"),
+                ("gemini", "Antigravity", "gemini-subscription"),
+            ) for model in self.catalog[provider]
+        )
+        dynamic = tuple(replace(choice, reasoning_efforts=tuple(self.catalog["openai_efforts"][choice.display_name]))
+                        if choice.source_id == "openai-subscription" and choice.display_name in self.catalog["openai_efforts"]
+                        else choice for choice in dynamic)
+        self.choices = static + dynamic
+
+    def add_catalog_models(self, provider: str, models: list[str], efforts: dict[str, list[str]] | None = None) -> None:
+        from subroute.provider_catalog import SavedEffortUnavailable, _validated_efforts, _validated_models, write_catalog
+        if provider not in {"openai", "gemini"}:
+            raise ValueError("invalid catalog provider")
+        with self._lock:
+            catalog = {key: (dict(value) if isinstance(value, dict) else list(value)) for key, value in self.catalog.items()}
+            catalog[provider] = _validated_models(sorted(set(catalog[provider]) | set(models)))
+            catalog[f"{provider}_current"] = _validated_models(models)
+            if provider == "openai" and efforts is not None:
+                validated_efforts = _validated_efforts(efforts, catalog["openai_current"])
+                state = self._state
+                slug = state.active_model.removeprefix("catalog-openai/") if state.active_model.startswith("catalog-openai/") else None
+                if slug is None:
+                    entries = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))["model_list"]
+                    upstream = next((entry.get("litellm_params", {}).get("model", "") for entry in entries
+                                     if entry.get("model_name") == state.active_model), "")
+                    if isinstance(upstream, str) and upstream.startswith("codex-subscription/"):
+                        slug = upstream.removeprefix("codex-subscription/")
+                if (slug in validated_efforts and state.reasoning_effort is not None
+                        and state.reasoning_effort not in validated_efforts[slug]):
+                    raise SavedEffortUnavailable("saved reasoning effort no longer offered")
+                catalog["openai_efforts"].update(validated_efforts)
+            write_catalog(self.state_path, catalog)
+            self.catalog = catalog
+            self._publish_catalog_choices()
+            self.allowed_models = frozenset(choice.model_id for choice in self.choices if choice.selectable)
 
     def _load_or_create_state(self) -> RoutingState:
         if not self.state_path.exists():
@@ -592,6 +669,8 @@ class DynamicRoutingPlugin(CustomLogger):
         call_type: str,
     ) -> dict | None:
         original_requested_model = data.get("model")
+        if isinstance(original_requested_model, str) and original_requested_model.startswith(("catalog-openai/", "catalog-antigravity/")) and original_requested_model not in self.control_plane.allowed_models:
+            raise HTTPException(status_code=404, detail="model is not in the refreshed provider catalog")
         requested_model = (
             RETIRED_MODEL_ALIASES.get(original_requested_model, original_requested_model)
             if isinstance(original_requested_model, str) else original_requested_model
@@ -721,23 +800,45 @@ class DynamicRoutingPlugin(CustomLogger):
         ))
         metadata["gateway_reasoning_effort"] = state.reasoning_effort if routed else None
         metadata["gateway_target_fast_mode"] = bool(routed and state.fast_mode)
+        responses_input = data.get("input")
+        responses_tools = data.get("tools")
+        has_additional_tools = (
+            isinstance(responses_input, list)
+            and any(isinstance(item, dict) and item.get("type") == "additional_tools"
+                    for item in responses_input)
+        )
         private_responses_tools = (
             call_type in {"responses", "aresponses"}
-            and isinstance(data.get("input"), list)
-            and any(isinstance(item, dict) and item.get("type") == "additional_tools"
-                    for item in data["input"])
+            and (
+                has_additional_tools
+                or (isinstance(responses_tools, list)
+                    and any(isinstance(tool, dict) and tool.get("type") == "custom"
+                            for tool in responses_tools))
+                or (isinstance(responses_input, list)
+                    and any(isinstance(item, dict) and item.get("type") in {
+                        "custom_tool_call", "custom_tool_call_output",
+                    } for item in responses_input))
+            )
         )
         if private_responses_tools:
             # These private Responses input items are not supported by the
             # OpenRouter/MiMo chat bridges. Keep the complete request on a
             # native Codex Responses deployment and constrain fallback to
             # the other configured Codex deployment only.
-            if resolved_model not in RESPONSES_PRIVATE_CODEX_MODELS:
+            native_codex = next((choice for choice in self.control_plane.choices
+                                 if choice.model_id == resolved_model and choice.source_id == "openai-subscription"), None)
+            if resolved_model not in RESPONSES_PRIVATE_CODEX_MODELS and native_codex is None:
                 resolved_model = "codex-luna"
             alternate = "codex-gpt-6.1-sol" if resolved_model == "codex-luna" else "codex-luna"
-            data["fallbacks"] = [{resolved_model: [alternate]}]
-            data["max_fallbacks"] = 1
-            data["disable_fallbacks"] = False
+            if native_codex is not None and resolved_model not in RESPONSES_PRIVATE_CODEX_MODELS:
+                alternate = None
+                data["fallbacks"] = []
+                data["max_fallbacks"] = 0
+                data["disable_fallbacks"] = True
+            else:
+                data["fallbacks"] = [{resolved_model: [alternate]}]
+                data["max_fallbacks"] = 1
+                data["disable_fallbacks"] = False
             metadata["routing"] = {
                 "requested_model": original_requested_model,
                 "resolved_model": resolved_model,
@@ -1015,13 +1116,87 @@ async def routing_options(request: Request) -> dict[str, Any]:
     """Presentation data for local control clients, never the request data path."""
     _require_local_control_request(request)
     configured = {source["id"]: source["configured"] for source in source_configuration()}
-    choices = [{**asdict(choice), "configured": bool(configured.get(choice.source_id, False))} for choice in control_plane.choices]
+    from subroute.provider_catalog import catalog_alias
+    visible = {catalog_alias(provider, model) for provider in ("openai", "gemini")
+               for model in control_plane.catalog[f"{provider}_current"]}
+    active = control_plane.snapshot().active_model
+    choices = [{**asdict(choice), "configured": bool(configured.get(choice.source_id, False))}
+               for choice in control_plane.choices
+               if not choice.model_id.startswith(("catalog-openai/", "catalog-antigravity/"))
+               or choice.model_id in visible or choice.model_id == active]
+    # The current provider inventory is the target menu. Keep a saved static
+    # route visible without changing its routing or losing its advisor entry.
+    deployments = yaml.safe_load(control_plane.config_path.read_text(encoding="utf-8"))["model_list"]
+    static_models = {entry.get("model_name"): entry.get("litellm_params", {}).get("model", "")
+                     for entry in deployments}
+    hidden_targets = set()
+    for choice in choices:
+        model_id = choice["model_id"]
+        upstream = static_models.get(model_id, "")
+        if not isinstance(upstream, str) or not choice["selectable"]:
+            continue
+        slug = upstream.partition("/")[2]
+        if not slug or "*" in slug:
+            continue
+        provider = "openai" if upstream.startswith("codex-subscription/") else "gemini" if upstream.startswith("antigravity/") else None
+        if provider == "gemini" and slug.startswith("agy-"):
+            slug = "claude-" + slug.removeprefix("agy-")
+        choice["display_name"] = slug
+        if provider is None or not control_plane.catalog[f"{provider}_current"]:
+            continue
+        if model_id != active:
+            hidden_targets.add(model_id)
+            continue
+        if provider == "gemini":
+            from subroute.handlers.antigravity import MODELS, model_with_effort
+            active_state = control_plane.snapshot()
+            if active_state.mode != "off" and active_state.reasoning_effort:
+                slug = model_with_effort(slug, active_state.reasoning_effort)
+            canonical = next((name for name in control_plane.catalog["gemini_current"]
+                              if MODELS.get(name) and MODELS.get(name) == MODELS.get(slug)), None)
+            slug = canonical or slug
+        choice["display_name"] = slug
+        choice["access"] = "Subscription"
+        hidden_targets.add(catalog_alias(provider, slug))
+    # Advisor routes may intentionally select a different effort than the
+    # target route; label them from the expert deployment, independently.
+    from subroute.plugins.advisor_plugin import EXPERT_TOOL_ROUTES
+    try:
+        expert_config = yaml.safe_load(control_plane.config_path.with_name("litellm.experts.yaml").read_text(encoding="utf-8"))
+        expert_deployments = {entry.get("model_name"): entry.get("litellm_params", {})
+                              for entry in expert_config["model_list"]}
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
+        logger.warning("Expert model labels are unavailable")
+        expert_deployments = {}
+    advisor_choices = []
+    for choice in choices:
+        if not choice["advisor_selectable"]:
+            continue
+        params = expert_deployments.get(EXPERT_TOOL_ROUTES.get(choice["model_id"]), {})
+        upstream = params.get("model", "")
+        advisor = dict(choice)
+        if isinstance(upstream, str) and "/" in upstream:
+            slug = upstream.partition("/")[2]
+            if slug.startswith("agy-"):
+                slug = "claude-" + slug.removeprefix("agy-")
+            if upstream.startswith("antigravity/") and params.get("reasoning_effort"):
+                from subroute.handlers.antigravity import model_with_effort
+                slug = model_with_effort(slug, params["reasoning_effort"])
+            advisor["display_name"] = slug
+            advisor["access"] = "Subscription"
+        advisor_choices.append(advisor)
     return {
         "state": asdict(control_plane.snapshot()),
-        "models": [choice for choice in choices if choice["selectable"]],
-        "advisor_models": [choice for choice in choices if choice["advisor_selectable"]],
+        "models": [choice for choice in choices if choice["selectable"] and choice["model_id"] not in hidden_targets],
+        "advisor_models": advisor_choices,
         "client_api_key_required": bool(os.getenv("GATEWAY_MASTER_KEY")),
     }
+
+
+async def refresh_model_catalog(request: Request) -> dict[str, Any]:
+    _require_local_control_request(request)
+    from subroute.provider_catalog import refresh_catalog
+    return await refresh_catalog()
 
 
 async def update_active_model(request: Request) -> dict[str, Any]:
@@ -1066,6 +1241,7 @@ def _register_routes() -> None:
         ("/api/active-model", active_model_state, ["GET"], None),
         ("/api/active-model", update_active_model, ["POST"], None),
         ("/api/routing-options", routing_options, ["GET"], None),
+        ("/api/model-catalog/refresh", refresh_model_catalog, ["POST"], None),
         ("/api/advisor-model", advisor_model_state, ["GET"], None),
         ("/api/advisor-model", update_advisor_model, ["POST"], None),
     )
