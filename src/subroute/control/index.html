@@ -45,8 +45,9 @@
     <section id="routing" class="routing-desk" aria-labelledby="routing-title">
       <div class="section-heading route-heading">
         <div><h2 id="routing-title">Routing policy</h2><p id="routing-description">Changes save automatically and apply to new requests.</p></div>
-        <div class="policy-chip" id="policy-summary">Loading policy…</div>
+        <div><button id="refresh-models" class="button-secondary" type="button">Refresh models</button> <div class="policy-chip" id="policy-summary">Loading policy…</div></div>
       </div>
+      <div id="model-catalog" class="route-help" role="status" aria-live="polite"></div>
       <div class="route-grid">
         <div class="route-column route-model-panel target-panel">
           <div class="route-panel-head"><span class="panel-index">A</span><div><strong>Target model</strong><small>The model that writes the response</small></div><span class="role-pill">Primary</span></div>

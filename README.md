@@ -92,6 +92,8 @@ For direct MiniMax M3.1 Flash, select `minimax-flash-direct`; it uses `MINIMAX_A
 
 Gemini 4 Argon is configured as the selectable `gemini-subscription-argon` target and Advisor through Antigravity. Staging requires its own Antigravity CLI authorization before Gemini requests. Expert calls have a configured 32,000-token input ceiling and Sift targets 25,600 estimated input tokens. The owner-defined 32K limit applies to input only, across every expert; output is separate and Gemini remains available. Expert calls default to low reasoning effort and do not join target fallback chains. Provider availability can still vary.
 
+The routing desk's **Refresh models** button reads the connected Codex and Antigravity subscription inventories separately. Refreshed models appear in the target menus, including Antigravity's Gemini and Claude variants; GPT-6.1 Terra also has a configured Codex route. Subroute retains discovered model IDs next to each environment's routing state so saved selections and existing client routes survive restarts and provider outages. A successful refresh updates the visible list without changing the active routing policy. Provider listings establish discovery, not that every model supports every protocol or feature. OpenAI's inventory request currently identifies as Codex client 0.166.0; provider results can depend on that version and account access. Antigravity's existing text/tool and buffered-stream limitations apply to its refreshed routes.
+
 Speech routes are available through LiteLLM. MiniMax TTS uses LiteLLM's standard `POST /v1/audio/speech` endpoint with model `minimax-tts` and `MINIMAX_API_KEY`:
 
 ```json

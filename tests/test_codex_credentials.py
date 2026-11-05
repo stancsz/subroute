@@ -185,6 +185,59 @@ def test_codex_additional_tools_enables_responses_lite_without_forwarding_client
     assert "parallel_tool_calls" not in request
 
 
+def test_unknown_codex_models_keep_distinct_upstream_identity_and_do_not_change_other_models(monkeypatch):
+    import litellm
+
+    monkeypatch.setattr(
+        "subroute.plugins.codex_credentials.read_codex_credentials",
+        lambda: ("fixture-token", "fixture-account"),
+    )
+    requests = [{"api_base": CODEX_API_BASE, "model": f"codex-subscription/{model}",
+                 "input": [{"type": "additional_tools", "role": "developer", "tools": []}],
+                 "extra_body": {"fixture_option": model}}
+                for model in ("new-fixture-a", "new-fixture-b")]
+    assert not litellm.utils.supports_native_streaming("unrelated-fixture-model", "openai")
+
+
+    async def prepare():
+        return await asyncio.gather(*(codex_credential_refresher.async_pre_call_deployment_hook(item, "aresponses") for item in requests))
+
+    updated = asyncio.run(prepare())
+    assert updated[0]["model"] == updated[1]["model"]
+    assert [item["extra_body"] for item in updated] == [
+        {"model": "new-fixture-a", "fixture_option": "new-fixture-a"},
+        {"model": "new-fixture-b", "fixture_option": "new-fixture-b"},
+    ]
+    assert [item["extra_body"] for item in requests] == [
+        {"fixture_option": "new-fixture-a"}, {"fixture_option": "new-fixture-b"},
+    ]
+    assert not litellm.utils.supports_native_streaming("unrelated-fixture-model", "openai")
+
+
+def test_unknown_codex_model_rejects_conflicting_extra_body_model(monkeypatch):
+    from litellm.llms.custom_llm import CustomLLMError
+    monkeypatch.setattr("subroute.plugins.codex_credentials.read_codex_credentials", lambda: ("fixture-token", "fixture-account"))
+    request = {"api_base": CODEX_API_BASE, "model": "codex-subscription/new-fixture-model",
+               "input": [{"type": "additional_tools", "role": "developer", "tools": []}],
+               "extra_body": {"model": "other-model"}}
+    with pytest.raises(CustomLLMError, match="conflicts") as error:
+        asyncio.run(codex_credential_refresher.async_pre_call_deployment_hook(request, "aresponses"))
+    assert error.value.status_code == 400
+    assert request["extra_body"] == {"model": "other-model"}
+
+
+def test_known_nonstreaming_model_metadata_is_not_overridden(monkeypatch):
+    import litellm
+    monkeypatch.setattr("subroute.plugins.codex_credentials.read_codex_credentials", lambda: ("fixture-token", "fixture-account"))
+    monkeypatch.setattr(litellm.utils, "supports_native_streaming", lambda model, provider: False)
+    monkeypatch.setattr(litellm.utils, "get_model_info_helper", lambda **kwargs: {"supports_native_streaming": False})
+    request = {"api_base": CODEX_API_BASE, "model": "codex-subscription/known-no-stream",
+               "input": [{"type": "additional_tools", "role": "developer", "tools": []}]}
+    result = asyncio.run(codex_credential_refresher.async_pre_call_deployment_hook(request, "aresponses"))
+    assert result["model"] == "known-no-stream"
+    assert "extra_body" not in result
+
+
 def test_codex_lite_defaults_preserve_explicit_reasoning_and_tool_policy(monkeypatch):
     monkeypatch.setattr(
         "subroute.plugins.codex_credentials.read_codex_credentials",

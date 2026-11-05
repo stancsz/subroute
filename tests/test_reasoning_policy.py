@@ -211,6 +211,8 @@ def test_native_codex_bridge_transmits_selected_effort(control, monkeypatch, pro
 
 @pytest.mark.parametrize("provider,model", [
     ("antigravity", "gemini-3.1-pro"),
+    ("antigravity", "agy-opus-5-5"),
+    ("antigravity", "agy-sonnet-5-5"),
     ("codex-advisor", "gpt-6-sol"),
 ])
 def test_native_custom_provider_transmits_target_effort(control, monkeypatch, provider, model):
@@ -251,6 +253,8 @@ def test_native_custom_provider_transmits_target_effort(control, monkeypatch, pr
     ("gemini-3.7-flash", "low", "gemini-3.7-flash-low"),
     ("gemini-3.6-flash", "high", "gemini-3.6-flash-high"),
     ("gemini-3.1-pro", "low", "gemini-3.1-pro-low"),
+    ("agy-opus-5-5-medium", "high", "agy-opus-5-5-high"),
+    ("agy-sonnet-5-5-medium", "low", "agy-sonnet-5-5-low"),
 ])
 def test_gemini_effort_selects_catalog_variant(model, effort, expected):
     assert antigravity.model_with_effort(model, effort) == expected

@@ -21,6 +21,12 @@ def test_target_and_advisor_routes_declare_separate_context_policies():
         assert settings["router_settings"]["enable_pre_call_checks"] is True
         for deployment in settings["model_list"]:
             info = deployment["model_info"]
+            if deployment["model_name"] in {"catalog-openai/*", "catalog-antigravity/*"}:
+                # A discovered model's capacity cannot be inferred from a shared wildcard.
+                assert "max_input_tokens" not in info
+                assert "context_window" not in info
+                assert "auto_compact_token_limit" not in info
+                continue
             if deployment["model_name"].startswith("experts/"):
                 assert info["selectable"] is False
                 assert "max_input_tokens" not in info

@@ -87,7 +87,7 @@ model_list:
       <<: *context_policy
       advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 3.8 Flash"
-      provider: Gemini
+      provider: Antigravity
       source_id: gemini-subscription
       access: Subscription
       reasoning_efforts: [low, medium, high]
@@ -102,7 +102,7 @@ model_list:
       <<: *context_policy
       advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 4 Argon"
-      provider: Gemini
+      provider: Antigravity
       source_id: gemini-subscription
       access: Subscription
       reasoning_efforts: [low, medium, high]
@@ -110,6 +110,49 @@ model_list:
       advisor_selectable: true
     litellm_params:
       model: antigravity/gemini-4-argon
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: antigravity-claude-opus-5-5
+    model_info:
+      <<: *context_policy
+      display_name: "Claude Opus 5.5"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      reasoning_efforts: [low, medium, high]
+      capabilities: [text, tools, buffered-sse]
+    litellm_params:
+      model: antigravity/agy-opus-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
+  - model_name: antigravity-claude-sonnet-5-5
+    model_info:
+      <<: *context_policy
+      display_name: "Claude Sonnet 5.5"
+      provider: Antigravity
+      source_id: gemini-subscription
+      access: Subscription
+      reasoning_efforts: [low, medium, high]
+      capabilities: [text, tools, buffered-sse]
+    litellm_params:
+      model: antigravity/agy-sonnet-5-5-medium
+      allowed_openai_params: [reasoning_effort]
+
+  # The dynamic catalog names are admitted by the local control plane.
+  - model_name: catalog-openai/*
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params:
+      model: codex-subscription/*
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers: {ChatGPT-Account-ID: refreshed-at-dispatch, User-Agent: "OpenAI-Codex/0.166.0"}
+      allowed_openai_params: [reasoning_effort]
+      store: false
+
+  - model_name: catalog-antigravity/*
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params:
+      model: antigravity/catalog--*
       allowed_openai_params: [reasoning_effort]
 
   # The CustomLLM uses LiteLLM's OpenAI Responses adapter for the upstream
@@ -164,6 +207,25 @@ model_list:
       capabilities: [tools, streaming]
     litellm_params:
       model: codex-subscription/gpt-6.1-sol
+      api_base: https://chatgpt.com/backend-api/codex
+      api_key: refreshed-at-dispatch
+      extra_headers:
+        ChatGPT-Account-ID: refreshed-at-dispatch
+        User-Agent: OpenAI-Codex/0.151.0 (Windows)
+      allowed_openai_params: [reasoning_effort]
+      store: false
+
+  - model_name: codex-gpt-6.1-terra
+    model_info:
+      <<: *context_policy
+      display_name: "OpenAI: GPT-6.1 Terra"
+      provider: OpenAI
+      source_id: openai-subscription
+      access: Codex subscription
+      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
+      capabilities: [tools, streaming]
+    litellm_params:
+      model: codex-subscription/gpt-6.1-terra
       api_base: https://chatgpt.com/backend-api/codex
       api_key: refreshed-at-dispatch
       extra_headers:

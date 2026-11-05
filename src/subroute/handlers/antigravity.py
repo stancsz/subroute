@@ -22,6 +22,18 @@ from subroute.audio import AUDIO_REQUEST_BYTES, MAX_AUDIO_BYTES, MAX_AUDIO_FILES
 
 MODELS = {
     "claude-opus-5-5-low": "Claude Opus 5.5 (Low)",
+    "claude-opus-5-5-medium": "Claude Opus 5.5 (Medium)",
+    "claude-opus-5-5-high": "Claude Opus 5.5 (High)",
+    "claude-sonnet-5-5-low": "Claude Sonnet 5.5 (Low)",
+    "claude-sonnet-5-5-medium": "Claude Sonnet 5.5 (Medium)",
+    "claude-sonnet-5-5-high": "Claude Sonnet 5.5 (High)",
+    # Avoid LiteLLM's Anthropic-name heuristics for this custom provider.
+    "agy-opus-5-5-low": "Claude Opus 5.5 (Low)",
+    "agy-opus-5-5-medium": "Claude Opus 5.5 (Medium)",
+    "agy-opus-5-5-high": "Claude Opus 5.5 (High)",
+    "agy-sonnet-5-5-low": "Claude Sonnet 5.5 (Low)",
+    "agy-sonnet-5-5-medium": "Claude Sonnet 5.5 (Medium)",
+    "agy-sonnet-5-5-high": "Claude Sonnet 5.5 (High)",
     "gemini-4-argon": "Gemini 4 Argon (High)",
     "gemini-4-argon-high": "Gemini 4 Argon (High)",
     "gemini-4-argon-medium": "Gemini 4 Argon (Medium)",
@@ -78,6 +90,21 @@ class AntigravityRequestTooLargeError(ValueError):
 def model_with_effort(model: str, effort: str | None) -> str:
     if effort is None:
         return model
+    if model.startswith("catalog--"):
+        from subroute.plugins.dynamic_router import control_plane
+        from subroute.provider_catalog import catalog_alias
+        try:
+            slug = bytes.fromhex(model.removeprefix("catalog--")).decode("ascii")
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise ValueError("invalid Antigravity catalog model") from exc
+        for suffix in ("-high", "-medium", "-med", "-low"):
+            if slug.endswith(suffix):
+                slug = slug.removesuffix(suffix)
+                break
+        selected = catalog_alias("gemini", f"{slug}-{effort}")
+        if selected in control_plane.allowed_models:
+            return "catalog--" + selected.partition("/")[2]
+        raise ValueError(f"Unsupported Antigravity reasoning effort {effort!r} for {model}")
     # The subscription catalog encodes thinking levels in the model variant.
     base = model
     for suffix in ("-high", "-medium", "-med", "-low"):
@@ -162,6 +189,14 @@ async def invoke_agy(
     attachments: list[dict] | None = None,
 ) -> tuple[str, Usage]:
     target = MODELS.get(model)
+    if model.startswith("catalog--"):
+        from subroute.plugins.dynamic_router import control_plane
+        encoded = model.removeprefix("catalog--")
+        if f"catalog-antigravity/{encoded}" in control_plane.allowed_models:
+            try:
+                target = bytes.fromhex(encoded).decode("ascii")
+            except (ValueError, UnicodeDecodeError):
+                target = None
     if target is None:
         raise ValueError(f"Unsupported Antigravity model: {model}")
     bridge_url = os.getenv("ANTIGRAVITY_BRIDGE_URL")
