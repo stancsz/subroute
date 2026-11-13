@@ -25,6 +25,7 @@ EXPERT_MODELS = (
     "gemini-3.6-flash-advisor",
     "gemini-3.1-pro-advisor",
     "gemini-4-argon-advisor",
+    "gemini-4-hydrogen-advisor",
 )
 EXPERT_SIFT_TARGET = 25_600
 EXPERT_INPUT_LIMIT = 32_000

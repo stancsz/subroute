@@ -248,6 +248,7 @@ def test_native_custom_provider_transmits_target_effort(control, monkeypatch, pr
 
 
 @pytest.mark.parametrize("model,effort,expected", [
+    ("gemini-4-hydrogen", "medium", "gemini-4-hydrogen-medium"),
     ("gemini-4-argon", "medium", "gemini-4-argon-medium"),
     ("gemini-3.8-flash", "medium", "gemini-3.8-flash-medium"),
     ("gemini-3.7-flash", "low", "gemini-3.7-flash-low"),

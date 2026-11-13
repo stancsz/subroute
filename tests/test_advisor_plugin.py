@@ -181,7 +181,7 @@ def test_selected_advisor_failure_propagates_without_retry(monkeypatch):
 
 @pytest.mark.parametrize("advisor,route", [
     ("codex-gpt-6.1-sol-advisor", "experts/codex-gpt-6.1-sol-advisor"),
-    ("gemini-subscription", "experts/gemini-3.8-flash-advisor"),
+    ("gemini-subscription", "experts/gemini-4-hydrogen-advisor"),
     ("gemini-subscription-argon", "experts/gemini-4-argon-advisor"),
     ("gemini-subscription-3.7-flash", "experts/gemini-3.7-flash-advisor"),
     ("gemini-subscription-3.6-flash", "experts/gemini-3.6-flash-advisor"),

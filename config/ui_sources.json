@@ -1,7 +1,7 @@
 {
   "sources": [
     {"id": "openai-subscription", "name": "OpenAI Subscription", "kind": "subscription", "models": "OpenAI: GPT-6 Sol · OpenAI: GPT-6 Astra · OpenAI: GPT-6 Luna · OpenAI: GPT-6.1 Sol", "accent": "coral", "credentials": ["CODEX_AUTH_FILE"]},
-    {"id": "gemini-subscription", "name": "Gemini Subscription", "kind": "subscription", "models": "Google: Gemini 3.8 Flash · Google: Gemini 4 Argon · Google: Gemini 3.7 Flash · Google: Gemini 3.6 Flash · Gemini 3.1 Pro", "accent": "blue"},
+    {"id": "gemini-subscription", "name": "Gemini Subscription", "kind": "subscription", "models": "Google: Gemini 4 Hydrogen · Google: Gemini 4 Argon · Google: Gemini 3.8 Flash · Google: Gemini 3.7 Flash · Google: Gemini 3.6 Flash · Gemini 3.1 Pro", "accent": "blue"},
     {"id": "minimax", "name": "MiniMax", "kind": "api key", "models": "MiniMax: MiniMax M3 · MiniMax: MiniMax M3.1 Flash · MiniMax Speech 2.6 HD", "accent": "gold", "credentials": ["MINIMAX_API_KEY"]},
     {"id": "xiaomi-tokenplan", "name": "Xiaomi MiMo Token Plan", "kind": "API key", "models": "Xiaomi: MiMo-V2.6-Pro · Xiaomi: MiMo-V2.6-Flash · Xiaomi: MiMo-V2.5-Pro · Xiaomi: MiMo-V2.5 · MiMo V2.5 speech models", "accent": "blue", "credentials": ["XIAOMI_TOKENPLAN_API_KEY"]},
     {"id": "openrouter", "name": "OpenRouter", "kind": "api key", "models": "MiniMax: MiniMax M3.1 Flash", "accent": "violet", "credentials": ["OPENROUTER_API_KEY"]},

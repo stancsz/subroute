@@ -434,7 +434,7 @@ def test_advisor_choices_use_actual_expert_model_names(monkeypatch, tmp_path):
     assert choices["codex-gpt-6.1-terra-advisor"] == "gpt-6.1-terra"
     assert choices["agy-opus-5-5-medium-advisor"] == "claude-opus-5-5-medium"
     assert choices["agy-sonnet-5-5-medium-advisor"] == "claude-sonnet-5-5-medium"
-    assert choices["gemini-subscription"] == "gemini-3.8-flash-low"
+    assert choices["gemini-subscription"] == "gemini-4-hydrogen-low"
     assert choices["agy-gemini-3.8-flash-medium-advisor"] == "gemini-3.8-flash-medium"
     plane.update_advisor("agy-sonnet-5-5-medium-advisor")
     assert subroute.plugins.dynamic_router.RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json").snapshot().advisor_model == "agy-sonnet-5-5-medium-advisor"

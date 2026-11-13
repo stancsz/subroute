@@ -419,6 +419,7 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
         {"experts/codex-luna-advisor": []},
         {"experts/gemini-3.8-flash-advisor": []},
         {"experts/gemini-4-argon-advisor": []},
+        {"experts/gemini-4-hydrogen-advisor": []},
         {"experts/gemini-3.7-flash-advisor": []},
         {"experts/gemini-3.6-flash-advisor": []},
         {"experts/gemini-3.1-pro-advisor": []},
@@ -488,6 +489,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
         "agy-sonnet-5-5-medium-advisor",
         "codex-sol-advisor", "codex-astra-advisor", "codex-luna-advisor",
         "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
+        "gemini-4-hydrogen-advisor",
         "gemini-3.8-flash-advisor", "gemini-3.7-flash-advisor",
         "gemini-3.6-flash-advisor", "gemini-3.1-pro-advisor",
     }
@@ -499,7 +501,7 @@ def test_experts_port_exposes_only_bounded_advisor_aliases():
         "antigravity/gemini-4-argon-medium", "antigravity/gemini-3.8-flash-medium", "antigravity/agy-opus-5-5-medium", "antigravity/agy-sonnet-5-5-medium",
         "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
         "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
-        "antigravity/gemini-4-argon-low", "antigravity/gemini-3.8-flash",
+        "antigravity/gemini-4-argon-low", "antigravity/gemini-4-hydrogen-low", "antigravity/gemini-3.8-flash",
         "antigravity/gemini-3.7-flash", "antigravity/gemini-3.6-flash",
         "antigravity/gemini-3.1-pro",
     }

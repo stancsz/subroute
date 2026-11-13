@@ -537,6 +537,9 @@ model_list:
   - model_name: experts/gemini-4-argon-advisor
     model_info: {selectable: false, disable_background_health_check: true}
     litellm_params: {model: "anthropic/gemini-4-argon-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
+  - model_name: experts/gemini-4-hydrogen-advisor
+    model_info: {selectable: false, disable_background_health_check: true}
+    litellm_params: {model: "anthropic/gemini-4-hydrogen-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
   - model_name: experts/gemini-3.7-flash-advisor
     model_info: {selectable: false, disable_background_health_check: true}
     litellm_params: {model: "anthropic/gemini-3.7-flash-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
@@ -860,6 +863,7 @@ router_settings:
     - experts/codex-luna-advisor: []
     - experts/gemini-3.8-flash-advisor: []
     - experts/gemini-4-argon-advisor: []
+    - experts/gemini-4-hydrogen-advisor: []
     - experts/gemini-3.7-flash-advisor: []
     - experts/gemini-3.6-flash-advisor: []
     - experts/gemini-3.1-pro-advisor: []

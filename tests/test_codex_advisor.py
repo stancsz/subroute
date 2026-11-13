@@ -307,6 +307,7 @@ def test_dedicated_experts_allows_all_current_advisors_without_fallback():
         "agy-sonnet-5-5-medium-advisor",
         "codex-luna-advisor", "codex-sol-advisor", "codex-astra-advisor",
         "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
+        "gemini-4-hydrogen-advisor",
         "gemini-3.1-pro-advisor", "gemini-3.6-flash-advisor",
         "gemini-3.7-flash-advisor", "gemini-3.8-flash-advisor",
     }
@@ -318,6 +319,7 @@ def test_dedicated_experts_allows_all_current_advisors_without_fallback():
         if name.startswith("gemini-"):
             expected = {
                 "gemini-4-argon-advisor": "antigravity/gemini-4-argon-low",
+                "gemini-4-hydrogen-advisor": "antigravity/gemini-4-hydrogen-low",
                 "gemini-3.1-pro-advisor": "antigravity/gemini-3.1-pro",
                 "gemini-3.6-flash-advisor": "antigravity/gemini-3.6-flash",
                 "gemini-3.7-flash-advisor": "antigravity/gemini-3.7-flash",

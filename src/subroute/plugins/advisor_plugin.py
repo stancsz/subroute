@@ -35,7 +35,7 @@ EXPERT_TOOL_ROUTES = {
     "agy-gemini-3.8-flash-medium-advisor": "agy-gemini-3.8-flash-medium-advisor",
     "agy-opus-5-5-medium-advisor": "agy-opus-5-5-medium-advisor",
     "agy-sonnet-5-5-medium-advisor": "agy-sonnet-5-5-medium-advisor",
-    "gemini-subscription": "gemini-3.8-flash-advisor",
+    "gemini-subscription": "gemini-4-hydrogen-advisor",
     "gemini-subscription-argon": "gemini-4-argon-advisor",
     "gemini-subscription-3.7-flash": "gemini-3.7-flash-advisor",
     "gemini-subscription-3.6-flash": "gemini-3.6-flash-advisor",
