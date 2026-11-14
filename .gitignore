@@ -10,6 +10,9 @@ config/active_model.catalog.json
 .env
 /tmp/
 
+# Retired Advisor ranker artifacts are local-only.
+models/advisor-ranker/
+
 # Local environment variants, reports, and editor/OS artifacts.
 .env.*
 !.env.example
