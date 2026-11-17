@@ -94,7 +94,7 @@ def read_asset(root: Path, supplied_path: str) -> tuple[dict, dict]:
     return attachment, receipt
 
 
-def create_server(root: Path, gateway_url: str, api_key: str | None = None) -> MCPServer:
+def create_server(root: Path, gateway_url: str) -> MCPServer:
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("audio root must be a directory")
@@ -131,12 +131,10 @@ def create_server(root: Path, gateway_url: str, api_key: str | None = None) -> M
             f"Known input metadata (not perceptual guesses): {[{k:v for k,v in receipt.items() if k not in {'path', 'sha256'}} for _, receipt in assets]}\n"
             f"Focus: {', '.join(focus)}\nQuestion: {question}"
         )
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
             async with httpx.AsyncClient(timeout=GEMINI_AUDIO_REQUEST_TIMEOUT_SECONDS, follow_redirects=False) as client:
                 response = await client.post(
                     gateway_url.rstrip("/") + "/v1/chat/completions",
-                    headers=headers,
                     json={"model": "gemini-subscription", "messages": [{"role": "user", "content": [
                         {"type": "text", "text": prompt},
                         *[{"type": "input_audio", "input_audio": item} for item, _ in assets],
@@ -204,11 +202,7 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True, help="Only files inside this audio folder may be sent")
     parser.add_argument("--gateway-url", default="http://127.0.0.1:4000")
     args = parser.parse_args()
-    import os
-    # Match the gateway's canonical credential name; keep the older client
-    # variable as a fallback for existing local MCP registrations.
-    api_key = os.getenv("GATEWAY_MASTER_KEY") or os.getenv("SUBROUTE_API_KEY")
-    create_server(args.root, args.gateway_url, api_key).run(transport="stdio")
+    create_server(args.root, args.gateway_url).run(transport="stdio")
 
 
 if __name__ == "__main__":

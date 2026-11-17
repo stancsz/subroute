@@ -78,7 +78,7 @@ Base URL: http://127.0.0.1:4000/v1
 Model:    auto
 ```
 
-Set a strong `GATEWAY_MASTER_KEY` in the local `.env` file before starting the pinned LiteLLM runtime. API clients then send `Authorization: Bearer <GATEWAY_MASTER_KEY>`. This also enables the LiteLLM Admin UI, using `UI_USERNAME` and `UI_PASSWORD` (Compose defaults: `admin` and `password`). For deliberate local development without a master key, LiteLLM requires the explicit native setting `LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true`; Compose passes it through without enabling it by default. That mode has no bearer authentication or Admin UI login.
+The production and staging gateways use LiteLLM's native keyless mode. Clients call the loopback API without a bearer token; provider credentials remain in the gateway environment. Compose enables `LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true` only for those gateway containers and does not pass through a host `GATEWAY_MASTER_KEY`. LiteLLM's built-in Admin UI is unavailable without a master key. Keep the gateway ports bound to loopback and trust only local clients and services on the corresponding Compose networks.
 
 For eligible text-only Chat Completions, Responses, and Anthropic Messages requests, any provider failure uses the same catch-all chain: OpenRouter's MiniMax M3.1 Flash, Xiaomi MiMo V2.6 Pro, then GPT-6 Luna. The client-visible `model` remains the originally requested target, and fallback does not change the saved routing selection. LiteLLM reports fallback attempts in its headers and internal request metadata. Media, image generation, speech, Advisor calls, and other specialized operations keep their own routes. A failed provider call may still incur cost. The fallback is a different model/provider, so identical output behavior is not guaranteed. Available models are listed in this checkout's [`config/litellm.yaml`](config/litellm.yaml).
 
@@ -203,7 +203,7 @@ The optional Qwen route retains its configured 40,960-token request window, 32,7
 
 Earlier Sift target-compaction and cache evaluations are retained in [the archived goal](docs/goal/archive/GOAL-2026-10-23-before-simplicity.md). They do not establish behavior for the 4040 expert boundary.
 
-For Claude Code, set `ANTHROPIC_BASE_URL` to `http://127.0.0.1:4000`, set `ANTHROPIC_API_KEY` to the gateway's configured master key, and launch `claude --model qwen3.8-27b`. Use routing mode `alias` or `off` so the explicit model reaches the local service. The repeatable staging tasks are in `tests/acceptance/qwen_claude/`.
+For Claude Code, set `ANTHROPIC_BASE_URL` to `http://127.0.0.1:4000`; no Subroute key is required. If the installed CLI insists on a non-empty `ANTHROPIC_API_KEY`, use a non-secret placeholder because the loopback gateway does not authenticate it. Launch `claude --model qwen3.8-27b`. Use routing mode `alias` or `off` so the explicit model reaches the local service. The repeatable staging tasks are in `tests/acceptance/qwen_claude/`.
 
 A stable endpoint does not make providers interchangeable. Tool use, streaming, vision, context size, reasoning options, and subscription access depend on each route. The Antigravity Gemini subscription integration supports text, PCM WAV/MP3 audio input and schema-constrained tool calls (audio and client tools cannot be combined). The sidecar sends prompts through the CLI's NDJSON stdin protocol, so long prompts do not consume OS command-line argument space. The client executes returned tool calls; the subscription sidecar does not execute them. The agent's internal finish control ends one runtime turn. In tool mode, Subroute reads AGY's native `structured_output` and checks its echoed schema; it never extracts decisions from prose. Automatic choice with parallel calls permitted can return one explicit JSON batch of up to eight calls. Every declared name and input is validated before exposing any tool. Mixed answers/tools, malformed results, undeclared calls, oversized batches, parallel opt-out violations, additional runtime turns and unexpected local tool execution fail closed. Provider usage is preserved. It does not support vision. Stream requests are returned as SSE after the CLI has completed the response, so tokens are not progressively streamed.
 
@@ -282,7 +282,7 @@ API 地址： http://127.0.0.1:4000/v1
 模型：     auto
 ```
 
-启动当前固定版本的 LiteLLM 前，请在本地 `.env` 设置足够强的 `GATEWAY_MASTER_KEY`，API 客户端使用 `Authorization: Bearer <GATEWAY_MASTER_KEY>`。该设置也启用 LiteLLM 管理界面，使用 `UI_USERNAME` 和 `UI_PASSWORD`（Compose 默认值为 `admin` 和 `password`）。若明确需要本地无主密钥开发模式，需显式设置 LiteLLM 原生变量 `LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true`；Compose 仅透传，不默认开启。该模式没有 bearer 认证，也无法登录管理界面。
+生产和预发布网关使用 LiteLLM 原生无客户端密钥模式。客户端无需 bearer token 即可调用 loopback API；provider 凭据保留在网关环境中。Compose 仅对这两个 gateway 容器设置 `LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true`，且不把宿主机 `GATEWAY_MASTER_KEY` 传入。没有 master key 时 LiteLLM 内置管理界面不可用。保持网关端口绑定到 loopback，并仅信任本地客户端及对应 Compose 网络中的服务。
 
 对于支持的纯文本 Chat Completions、Responses 和 Anthropic Messages 请求，无论哪个目标路由或哪类上游服务故障，都会使用同一回退链：OpenRouter 上的 MiniMax M3.1 Flash、Xiaomi MiMo V2.6 Pro，最后是 GPT-6 Luna。返回给客户端的 `model` 保持为最初请求的目标，回退也不会更改已保存的路由选择。LiteLLM 响应头和内部请求元数据仍会记录回退尝试。媒体、图片生成、语音、Advisor 和其他专用操作继续使用各自的路由。失败的上游请求仍可能产生费用。回退会切换实际模型/服务，不能保证输出行为完全相同。当前模型见本仓库的 [`config/litellm.yaml`](config/litellm.yaml)。
 

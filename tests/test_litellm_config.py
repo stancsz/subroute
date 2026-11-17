@@ -425,9 +425,7 @@ def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retri
         {"experts/gemini-3.1-pro-advisor": []},
     ]
     assert settings["litellm_settings"]["drop_params"] is True
-    assert settings["general_settings"]["master_key"] == (
-        "os.environ/GATEWAY_MASTER_KEY"
-    )
+    assert "master_key" not in settings["general_settings"]
     assert settings["general_settings"]["database_url"] == (
         "os.environ/DATABASE_URL"
     )
@@ -455,14 +453,21 @@ def test_windows_launchers_force_utf8_and_loopback_defaults():
     assert "4010" not in gateway
 
 
-def test_gateway_master_key_is_optional_and_passed_to_both_gateways():
+def test_gateway_clients_are_keyless_with_litellm_native_local_mode():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert 'GATEWAY_MASTER_KEY=${GATEWAY_MASTER_KEY:-sk-gateway-local-dev}' not in compose
     services = yaml.safe_load(compose)["services"]
     for service in ("gateway", "gateway-staging"):
-        assert "GATEWAY_MASTER_KEY" in services[service]["environment"]
-    assert config()["general_settings"]["master_key"] == "os.environ/GATEWAY_MASTER_KEY"
+        environment = services[service]["environment"]
+        assert "GATEWAY_MASTER_KEY" not in environment
+        assert "LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true" in environment
+    for service in ("experts", "experts-staging"):
+        assert not any(
+            item.startswith("LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY")
+            for item in services[service]["environment"]
+        )
+    assert "master_key" not in config()["general_settings"]
 
 
 def test_experts_port_exposes_only_bounded_advisor_aliases():

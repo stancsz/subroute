@@ -8,7 +8,7 @@
 
 ## 当前可用的 Gemini MVP
 
-`python -m subroute.music_mcp --root <音频目录> --gateway-url http://127.0.0.1:4000` 启动标准 stdio MCP，额外依赖用 `pip install -e ".[music]"` 安装。当前已将 `subroute-music` 注册到本机 Codex，文件根目录按用户提供的路径更新为 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI`，仅允许其内部 WAV/MP3。新会话或重启 MCP server 加载该配置；本次通过真实 MCP SDK 完成握手、发现工具和调用，并未宣称当前会话的动态工具菜单已经刷新。
+`python -m subroute.music_mcp --root <音频目录> --gateway-url http://127.0.0.1:4000` 启动标准 stdio MCP，额外依赖用 `pip install -e ".[music]"` 安装。该 MCP 不发送 gateway bearer token；provider 凭据由 Subroute 在服务端管理。当前已将 `subroute-music` 注册到本机 Codex，文件根目录按用户提供的路径更新为 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI`，仅允许其内部 WAV/MP3。新会话或重启 MCP server 加载该配置；本次通过真实 MCP SDK 完成握手、发现工具和调用，并未宣称当前会话的动态工具菜单已经刷新。
 
 当前参数比下文专业设计简单：`analyze_audio(asset_path, question, focus)`；`compare_audio(a_path, b_path, question, focus)`。最多两个文件、合计 20 MiB。返回 `gemini-listening-v1` structuredContent：原文件哈希、WAV/MP3 时长/采样率/声道、实际 provider usage、Gemini 观察与限制。WAV 时长来自 PCM 帧数，MP3 使用固定 Mutagen 1.47.0 从将要发送的同一份字节解析 MPEG/Xing 头，并注明 `duration_source=mpeg_headers` / `duration_is_estimate=true`，编码 padding 等可能造成小偏差。这是元数据检查，不能认证文件完整解码或混音质量。无可读 MP3 音频流在本地拒绝；裸 HTTP 音频入口仍只检查 MP3 头，不宣称同等级解码验证。`complete` 指完成此次订阅请求和指定文件读取，不证明其判断正确。
 

@@ -134,12 +134,15 @@ def test_litellm_internal_search_skips_model_usage_receipt_but_inference_is_acco
 
 def test_caller_metadata_cannot_attribute_a_local_request(store):
     async def scenario():
+        from litellm.proxy._types import UserAPIKeyAuth, LitellmUserRoles
+
         plugin = accounting.UsageAccounting(store)
         accounting.install_stream_accounting()
         data = {"metadata": {accounting.TAG: str(uuid.uuid4()), "customer_id": "forged"},
                 "proxy_server_request": {"url": "http://localhost/v1/chat/completions",
                                          "headers": {"x-litellm-end-user-id": "forged"}}}
-        await plugin.async_pre_call_hook({"api_key": "fake-auth-object"}, None, data, "completion")
+        keyless_auth = UserAPIKeyAuth(user_role=LitellmUserRoles.INTERNAL_USER)
+        await plugin.async_pre_call_hook(keyless_auth, None, data, "completion")
         kwargs = await plugin.async_pre_call_deployment_hook({"model": "openai/fixture", "metadata": data["metadata"]}, "acompletion")
         ident = accounting.attempt_id(kwargs)
         assert store.rows[ident]["trace"].customer_id is None

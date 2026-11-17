@@ -112,11 +112,9 @@ services:
       - SUBROUTE_ENVIRONMENT=production
       - SUBROUTE_USAGE_OUTBOX_PATH=/app/state/usage-outbox.sqlite3
       - SUBROUTE_ACCOUNTING_SECRET
-      # An explicit GATEWAY_MASTER_KEY enables the Admin UI and bearer-token auth.
-      # The pinned LiteLLM image rejects unset and known-default keys unless its
-      # native local development override is explicitly enabled by the operator.
-      - GATEWAY_MASTER_KEY
-      - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY
+      # Clients are trusted on loopback; upstream credentials stay server-side.
+      # LiteLLM's native mode allows an unset public master key and disables its Admin UI.
+      - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
@@ -163,8 +161,8 @@ services:
       - SUBROUTE_USAGE_OUTBOX_PATH=/app/state/usage-outbox.sqlite3
       - LITELLM_LOG=INFO
       - SUBROUTE_ACCOUNTING_SECRET
-      - GATEWAY_MASTER_KEY
-      - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY
+      # Clients are trusted on loopback; upstream credentials stay server-side.
+      - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
       - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
