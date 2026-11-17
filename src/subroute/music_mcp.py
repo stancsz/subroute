@@ -205,7 +205,10 @@ def main() -> None:
     parser.add_argument("--gateway-url", default="http://127.0.0.1:4000")
     args = parser.parse_args()
     import os
-    create_server(args.root, args.gateway_url, os.getenv("SUBROUTE_API_KEY")).run(transport="stdio")
+    # Match the gateway's canonical credential name; keep the older client
+    # variable as a fallback for existing local MCP registrations.
+    api_key = os.getenv("GATEWAY_MASTER_KEY") or os.getenv("SUBROUTE_API_KEY")
+    create_server(args.root, args.gateway_url, api_key).run(transport="stdio")
 
 
 if __name__ == "__main__":
