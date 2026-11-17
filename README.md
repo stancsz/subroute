@@ -17,6 +17,8 @@
 [Subroute Relay](docs/operations/relay.md) adds a separate Docker-hosted MCP workboard and outbound runners for Claude Code sessions across machines. It tracks bounded goals, assignments, leases, cancellation and separate review evidence. An optional event-driven headless supervisor advances active goals using the Northstar contract, with explicit cycle and Advisor call budgets. See the [device A server and device B Docker client setup](docs/operations/relay-devices.md) and [pilot verification limits](docs/evals/relay-2026-10-23.md). It is separate from the gateway's routing/runtime state. Device B needs Docker, a private workspace, runner config and credentials; the default leaf client does not require a Northstar skill bundle. Reproduce the provider-free fault checks with `python scripts/verify_relay_docker.py`.
 
 
+For implementation delegation through Codex CLI and OpenRouter, see the [worker guide](docs/codex-cli-workers.md).
+
 ## Codex Advisor skill
 
 The former **Luna Advisor Escalation** skill has moved to the central [Northstar package](https://github.com/stancsz/northstar/tree/main/skills) and is now called **Codex Advisor**. Install the four-skill Northstar package for `northstar`, `codex-qa`, `codex-subagents` and `codex-advisor`. See the [installation guide](https://github.com/stancsz/northstar/blob/main/docs/misc/install.md) and [Codex Advisor instructions](https://github.com/stancsz/northstar/blob/main/skills/codex-advisor/SKILL.md).
