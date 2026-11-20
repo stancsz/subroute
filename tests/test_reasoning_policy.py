@@ -10,33 +10,12 @@ from fastapi.testclient import TestClient
 from litellm.proxy.proxy_server import app
 from litellm.types.utils import Usage
 
-from subroute.handlers import antigravity, codex_advisor
+from subroute.handlers import antigravity
 from subroute.plugins import dynamic_router
 from subroute.plugins.dynamic_router import DynamicRoutingPlugin, RoutingControlPlane
 
 
 ROOT = Path(__file__).parents[1]
-
-
-@pytest.mark.parametrize("call_type,bucket", [
-    ("acompletion", "metadata"),
-    ("aanthropic_messages", "metadata"),
-    ("aresponses", "litellm_metadata"),
-])
-def test_retired_subcall_flag_cannot_override_image_routing(control, call_type, bucket):
-    control.update("minimax", "force", reasoning_effort=None)
-    plugin = DynamicRoutingPlugin(control)
-    data = {"model": "codex-luna-advisor", "messages": [{"role": "user", "content": "Generate an image of a blue square"}],
-            "input": "Generate an image of a blue square", bucket: {
-        "advisor_sub_call": True, "gateway_policy": {"advisor_model": "codex-luna-advisor"},
-            }}
-    assert asyncio.run(plugin.async_pre_call_hook({}, None, data, call_type)) is data
-    assert data["model"] == "codex-luna"
-    assert data["gateway_image_request"] is not None
-    metadata = data["litellm_metadata"] if call_type == "aresponses" else data["metadata"]
-    assert metadata["gateway_policy"]["active_model"] == "minimax"
-    assert metadata["gateway_reasoning_effort"] is None
-    assert asyncio.run(plugin.async_pre_call_deployment_hook(data, call_type)) is None
 
 
 @pytest.fixture
@@ -45,16 +24,13 @@ def control(tmp_path):
 
 
 def test_reasoning_persists_independently_and_old_state_still_loads(control):
-    control.update("codex-luna", "force", reasoning_effort="high")
-    control.update_advisor("gemini-subscription-pro")
+    control.update("codex-luna", reasoning_effort="high")
     restarted = RoutingControlPlane(control.config_path, control.state_path)
     assert restarted.snapshot() == control.snapshot()
-    control.update("codex-luna", "alias")  # Existing API clients omit effort.
+    control.update("codex-luna")  # Existing API clients omit effort.
     assert control.snapshot().reasoning_effort == "high"
-    control.update_advisor("codex-sol-advisor")
     assert control.snapshot().reasoning_effort == "high"
-    assert control.snapshot().advisor_model == "codex-sol-advisor"
-    control.update("desktop", "alias")
+    control.update("desktop")
     assert control.snapshot().reasoning_effort is None
     raw = json.loads(control.state_path.read_text())
     raw.pop("reasoning_effort")
@@ -69,7 +45,6 @@ def test_invalid_effort_fails_before_state_changes(control, monkeypatch):
     for endpoint, body in [
         ("/api/active-model", {"model": "gemini-subscription-pro", "mode": "alias", "reasoning_effort": "medium"}),
         ("/api/active-model", {"model": "codex-luna", "mode": "alias", "reasoning_effort": "ultra"}),
-        ("/api/advisor-model", {"advisor_model": None, "reasoning_effort": "high"}),
     ]:
         assert client.post(endpoint, json=body).status_code == 422
         assert control.snapshot() == original
@@ -106,18 +81,13 @@ def test_fast_mode_is_openai_target_only_and_persists(control, monkeypatch):
     assert response.json()["fast_mode"] is False
 
 
-@pytest.mark.parametrize("mode,requested,expected", [
-    ("force", "openrouter", True),
-    ("alias", "default", True),
-    ("alias", "codex-luna", False),
-    ("off", "codex-luna", False),
-])
-def test_fast_mode_uses_target_routing_snapshot(control, mode, requested, expected):
-    control.update("codex-luna", mode, fast_mode=True)
+@pytest.mark.parametrize("requested,expected", [("default", True), ("codex-luna", False)])
+def test_fast_mode_uses_target_routing_snapshot(control, requested, expected):
+    control.update("codex-luna", fast_mode=True)
     plugin = DynamicRoutingPlugin(control)
     data = {"model": requested, "metadata": {}}
     asyncio.run(plugin.async_pre_call_hook({}, None, data, "acompletion"))
-    control.update("codex-luna", mode, fast_mode=False)
+    control.update("codex-luna", fast_mode=False)
     assert data["metadata"]["gateway_target_fast_mode"] is expected
     dispatch = {**data, "api_base": "https://chatgpt.com/backend-api/codex"}
     result = asyncio.run(plugin.async_pre_call_deployment_hook(dispatch, "acompletion"))
@@ -128,16 +98,13 @@ def test_fast_mode_uses_target_routing_snapshot(control, mode, requested, expect
     assert (advisor_dispatch or dispatch).get("service_tier") == ("fast" if expected else None)
 
 
-@pytest.mark.parametrize("mode,requested,expected", [
-    ("force", "desktop", "high"), ("alias", "default", "high"),
-    ("alias", "codex-luna", None), ("off", "default", "high"),
-])
-def test_effort_only_overrides_routed_requests_and_uses_one_snapshot(control, mode, requested, expected):
-    control.update("codex-luna", mode, reasoning_effort="high")
+@pytest.mark.parametrize("requested,expected", [("default", "high"), ("codex-luna", None)])
+def test_effort_only_overrides_routed_requests_and_uses_one_snapshot(control, requested, expected):
+    control.update("codex-luna", reasoning_effort="high")
     plugin = DynamicRoutingPlugin(control)
     data = {"model": requested, "reasoning_effort": "low", "metadata": {"gateway_reasoning_effort": "max"}}
     asyncio.run(plugin.async_pre_call_hook({}, None, data, "acompletion"))
-    control.update("codex-luna", mode, reasoning_effort="medium")
+    control.update("codex-luna", reasoning_effort="medium")
     result = asyncio.run(plugin.async_pre_call_deployment_hook(data, "acompletion"))
     assert data["metadata"]["gateway_reasoning_effort"] == expected
     assert (result or data)["reasoning_effort"] == (expected or "low")
@@ -164,14 +131,13 @@ def test_chat_override_preserves_reasoning_summary_and_original_request(control)
 
 @pytest.mark.parametrize("provider_metadata", [None, {"label": "client-value"}])
 def test_responses_policy_never_leaks_into_provider_metadata(control, provider_metadata):
-    control.update("codex-luna", "force", reasoning_effort="low")
+    control.update("codex-luna", reasoning_effort="low")
     plugin = DynamicRoutingPlugin(control)
     data = {"model": "default", "input": [{"role": "user", "content": "hello"}]}
     if provider_metadata is not None:
         data["metadata"] = provider_metadata.copy()
     asyncio.run(plugin.async_pre_call_hook({}, None, data, "aresponses"))
     assert data.get("metadata") == provider_metadata
-    assert data["litellm_metadata"]["gateway_policy"]["reasoning_effort"] == "low"
     result = asyncio.run(plugin.async_pre_call_deployment_hook(data, "aresponses"))
     assert result["reasoning"] == {"effort": "low"}
 
@@ -179,7 +145,7 @@ def test_responses_policy_never_leaks_into_provider_metadata(control, provider_m
 @pytest.mark.parametrize("protocol", ["chat", "messages"])
 @pytest.mark.parametrize("alias,model,effort", [("codex-luna", "gpt-6-luna", "high")])
 def test_native_codex_bridge_transmits_selected_effort(control, monkeypatch, protocol, alias, model, effort):
-    control.update(alias, "force", reasoning_effort=effort)
+    control.update(alias, reasoning_effort=effort)
     plugin = DynamicRoutingPlugin(control)
     data = {"model": "default", "messages": [{"role": "user", "content": "hello"}]}
     asyncio.run(plugin.async_pre_call_hook({}, None, data, "acompletion"))
@@ -213,7 +179,6 @@ def test_native_codex_bridge_transmits_selected_effort(control, monkeypatch, pro
     ("antigravity", "gemini-3.1-pro"),
     ("antigravity", "agy-opus-5-5"),
     ("antigravity", "agy-sonnet-5-5"),
-    ("codex-advisor", "gpt-6-sol"),
 ])
 def test_native_custom_provider_transmits_target_effort(control, monkeypatch, provider, model):
     plugin = DynamicRoutingPlugin(control)
@@ -230,10 +195,8 @@ def test_native_custom_provider_transmits_target_effort(control, monkeypatch, pr
         return "OK", Usage(prompt_tokens=1, completion_tokens=1, total_tokens=2)
 
     monkeypatch.setattr(antigravity, "invoke_agy", fake_agy)
-    monkeypatch.setattr(codex_advisor, "call_codex_streaming_collect", fake_codex)
     monkeypatch.setattr(litellm, "custom_provider_map", [
         {"provider": "antigravity", "custom_handler": antigravity.antigravity_handler},
-        {"provider": "codex-advisor", "custom_handler": codex_advisor.codex_advisor_handler},
     ])
     metadata = {"gateway_reasoning_effort": "high"}
     result = asyncio.run(litellm.anthropic.acreate(
@@ -261,36 +224,3 @@ def test_gemini_effort_selects_catalog_variant(model, effort, expected):
     assert antigravity.model_with_effort(model, effort) == expected
     with pytest.raises(ValueError, match="Unsupported"):
         antigravity.model_with_effort(model, "xhigh")
-
-
-def test_routing_choices_follow_configured_sources_without_exposing_credentials(control, monkeypatch):
-    monkeypatch.setattr(dynamic_router, "control_plane", control)
-    monkeypatch.setenv("CODEX_AUTH_FILE", "fixture-auth-path")
-    monkeypatch.setenv("ANTIGRAVITY_BRIDGE_URL", "http://fixture-bridge")
-    client = TestClient(app, client=("127.0.0.1", 50000))
-    result = client.get("/api/routing-options").json()
-    choices = {item["model_id"]: item for item in result["models"]}
-    assert "openai" not in choices
-    assert "gemini-api" not in choices
-    assert choices["gemini-subscription-argon"]["reasoning_efforts"] == ["low", "medium", "high"]
-    assert choices["codex-luna"]["configured"] is True
-    assert choices["codex-luna"]["provider"] == "OpenAI"
-    assert next(item for item in result["advisor_models"] if item["model_id"] == "gemini-subscription")["configured"] is True
-    response = client.get("/api/routing-options")
-    assert "openai" not in {item["model_id"] for item in response.json()["models"]}
-
-
-@pytest.mark.parametrize("old,canonical", [("openrouter-guided", "openrouter"), ("minimax-guided", "minimax")])
-@pytest.mark.parametrize("advisor", ["codex-sol-advisor"])
-def test_retired_model_state_migrates_without_changing_advisor(control, old, canonical, advisor):
-    original = {"active_model": old, "mode": "force", "policy_version": 9,
-                "advisor_model": advisor, "advisor_reasoning_effort": "high" if advisor else None}
-    control.state_path.write_text(json.dumps(original), encoding="utf-8")
-    restarted = RoutingControlPlane(control.config_path, control.state_path)
-    state = restarted.snapshot()
-    migrated_model = "minimax/minimax-m3.1-flash" if old == "openrouter-guided" else canonical
-    assert state.active_model == migrated_model
-    assert state.advisor_model == advisor
-    assert state.policy_version == 10
-    assert "advisor_reasoning_effort" not in json.loads(control.state_path.read_text())
-    assert RoutingControlPlane(control.config_path, control.state_path).snapshot() == state

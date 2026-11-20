@@ -36,7 +36,7 @@ def format_plugin(tmp_path):
     with control.config_path.open("a", encoding="utf-8") as config:
         config.write("\n  - model_name: codex-luna\n    litellm_params: {model: codex-subscription/gpt-6-luna}\n")
     control = RoutingControlPlane(control.config_path, control.state_path)
-    control.update("minimax", "off")
+    control.update("minimax")
     return DynamicRoutingPlugin(control)
 
 

@@ -6,8 +6,6 @@
 !src/**
 !config/
 !config/litellm.yaml
-!config/litellm.experts.yaml
-!config/ui_sources.json
 **/__pycache__/
 **/*.pyc
 **/*.pyo

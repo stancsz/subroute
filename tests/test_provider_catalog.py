@@ -5,12 +5,12 @@ import pytest
 import subroute.plugins.dynamic_router
 import subroute.provider_catalog as catalog
 from subroute.plugins.dynamic_router import _load_choices
+import yaml
 
 
 def test_requested_models_are_present_as_configured_choices():
-    choices = {choice.model_id: choice for choice in _load_choices(Path("config/litellm.yaml"))}
+    choices = {choice.model_id: choice for choice in _load_choices(yaml.safe_load(Path("config/litellm.yaml").read_text())["model_list"])}
     assert choices["codex-gpt-6.1-terra"].provider == "OpenAI"
-    assert all(choice.access == "Subscription" for choice in choices.values() if choice.source_id == "openai-subscription")
     for model in ("gemini-subscription", "gemini-subscription-argon", "antigravity-claude-opus-5-5", "antigravity-claude-sonnet-5-5"):
         assert choices[model].provider == "Antigravity"
 
@@ -95,7 +95,7 @@ def test_refreshed_model_survives_restart_and_unlisted_names_are_rejected(monkey
     before = plane.snapshot()
     plane.add_catalog_models("openai", ["new-model"])
     assert plane.snapshot() == before
-    plane.update("catalog-openai/new-model", "alias")
+    plane.update("catalog-openai/new-model")
     restarted = RoutingControlPlane(Path("config/litellm.yaml"), path)
     assert restarted.snapshot().active_model == "catalog-openai/new-model"
     assert "catalog-openai/new-model" in restarted.allowed_models
@@ -134,21 +134,16 @@ def test_dynamic_codex_private_responses_keep_selected_model(tmp_path):
     data = {"model": "catalog-openai/gpt-6.1-terra", "input": "hello", "tools": [{"type": "custom", "name": "x"}]}
     result = asyncio.run(DynamicRoutingPlugin(plane).async_pre_call_hook(None, None, data, "responses"))
     assert result["model"] == "catalog-openai/gpt-6.1-terra"
-    assert result["disable_fallbacks"] is True
+    assert not result.get("disable_fallbacks")
 
 
 def test_dynamic_codex_private_responses_reach_correct_upstream(monkeypatch, tmp_path):
     import json
     import httpx
     from test_codex_proxy_http import _configured_proxy
-    from test_usage_accounting import MemoryStore
-    from subroute import usage_accounting
     from subroute.plugins.dynamic_router import RoutingControlPlane, DynamicRoutingPlugin
     plane = RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json")
     plane.add_catalog_models("openai", ["new-codex-model"])
-    store = MemoryStore()
-    monkeypatch.setattr(usage_accounting.usage_accounting, "store", store)
-    usage_accounting.install_stream_accounting()
     captured = []
     async def fake_send(self, request, **kwargs):
         captured.append(json.loads(request.content))
@@ -164,7 +159,7 @@ def test_dynamic_codex_private_responses_reach_correct_upstream(monkeypatch, tmp
         "api_key": "fixture", "store": False, "allowed_openai_params": ["reasoning_effort"],
     }}]
     items = [{"type": "additional_tools", "role": "developer", "tools": []}, {"role": "user", "content": "hello"}]
-    callbacks = [usage_accounting.usage_accounting, DynamicRoutingPlugin(plane)]
+    callbacks = [DynamicRoutingPlugin(plane)]
     with _configured_proxy(credential_callback=True, additional_callbacks=callbacks, provider_model_list=models) as (client, *_):
         response = client.post("/v1/responses", json={"model": "catalog-openai/new-codex-model", "input": items, "stream": True, "store": False})
         conflict = client.post("/v1/responses", json={"model": "catalog-openai/new-codex-model", "input": items, "stream": True, "store": False, "extra_body": {"model": "other-model"}})
@@ -177,11 +172,6 @@ def test_dynamic_codex_private_responses_reach_correct_upstream(monkeypatch, tmp
     assert captured[0]["input"] == items
     assert conflict.status_code == 400, conflict.text
     assert len(captured) == 1
-    target_rows = [row for row in store.rows.values() if row["model"].endswith("new-codex-model")]
-    assert target_rows
-    assert any(row["outcome"] == "complete" and row["facts"].get("input_tokens") == 1 for row in target_rows)
-    assert all("provider_cost_micros" not in row["facts"] for row in target_rows)
-    assert all("subroute-codex-responses-stream" not in row["model"] for row in target_rows)
 
 
 def test_dynamic_codex_custom_tool_reaches_native_responses(monkeypatch, tmp_path):
@@ -258,7 +248,6 @@ def test_dynamic_codex_non_success_stream_is_not_reported_as_completed(monkeypat
 def test_dynamic_antigravity_dispatch_uses_discovered_id(monkeypatch, tmp_path):
     import asyncio
     from subroute.handlers import antigravity
-    from subroute import usage_accounting
     from subroute.plugins.dynamic_router import RoutingControlPlane
     plane = RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json")
     plane.add_catalog_models("gemini", ["claude-sonnet-5-5-medium"])
@@ -276,9 +265,7 @@ def test_dynamic_antigravity_dispatch_uses_discovered_id(monkeypatch, tmp_path):
         async def post(self, url, **kwargs):
             captured.append(kwargs["json"]["model"])
             return Response()
-    async def observe(_): pass
     monkeypatch.setattr(antigravity.httpx, "AsyncClient", Client)
-    monkeypatch.setattr(usage_accounting, "observe_direct", observe)
     name = catalog.catalog_alias("gemini", "claude-sonnet-5-5-medium")
     content, _ = asyncio.run(antigravity.invoke_agy("catalog--" + name.partition("/")[2], "hello"))
     assert content == "OK"
@@ -334,7 +321,7 @@ def test_unlisted_catalog_models_are_rejected_at_public_protocols_in_all_modes(t
     }}]
     with _configured_proxy(dynamic_routing_plugin=DynamicRoutingPlugin(plane), provider_model_list=models) as (client, upstream, *_):
         for mode in ("alias", "force", "off"):
-            plane.update("codex-luna", mode)
+            plane.update("codex-luna")
             for protocol in ("chat", "responses", "messages"):
                 path, body = _request(protocol, False)
                 body["model"] = "catalog-openai/not-authorized"
@@ -371,7 +358,6 @@ def test_dynamic_antigravity_route_through_public_messages(monkeypatch, tmp_path
         assert captured == ["catalog--" + slug.encode("ascii").hex()]
 
 
-
 def test_catalog_menu_uses_provider_names_and_preserves_saved_routes(monkeypatch, tmp_path):
     plane = subroute.plugins.dynamic_router.RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json")
     monkeypatch.setattr(subroute.plugins.dynamic_router, "control_plane", plane)
@@ -386,17 +372,17 @@ def test_catalog_menu_uses_provider_names_and_preserves_saved_routes(monkeypatch
     assert result["catalog-openai/new-model"] == "new-model"
     assert "gemini-subscription" not in result
     assert catalog.catalog_alias("gemini", "claude-opus-5-5-medium") in result
-    plane.update("codex-gpt-6.1-terra", "alias")
+    plane.update("codex-gpt-6.1-terra")
     result = models()
     assert result["codex-gpt-6.1-terra"] == "gpt-6.1-terra"
     assert "catalog-openai/gpt-6.1-terra" not in result
     assert "catalog-openai/gpt-6.1-terra" in plane.allowed_models
-    plane.update("gemini-subscription", "alias")
+    plane.update("gemini-subscription")
     result = models()
     assert result["gemini-subscription"] == "gemini-3.8-flash-high"
     assert catalog.catalog_alias("gemini", "gemini-3.8-flash-high") not in result
     plane.add_catalog_models("gemini", ["gemini-3.8-flash-high", "gemini-3.8-flash-medium"])
-    plane.update("gemini-subscription", "alias", reasoning_effort="medium")
+    plane.update("gemini-subscription", reasoning_effort="medium")
     result = models()
     assert result["gemini-subscription"] == "gemini-3.8-flash-medium"
     assert catalog.catalog_alias("gemini", "gemini-3.8-flash-medium") not in result
@@ -419,25 +405,9 @@ def test_refreshed_known_codex_model_keeps_supported_reasoning_efforts(tmp_path)
     choices = {choice.model_id: choice for choice in plane.choices}
     assert choices["catalog-openai/gpt-6.1-terra"].reasoning_efforts == choices["codex-gpt-6.1-terra"].reasoning_efforts
     assert choices["catalog-openai/gpt-6.1-terra"].reasoning_efforts
-    assert choices["catalog-openai/gpt-6.1-terra"].access == "Subscription"
     assert not choices["catalog-openai/unknown-model"].reasoning_efforts
-    plane.update("catalog-openai/gpt-6.1-terra", "alias", reasoning_effort="high")
+    plane.update("catalog-openai/gpt-6.1-terra", reasoning_effort="high")
     assert plane.snapshot().reasoning_effort == "high"
-
-
-def test_advisor_choices_use_actual_expert_model_names(monkeypatch, tmp_path):
-    plane = subroute.plugins.dynamic_router.RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json")
-    monkeypatch.setattr(subroute.plugins.dynamic_router, "control_plane", plane)
-    client = TestClient(app, client=("127.0.0.1", 50000))
-    choices = {x["model_id"]: x["display_name"] for x in client.get("/api/routing-options").json()["advisor_models"]}
-    assert choices["codex-gpt-6.1-sol-advisor"] == "gpt-6.1-sol"
-    assert choices["codex-gpt-6.1-terra-advisor"] == "gpt-6.1-terra"
-    assert choices["agy-opus-5-5-medium-advisor"] == "claude-opus-5-5-medium"
-    assert choices["agy-sonnet-5-5-medium-advisor"] == "claude-sonnet-5-5-medium"
-    assert choices["gemini-subscription"] == "gemini-4-hydrogen-low"
-    assert choices["agy-gemini-3.8-flash-medium-advisor"] == "gemini-3.8-flash-medium"
-    plane.update_advisor("agy-sonnet-5-5-medium-advisor")
-    assert subroute.plugins.dynamic_router.RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json").snapshot().advisor_model == "agy-sonnet-5-5-medium-advisor"
 
 
 def test_restart_with_failed_refresh_retains_current_and_saved_catalog_routes(monkeypatch, tmp_path):
@@ -446,7 +416,7 @@ def test_restart_with_failed_refresh_retains_current_and_saved_catalog_routes(mo
     path = tmp_path / "active.json"
     plane = RoutingControlPlane(Path("config/litellm.yaml"), path)
     plane.add_catalog_models("openai", ["previous-model"], {"previous-model": ["low"]})
-    plane.update("catalog-openai/previous-model", "alias", reasoning_effort="low")
+    plane.update("catalog-openai/previous-model", reasoning_effort="low")
     plane.add_catalog_models("openai", ["current-model"], {"current-model": ["high"]})
     restarted = RoutingControlPlane(Path("config/litellm.yaml"), path)
     monkeypatch.setattr(subroute.plugins.dynamic_router, "control_plane", restarted)
@@ -483,7 +453,7 @@ def test_refresh_rejects_effort_change_that_would_hide_saved_policy(monkeypatch,
     path = tmp_path / "active.json"
     plane = RoutingControlPlane(Path("config/litellm.yaml"), path)
     plane.add_catalog_models("openai", ["gpt-new"], {"gpt-new": ["low", "high"]})
-    plane.update("catalog-openai/gpt-new", "force", reasoning_effort="high")
+    plane.update("catalog-openai/gpt-new", reasoning_effort="high")
     before = plane.snapshot()
     monkeypatch.setattr(subroute.plugins.dynamic_router, "control_plane", plane)
     monkeypatch.setattr(catalog, "_snapshot", None)
@@ -497,7 +467,7 @@ def test_refresh_rejects_effort_change_that_would_hide_saved_policy(monkeypatch,
     assert plane.snapshot() == before
     assert next(c for c in plane.choices if c.model_id == before.active_model).reasoning_efforts == ("low", "high")
     assert RoutingControlPlane(Path("config/litellm.yaml"), path).snapshot() == before
-    plane.update(before.active_model, before.mode, reasoning_effort=None)
+    plane.update(before.active_model, reasoning_effort=None)
     result = asyncio.run(catalog.refresh_catalog())
     assert result["openai"]["state"] == "ready"
     assert next(c for c in plane.choices if c.model_id == before.active_model).reasoning_efforts == ("low",)
@@ -508,7 +478,7 @@ def test_static_codex_effort_conflict_is_reported_and_policy_preserved(monkeypat
     from subroute.plugins.dynamic_router import RoutingControlPlane
     path = tmp_path / "active.json"
     plane = RoutingControlPlane(Path("config/litellm.yaml"), path)
-    plane.update("codex-gpt-6.1-terra", "force", reasoning_effort="high")
+    plane.update("codex-gpt-6.1-terra", reasoning_effort="high")
     before = plane.snapshot()
     monkeypatch.setattr(subroute.plugins.dynamic_router, "control_plane", plane)
     monkeypatch.setattr(catalog, "_snapshot", None)

@@ -6,7 +6,7 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent
 
-from subroute.image_mcp import create_server, decode_image
+from clients.image_mcp import create_server, decode_image
 
 PNG = b"\x89PNG\r\n\x1a\nfixture"
 
@@ -19,7 +19,7 @@ def test_decode_image_requires_valid_supported_image():
 
 
 def test_mcp_image_tool_returns_inline_image_content(monkeypatch):
-    from subroute import image_mcp
+    from clients import image_mcp
 
     class Client:
         def __init__(self, **kwargs):
@@ -44,7 +44,7 @@ def test_mcp_image_tool_returns_inline_image_content(monkeypatch):
 
 
 def test_mcp_image_tool_reports_upstream_failure_without_retry(monkeypatch):
-    from subroute import image_mcp
+    from clients import image_mcp
 
     class Client:
         def __init__(self, **kwargs): pass

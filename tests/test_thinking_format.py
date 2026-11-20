@@ -69,7 +69,7 @@ def test_codex_reasoning_through_messages_client(tmp_path, shape):
     with control.config_path.open("a", encoding="utf-8") as config:
         config.write("\n  - model_name: codex-luna\n    litellm_params: {model: codex-subscription/gpt-6-luna}\n")
     control = RoutingControlPlane(control.config_path, control.state_path)
-    control.update("minimax", "off")
+    control.update("minimax")
     plugin = DynamicRoutingPlugin(control)
     chunks = reasoning_chunks()
     expected = "Plan\n\n中文 😀\\n" + "Continue **carefully**."
@@ -403,7 +403,7 @@ def test_native_provider_adapters_through_messages_http(tmp_path, model, native,
         "advisor_model": "codex-gpt-6.1-sol-advisor",
     }))
     control = RoutingControlPlane(config, tmp_path / "state.json")
-    control.update("codex-luna", "off")
+    control.update("codex-luna")
     plugin = DynamicRoutingPlugin(control)
     ollama = model.startswith("ollama_chat/")
     with provider_server(native, field, ollama) as (base, calls):

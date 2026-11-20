@@ -85,7 +85,7 @@ def test_actual_chat_client_tools_and_format(formatting_gateway, tmp_path, provi
     prompt = ('Read one.txt and two.txt using your real file tools. Compute FORMAT_ONE + FORMAT_TWO. '
               'Return a brief Markdown answer containing FORMAT_SUM: <computed sum>, a two-row input table, '
               'and a fenced Python example containing the literal raw string r"\\n". Do not edit files.')
-    formatting_gateway.set_policy(target=provider, mode="force", advisor=None)
+    formatting_gateway.set_policy(target=provider)
     timeout = 240 if provider == "gemini-subscription" else 120
     with WireRecorder(allowed_tools={"read_files", "submit_and_exit"} if client_name == "cline" else None) as recorder:
         if client_name == "opencode":

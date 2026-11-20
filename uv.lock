@@ -2737,9 +2737,6 @@ music = [
     { name = "mcp" },
     { name = "mutagen" },
 ]
-search = [
-    { name = "mcp" },
-]
 test = [
     { name = "pytest" },
     { name = "pyyaml" },
@@ -2750,12 +2747,11 @@ requires-dist = [
     { name = "jsonschema", specifier = "==4.26.0" },
     { name = "litellm", extras = ["extra-proxy", "proxy"], specifier = "==1.106.2" },
     { name = "mcp", marker = "extra == 'music'", specifier = "==2.3.0" },
-    { name = "mcp", marker = "extra == 'search'", specifier = "==2.3.0" },
     { name = "mutagen", marker = "extra == 'music'", specifier = "==1.48.1" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
     { name = "pyyaml", marker = "extra == 'test'", specifier = ">=6" },
 ]
-provides-extras = ["test", "music", "search"]
+provides-extras = ["test", "music"]
 
 [[package]]
 name = "tenacity"

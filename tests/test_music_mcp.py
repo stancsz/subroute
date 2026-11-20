@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 from mcp.server.mcpserver import MCPServer
 
-from subroute import music_mcp
-from subroute.music_mcp import create_server
+from clients import music_mcp
+from clients.music_mcp import create_server
 
 
 def test_music_server_registers_listening_tools_with_mcpserver(tmp_path):

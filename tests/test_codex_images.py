@@ -55,20 +55,17 @@ def stub(monkeypatch, events):
     return stream, calls
 
 
-@pytest.mark.parametrize("mode", ["force", "alias", "off"])
-@pytest.mark.parametrize("model", ["minimax", "auto", "gpt-image-2", None])
+@pytest.mark.parametrize("model", ["codex-luna"])
 @pytest.mark.parametrize("active_model", ["minimax", "desktop"])
-def test_image_route_precedes_every_saved_policy(tmp_path, mode, model, active_model):
+def test_explicit_codex_images_preserve_options(tmp_path, model, active_model):
     control = make_control_plane(tmp_path)
-    control.update(active_model, mode)
-    before = control.snapshot()
+    control.update(active_model)
     plugin = DynamicRoutingPlugin(control)
     data = {"model": model, "prompt": "a circle", "quality": "low", "size": "auto"}
     result = asyncio.run(plugin.async_pre_call_hook({}, None, data, "aimage_generation"))
     assert result["model"] == "codex-luna"
     assert result["image_generation_options"] == {"quality": "low", "size": "auto"}
-    assert result["metadata"]["gateway_policy"] == {**asdict(before), "advisor_model": None}
-    assert control.snapshot() == before
+    assert control.snapshot().active_model == active_model
 
 
 @pytest.mark.parametrize("options", [{"n": 2}, {"response_format": "url"}, {"style": "vivid"}, {"stream": True}, {"size": "1024x1024"}])
@@ -185,16 +182,16 @@ def test_concurrent_image_requests_are_bounded_and_slots_recover(monkeypatch):
     asyncio.run(run())
 
 
-def test_proxy_images_force_exception_preserves_options(monkeypatch, tmp_path):
+def test_proxy_images_routes_explicit_codex_model(monkeypatch, tmp_path):
     from test_codex_proxy_http import _configured_proxy
 
     stream, calls = stub(monkeypatch, [image_event(), terminal()])
     control = make_control_plane(tmp_path)
-    control.update("minimax", "force")
+    control.update("minimax")
     plugin = DynamicRoutingPlugin(control)
     with _configured_proxy(dynamic_routing_plugin=plugin) as (client, *_):
         for path in ("/v1/images/generations", "/images/generations"):
-            for model in ("minimax", "gpt-image-2", None):
+            for model in ("codex-luna",):
                 payload = {"prompt": "a blue circle", "n": 1, "quality": "low",
                            "size": "auto", "response_format": "b64_json"}
                 if model is not None:
@@ -203,8 +200,8 @@ def test_proxy_images_force_exception_preserves_options(monkeypatch, tmp_path):
                 assert result.status_code == 200, result.text
                 assert result.json()["data"][0]["b64_json"] == PNG
         for invalid in ({"n": 2}, {"size": "1024x1024"}, {"response_format": "url"}):
-            result = client.post("/v1/images/generations", json={"model": "auto", "prompt": "circle", **invalid})
+            result = client.post("/v1/images/generations", json={"model": "codex-luna", "prompt": "circle", **invalid})
             assert result.status_code == 400, result.text
     assert calls[0]["tools"] == [{"type": "image_generation", "quality": "low", "size": "auto"}]
-    assert len(calls) == 6
+    assert len(calls) == 2
     assert stream.closed

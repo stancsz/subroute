@@ -155,7 +155,7 @@ def test_actual_client_thinking_tools_and_answer(formatting_gateway, tmp_path, p
         subprocess.run(["icacls", str(tmp_path), "/grant", "*S-1-5-32-545:(OI)(CI)RX"],
                        check=True, capture_output=True)
     before = {name: hashlib.sha256((tmp_path / name).read_bytes()).hexdigest() for name in files}
-    formatting_gateway.set_policy(target=provider, mode="force", advisor=None)
+    formatting_gateway.set_policy(target=provider)
     env = dict(os.environ)
     for key in list(env):
         if key.startswith(("ANTHROPIC_", "CLAUDE_")):

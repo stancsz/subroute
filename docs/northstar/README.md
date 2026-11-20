@@ -1,28 +1,10 @@
 # Product direction
 
-The Badlands public API uses Subroute for a dedicated on-demand Luna advisor and
-image generation, while ordinary public inference runs through OpenRouter with
-native MiMo coding-plan fallback. [Dedicated advisor operation](../misc/badlands-dedicated-advisor.md)
-records the internal metadata contract and separation from the saved local policy.
+Subroute keeps one endpoint stable while a developer changes the default model
+in a browser. LiteLLM owns API providers, fallback chains and usage logs.
+Subroute maintains Codex and Antigravity subscription access.
 
-Subroute is a local AI subscription router for developers using coding tools. Its job is to keep the client endpoint stable while the person chooses which configured model handles new requests. The repository describes local provider credentials, explicit routing, and visible failure behavior as core product boundaries; see [README.md](../../README.md) and [GOAL.md](../../GOAL.md).
+The selector lists configured and discovered routes, saves the target for
+`default`, and shows whether a save or subscription refresh succeeded.
 
-The current customer thesis is a single developer who wants to use several AI subscriptions and API connections from existing coding tools without changing each tool's model setting. The intended measurable value is fewer client reconfigurations and clearer control over where a request goes. The repository does not establish a paid business model, supported installer/distribution channel, or commercial support promise. This UI task does not invent those decisions.
-
-## Interface standard
-
-The control desk should feel like a considered local developer product, not an operator prototype. Keep the routing action obvious, show actual gateway and provider state, put configured connections ahead of setup choices, and never make unavailable quota look healthy. Browser and Desktop share the same routing and provider interface. Desktop adds only a friendly local connection and coding-agent launch experience.
-
-Current visual direction: warm paper, deep evergreen, and a restrained signal-lime accent, with clear type hierarchy and local system fonts. Keep the interface useful at laptop and narrow browser widths. Keep claims tied to the gateway's loopback boundary and provider-reported data.
-
-## Product reference
-
-On 2026-09-24, reviewed the [LiteLLM Proxy quickstart](https://docs.litellm.ai/docs/proxy/docker_quick_start) and [gateway overview](https://docs.litellm.ai/docs/) as the strongest direct product reference because Subroute is built on LiteLLM for the same self-hosted gateway workflow. This was a documentation review, not a hands-on competitor UI inspection. LiteLLM documents a first-run journey for connecting a provider, adding and testing a model, sending a Playground request, and creating a client key. Subroute's current control desk has a narrower job: local policy and subscription routes around the LiteLLM gateway. Keep those areas focused, and close the commercial onboarding gap with a clear setup path rather than a second provider administration system.
-
-Reference links: [LiteLLM overview](https://docs.litellm.ai/docs/) and [Docker quickstart](https://docs.litellm.ai/docs/proxy/docker_quick_start).
-
-## Music listening and mixing direction
-
-On 2026-09-30, the user requested a design for giving GPT-6.1 callable local music-listening tools, with a longer-term goal of a capable Chinese Hip Hop / R&B mixing workflow. Arrangement, melody, vocals and groove matter; vocal clarity, sibilance, body, breath and air need separate acceptance. The intended value is evidence-backed diagnosis, version comparison and eventually reversible mixing decisions.
-
-The [music-listening MCP](../misc/music-listening-mcp.md) now provides a Gemini Subscription MVP with `analyze_audio` and `compare_audio`. The user explicitly chose the existing subscription rather than deploying other listening models. Actual audio and MCP calls are verified; professional mixing, reliable sibilance diagnosis and taste remain unverified. [Evidence and failure causes](../evals/gemini-audio-2026-09-30.md) distinguish transport success, upstream refusal and incorrect musical observations. The completed historical reliability goal stays intact; this is an explicitly requested increment.
+[Product and operations reference](../../README.md)

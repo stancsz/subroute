@@ -25,7 +25,6 @@ except ModuleNotFoundError:
     from audio_validation import AUDIO_REQUEST_BYTES, MAX_AUDIO_BYTES, MAX_AUDIO_FILES, decode_audio
 
 logger = logging.getLogger(__name__)
-AGY_ADVISOR_AGENT = "subroute-advisor"
 AGY_TARGET_AGENT = "subroute-target"
 AGY_AUDIO_AGENT = "subroute-audio"
 MAX_REQUEST_BYTES = 1_000_000
@@ -48,6 +47,10 @@ class ProviderRefused(RuntimeError):
         self.completed_reads = completed_reads
         self.phase = "generation" if completed_reads is None else ("after_attachment_reads" if completed_reads else "before_attachment_reads")
         super().__init__(f"provider_content_filter phase={self.phase} conversation_id={result.get('conversation_id', 'unknown')}")
+
+
+class ProviderRateLimited(RuntimeError):
+    """The CLI terminal result explicitly reports an upstream quota 429."""
 
 
 def _reject_refusal(result: dict[str, Any], completed_reads: int | None = None) -> None:
@@ -135,13 +138,12 @@ def _agy_command(
     model: str,
     *,
     json_schema_path: str | None = None,
-    advisor: bool = False,
     audio: bool = False,
 ) -> list[str]:
     """Run AGY as a constrained text or structured-output target, not a workspace agent."""
     command = [
         "agy",
-        "--agent", AGY_AUDIO_AGENT if audio else (AGY_ADVISOR_AGENT if advisor else AGY_TARGET_AGENT),
+        "--agent", AGY_AUDIO_AGENT if audio else AGY_TARGET_AGENT,
         "--model", model,
         "--output-format", "stream-json",
         "--input-format", "stream-json",
@@ -178,6 +180,8 @@ def _terminal_result(stdout: str) -> dict[str, Any]:
         status = str(result.get("status") or "unknown")
         reason = result.get("error")
         detail = f": {str(reason)[:300]}" if isinstance(reason, str) and reason else ""
+        if isinstance(reason, str) and re.search(r"\bRESOURCE_EXHAUSTED\s*\(code\s+429\)", reason):
+            raise ProviderRateLimited(f"Antigravity CLI ended with status {status}{detail}")
         raise RuntimeError(f"Antigravity CLI ended with status {status}{detail}")
     return result
 
@@ -323,9 +327,10 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload, dict):
                 raise ValueError("request body must be an object")
+            if payload.keys() - {"model", "prompt", "json_schema", "attachments"}:
+                raise ValueError("request contains unsupported fields")
             model, prompt = payload["model"], payload["prompt"]
             json_schema = payload.get("json_schema")
-            advisor = payload.get("advisor", False)
             attachments = payload.get("attachments", [])
             if not isinstance(attachments, list) or len(attachments) > MAX_AUDIO_FILES:
                 raise ValueError("audio supports at most two attachments")
@@ -334,10 +339,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("audio attachments exceed 20 MiB combined")
             if not attachments and length > MAX_REQUEST_BYTES:
                 raise ValueError(f"text request body exceeds {MAX_REQUEST_BYTES} bytes")
-            if attachments and (advisor or json_schema is not None):
-                raise ValueError("audio does not support advisor or schema-constrained client tools")
-            if not isinstance(advisor, bool):
-                raise ValueError("advisor must be a boolean")
+            if attachments and json_schema is not None:
+                raise ValueError("audio does not support schema-constrained client tools")
             if not isinstance(model, str) or not isinstance(prompt, str) or not prompt.strip():
                 raise ValueError("model and non-empty prompt are required strings")
             if json_schema is not None and not isinstance(json_schema, dict):
@@ -376,7 +379,7 @@ class Handler(BaseHTTPRequestHandler):
                             + "\n\nClient request:\n" + prompt
                         )
                     completed = _run_agy(
-                        _agy_command(model, json_schema_path=schema_path, **({"advisor": True} if advisor else {}), **({"audio": True} if attachments else {})),
+                        _agy_command(model, json_schema_path=schema_path, **({"audio": True} if attachments else {})),
                         _prompt_input(prompt),
                         client_disconnected=self._client_disconnected,
                         **({"cwd": temp_dir} if attachments else {}),
@@ -389,7 +392,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise RuntimeError(completed.stderr.strip()[:300] or f"agy exited with {completed.returncode}")
             try:
                 if not attachments:
-                    # Target/advisor can end their own turn, never execute a
+                    # Target can end their own turn, never execute a
                     # workspace/client tool. Check actual events, not only the
                     # agent's declaration (AGY exposes manage_task implicitly).
                     for line in completed.stdout.splitlines():
@@ -398,7 +401,7 @@ class Handler(BaseHTTPRequestHandler):
                         except (ValueError, AttributeError):
                             continue
                         if update.get("step_type") == "tool" and update.get("tool_name") != "finish":
-                            raise RuntimeError("Antigravity target/advisor attempted an unexpected local tool")
+                            raise RuntimeError("Antigravity target attempted an unexpected local tool")
                 content = _response_text(completed.stdout, json_schema)
             except RuntimeError as exc:
                 event_names = []
@@ -410,7 +413,7 @@ class Handler(BaseHTTPRequestHandler):
                     if isinstance(event_name, str):
                         event_names.append(event_name)
                 logger.warning(
-                    "AGY advisor produced no accepted answer request_id=%s model=%r error=%s returncode=%s stdout_bytes=%s events=%s stderr=%s",
+                    "AGY produced no accepted answer request_id=%s model=%r error=%s returncode=%s stdout_bytes=%s events=%s stderr=%s",
                     request_id, model, str(exc)[:300], completed.returncode, len(completed.stdout.encode("utf-8")),
                     ",".join(event_names[:12]), completed.stderr.strip()[:300],
                 )
@@ -439,6 +442,9 @@ class Handler(BaseHTTPRequestHandler):
                                               "phase": exc.phase, "conversation_id": exc.result.get("conversation_id"),
                                               "completed_reads": exc.completed_reads,
                                               "provider_usage": exc.result.get("usage")})
+        except ProviderRateLimited as exc:
+            logger.warning("AGY provider rate limited request_id=%s model=%r error=%s", request_id, model, str(exc)[:300])
+            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"detail": str(exc)})
         except RuntimeError as exc:
             logger.warning("AGY request failed request_id=%s model=%r error=%s", request_id, model, str(exc)[:300])
             self._json(HTTPStatus.BAD_GATEWAY, {"detail": str(exc)})

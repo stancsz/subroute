@@ -37,8 +37,9 @@ def formatting_gateway():
     try:
         yield gateway
     finally:
-        gateway.set_policy(target=original["active_model"], mode=original["mode"],
-                           advisor=original["advisor_model"], reasoning_effort=original.get("reasoning_effort"))
+        gateway.set_policy(target=original["active_model"],
+                           reasoning_effort=original.get("reasoning_effort"),
+                           fast_mode=original.get("fast_mode", False))
         gateway.client.close()
 
 
@@ -58,9 +59,9 @@ PAYLOAD = {"model": "default", "max_tokens": 2048, "stream": True,
            "messages": [{"role": "user", "content": "Write exactly two lines: FORMAT_LINE_A then FORMAT_LINE_B. Put a real line break between the lines, with no code fence or explanation."}]}
 
 
-@pytest.mark.parametrize("model", ["minimax", "openrouter", "mimo-v2.6-pro", "codex-luna", "gemini-subscription"])
+@pytest.mark.parametrize("model", ["minimax", "minimax/minimax-m3.1-flash", "mimo-v2.6-pro", "codex-luna", "gemini-subscription"])
 def test_configured_provider_formatting(formatting_gateway, model):
-    formatting_gateway.set_policy(target=model, mode="force")
+    formatting_gateway.set_policy(target=model)
     response = formatting_gateway.client.post("/v1/messages", json=PAYLOAD)
     blocks = verify_stream(response)
     print(f"{model}: valid blocks={[block['type'] for block in blocks]}")
@@ -72,7 +73,7 @@ def test_local_claude_code_endpoint(formatting_gateway):
         pytest.skip("set SUBROUTE_LOCAL_BASE_URL to check the local forwarder")
     address = urlparse(base)
     assert address.hostname in {"127.0.0.1", "localhost", "::1"} and address.port == 11435
-    formatting_gateway.set_policy(target="minimax", mode="force")
+    formatting_gateway.set_policy(target="minimax")
     token = os.getenv("SUBROUTE_LOCAL_API_KEY")
     headers = {"x-api-key": token} if token else {}
     with httpx.Client(base_url=base, headers=headers, timeout=120) as client:
@@ -86,7 +87,7 @@ def test_local_parallel_tools_and_followup(formatting_gateway):
         pytest.skip("set SUBROUTE_LOCAL_BASE_URL to check the local forwarder")
     address = urlparse(base)
     assert address.hostname in {"127.0.0.1", "localhost", "::1"} and address.port == 11435
-    formatting_gateway.set_policy(target="codex-luna", mode="force")
+    formatting_gateway.set_policy(target="codex-luna")
     token = os.getenv("SUBROUTE_LOCAL_API_KEY")
     headers = {"x-api-key": token} if token else {}
     messages = [{"role": "user", "content": "Call lookup twice, once with q=1 and once with q=2. Do not answer until both tool results return."}]

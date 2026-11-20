@@ -7,9 +7,6 @@ model_list:
       <<: &context_policy
         max_input_tokens: 256000
         context_window: 256000
-        # Client-side compaction threshold within the configured route capacity.
-        auto_compact_token_limit: 204800
-        compaction_scope: total
       display_name: Auto
       selectable: false
       reasoning_efforts: [low, medium, high, xhigh, max]
@@ -19,76 +16,14 @@ model_list:
       api_key: os.environ/OPENROUTER_API_KEY
       allowed_openai_params: [reasoning]
 
-  # Advisor-only Gemini alias keeps its fallback policy separate from the
-  # public Gemini target route.
-  - model_name: gemini-3.8-flash-advisor
-    model_info:
-      max_input_tokens: 32000
-      context_window: 32000
-      auto_compact_token_limit: 25600
-      compaction_scope: total
-      display_name: "Google: Gemini 3.8 Flash"
-      selectable: false
-      disable_background_health_check: true
-    litellm_params:
-      model: antigravity/gemini-3.8-flash
-      allowed_openai_params: [reasoning_effort]
-
-  # Supplemental Advisor call on the verified Antigravity subscription model.
-  - model_name: claude-opus-5-5-low-advisor
-    model_info:
-      max_input_tokens: 32000
-      context_window: 32000
-      auto_compact_token_limit: 25600
-      compaction_scope: total
-      display_name: "Supplemental Advisor: Claude Opus 5.5 Low"
-      selectable: false
-      disable_background_health_check: true
-    litellm_params:
-      model: antigravity/claude-opus-5-5-low
-
-  - model_name: openrouter
-    model_info:
-      <<: *context_policy
-      display_name: "MiniMax: MiniMax M3.1 Flash"
-      provider: OpenRouter
-      source_id: openrouter
-      access: API key
-      selectable: false
-      capabilities: [tools, streaming]
-      reasoning_efforts: [low, medium, high, xhigh, max]
-    litellm_params:
-      model: openrouter/minimax/minimax-m3.1-flash
-      api_key: os.environ/OPENROUTER_API_KEY
-      allowed_openai_params: [reasoning]
-
-  - model_name: openrouter-flash
-    model_info:
-      <<: *context_policy
-      display_name: "MiniMax: MiniMax M3.1 Flash"
-      provider: OpenRouter
-      source_id: openrouter
-      access: API key
-      selectable: false
-      capabilities: [tools, streaming]
-      reasoning_efforts: [low, medium, high, xhigh, max]
-    litellm_params:
-      model: openrouter/minimax/minimax-m3.1-flash
-      api_key: os.environ/OPENROUTER_API_KEY
-      allowed_openai_params: [reasoning]
-
   # In-process CustomLLM handler backed by the Compose CLI bridge sidecar.
   - model_name: gemini-subscription
     model_info:
       <<: *context_policy
-      advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 3.8 Flash"
       provider: Antigravity
       source_id: gemini-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high]
-      capabilities: [text, audio, tools, buffered-sse]
-      advisor_selectable: true
     litellm_params:
       model: antigravity/gemini-3.8-flash
       allowed_openai_params: [reasoning_effort]
@@ -96,14 +31,10 @@ model_list:
   - model_name: gemini-subscription-argon
     model_info:
       <<: *context_policy
-      advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 4 Argon"
       provider: Antigravity
       source_id: gemini-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high]
-      capabilities: [text, tools, buffered-sse]
-      advisor_selectable: true
     litellm_params:
       model: antigravity/gemini-4-argon
       allowed_openai_params: [reasoning_effort]
@@ -111,13 +42,9 @@ model_list:
   - model_name: gemini-subscription-3.7-flash
     model_info:
       <<: *context_policy
-      advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 3.7 Flash"
       provider: Antigravity
       source_id: gemini-subscription
-      access: Subscription
-      capabilities: [text, tools, buffered-sse]
-      advisor_selectable: true
       reasoning_efforts: [low, medium, high]
     litellm_params:
       model: antigravity/gemini-3.7-flash
@@ -126,13 +53,9 @@ model_list:
   - model_name: gemini-subscription-3.6-flash
     model_info:
       <<: *context_policy
-      advisor_max_input_tokens: 32000
       display_name: "Google: Gemini 3.6 Flash"
       provider: Antigravity
       source_id: gemini-subscription
-      access: Subscription
-      capabilities: [text, tools, buffered-sse]
-      advisor_selectable: true
       reasoning_efforts: [low, medium, high]
     litellm_params:
       model: antigravity/gemini-3.6-flash
@@ -141,13 +64,9 @@ model_list:
   - model_name: gemini-subscription-pro
     model_info:
       <<: *context_policy
-      advisor_max_input_tokens: 32000
       display_name: Gemini 3.1 Pro
       provider: Antigravity
       source_id: gemini-subscription
-      access: Subscription
-      capabilities: [text, tools, buffered-sse]
-      advisor_selectable: true
       reasoning_efforts: [low, high]
     litellm_params:
       model: antigravity/gemini-3.1-pro
@@ -159,9 +78,7 @@ model_list:
       display_name: "Claude Opus 5.5"
       provider: Antigravity
       source_id: gemini-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high]
-      capabilities: [text, tools, buffered-sse]
     litellm_params:
       model: antigravity/agy-opus-5-5-medium
       allowed_openai_params: [reasoning_effort]
@@ -172,9 +89,7 @@ model_list:
       display_name: "Claude Sonnet 5.5"
       provider: Antigravity
       source_id: gemini-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high]
-      capabilities: [text, tools, buffered-sse]
     litellm_params:
       model: antigravity/agy-sonnet-5-5-medium
       allowed_openai_params: [reasoning_effort]
@@ -205,9 +120,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Sol"
       provider: OpenAI
       source_id: openai-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
-      capabilities: [tools, streaming]
     litellm_params:
       model: codex-subscription/gpt-6-sol
       api_base: https://chatgpt.com/backend-api/codex
@@ -224,9 +137,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Astra"
       provider: OpenAI
       source_id: openai-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
-      capabilities: [tools, streaming]
     litellm_params:
       model: codex-subscription/gpt-6-astra
       api_base: https://chatgpt.com/backend-api/codex
@@ -243,9 +154,7 @@ model_list:
       display_name: "OpenAI: GPT-6.1 Sol"
       provider: OpenAI
       source_id: openai-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
-      capabilities: [tools, streaming]
     litellm_params:
       model: codex-subscription/gpt-6.1-sol
       api_base: https://chatgpt.com/backend-api/codex
@@ -262,9 +171,7 @@ model_list:
       display_name: "OpenAI: GPT-6.1 Terra"
       provider: OpenAI
       source_id: openai-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max, ultra]
-      capabilities: [tools, streaming]
     litellm_params:
       model: codex-subscription/gpt-6.1-terra
       api_base: https://chatgpt.com/backend-api/codex
@@ -281,9 +188,7 @@ model_list:
       display_name: "OpenAI: GPT-6 Luna"
       provider: OpenAI
       source_id: openai-subscription
-      access: Subscription
       reasoning_efforts: [low, medium, high, xhigh, max]
-      capabilities: [tools, streaming, image-generation]
     litellm_params:
       model: codex-subscription/gpt-6-luna
       api_base: https://chatgpt.com/backend-api/codex
@@ -296,271 +201,12 @@ model_list:
 
   # Stable client alias for the persisted routing-desk target. The routing
   # hook replaces this placeholder with the selected target before dispatch.
-  - model_name: default
-    model_info:
-      <<: *context_policy
-      selectable: false
-      display_name: Default target
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      reasoning_efforts: [low, medium, high, xhigh, max]
-      capabilities: [tools, streaming]
-    litellm_params:
-      model: codex-subscription/gpt-6-luna
-      api_base: https://chatgpt.com/backend-api/codex
-      api_key: refreshed-at-dispatch
-      extra_headers:
-        ChatGPT-Account-ID: refreshed-at-dispatch
-        User-Agent: OpenAI-Codex/0.151.0 (Windows)
-      allowed_openai_params: [reasoning_effort]
-      store: false
-
-  - model_name: codex-gpt-6.1-sol-advisor
-    model_info:
-      <<: &advisor_context_policy
-        max_input_tokens: 32000
-        context_window: 32000
-        auto_compact_token_limit: 25600
-        compaction_scope: total
-      display_name: "OpenAI: GPT-6.1 Sol"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-6.1-sol
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-sol-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "OpenAI: GPT-6 Sol"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-6-sol
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-astra-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "OpenAI: GPT-6 Astra"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      reasoning_efforts: [low, medium, high, xhigh, max, ultra]
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-6-astra
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-luna-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "OpenAI: GPT-6 Luna"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      reasoning_efforts: [low, medium, high, xhigh, max]
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-6-luna
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-gpt-6.1-terra-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "gpt-6.1-terra"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      capabilities: [text, vision]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-6.1-terra
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-gpt-5.6-luna-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "gpt-5.6-luna"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      capabilities: [text, vision]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-5.6-luna
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-gpt-5.6-sol-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "gpt-5.6-sol"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      capabilities: [text, vision]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-5.6-sol
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: codex-gpt-5.6-terra-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "gpt-5.6-terra"
-      provider: OpenAI
-      source_id: openai-subscription
-      access: Subscription
-      capabilities: [text, vision]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: codex-advisor/gpt-5.6-terra
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: agy-gemini-4-argon-medium-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "gemini-4-argon-medium"
-      provider: Antigravity
-      source_id: gemini-subscription
-      access: Subscription
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: antigravity/gemini-4-argon-medium
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: agy-gemini-3.8-flash-medium-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "gemini-3.8-flash-medium"
-      provider: Antigravity
-      source_id: gemini-subscription
-      access: Subscription
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: antigravity/gemini-3.8-flash-medium
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: agy-opus-5-5-medium-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "claude-opus-5-5-medium"
-      provider: Antigravity
-      source_id: gemini-subscription
-      access: Subscription
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: antigravity/agy-opus-5-5-medium
-      allowed_openai_params: [reasoning_effort]
-
-  - model_name: agy-sonnet-5-5-medium-advisor
-    model_info:
-      <<: *advisor_context_policy
-      display_name: "claude-sonnet-5-5-medium"
-      provider: Antigravity
-      source_id: gemini-subscription
-      access: Subscription
-      capabilities: [text]
-      selectable: false
-      advisor_selectable: true
-    litellm_params:
-      model: antigravity/agy-sonnet-5-5-medium
-      allowed_openai_params: [reasoning_effort]
-
-  # Private Anthropic Messages transports used only by LiteLLM's optional
-  # model-selected Advisor tool. The 4040 experts service owns Sift and the
-  # actual 32K provider admission limit; do not add a larger context here.
-  - model_name: experts/codex-gpt-6.1-terra-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-gpt-6.1-terra-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/codex-gpt-5.6-luna-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-gpt-5.6-luna-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/codex-gpt-5.6-sol-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-gpt-5.6-sol-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/codex-gpt-5.6-terra-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-gpt-5.6-terra-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/agy-gemini-4-argon-medium-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/agy-gemini-4-argon-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/agy-gemini-3.8-flash-medium-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/agy-gemini-3.8-flash-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/agy-opus-5-5-medium-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/agy-opus-5-5-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/agy-sonnet-5-5-medium-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/agy-sonnet-5-5-medium-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/codex-gpt-6.1-sol-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-gpt-6.1-sol-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/codex-sol-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-sol-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/codex-astra-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-astra-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/codex-luna-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/codex-luna-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/gemini-3.8-flash-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/gemini-3.8-flash-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/gemini-4-argon-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/gemini-4-argon-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/gemini-4-hydrogen-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/gemini-4-hydrogen-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/gemini-3.7-flash-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/gemini-3.7-flash-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/gemini-3.6-flash-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/gemini-3.6-flash-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-  - model_name: experts/gemini-3.1-pro-advisor
-    model_info: {selectable: false, disable_background_health_check: true}
-    litellm_params: {model: "anthropic/gemini-3.1-pro-advisor", api_base: "http://experts:4040", api_key: "os.environ/EXPERTS_API_KEY"}
-
-
-
   - model_name: minimax
     model_info:
       <<: *context_policy
       display_name: "MiniMax: MiniMax M3"
       provider: MiniMax
       source_id: minimax
-      access: API key
-      reasoning_note: This M3 route uses adaptive thinking; graded effort levels are not exposed.
-      capabilities: [tools, streaming]
     litellm_params:
       model: minimax/MiniMax-M3
       # Keep thinking out of visible Chat/Responses text (native provider switch).
@@ -568,30 +214,12 @@ model_list:
       api_key: os.environ/MINIMAX_API_KEY
 
   # Existing OpenRouter-backed alias remains unchanged.
-  - model_name: minimax-flash
-    model_info:
-      <<: *context_policy
-      display_name: "MiniMax: MiniMax M3.1 Flash"
-      provider: OpenRouter
-      source_id: openrouter
-      access: API key
-      selectable: false
-      capabilities: [tools, streaming]
-      reasoning_efforts: [low, medium, high, xhigh, max]
-    litellm_params:
-      model: openrouter/minimax/minimax-m3.1-flash
-      api_key: os.environ/OPENROUTER_API_KEY
-      allowed_openai_params: [reasoning]
-
-  # Canonical OpenRouter model ID; the legacy aliases above remain accepted.
   - model_name: minimax/minimax-m3.1-flash
     model_info:
       <<: *context_policy
       display_name: "MiniMax: MiniMax M3.1 Flash"
       provider: OpenRouter
       source_id: openrouter
-      access: API key
-      capabilities: [tools, streaming]
       reasoning_efforts: [low, medium, high, xhigh, max]
     litellm_params:
       model: openrouter/minimax/minimax-m3.1-flash
@@ -605,8 +233,6 @@ model_list:
       display_name: "MiniMax: MiniMax M3.1 Flash"
       provider: MiniMax
       source_id: minimax
-      access: API key
-      capabilities: [tools, streaming]
       reasoning_efforts: [low, medium, high, xhigh, max]
       supports_reasoning: true
       supports_adaptive_thinking: true
@@ -625,8 +251,6 @@ model_list:
       display_name: MiniMax Speech 2.6 HD
       provider: MiniMax
       source_id: minimax
-      access: API key
-      capabilities: [speech-synthesis]
     litellm_params:
       model: minimax/speech-2.6-hd
       api_key: os.environ/MINIMAX_API_KEY
@@ -637,8 +261,6 @@ model_list:
       display_name: "Xiaomi: MiMo-V2.6-Pro"
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [text, streaming]
     litellm_params:
       model: openai/mimo-v2.6-pro
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -650,8 +272,6 @@ model_list:
       display_name: "Xiaomi: MiMo-V2.6-Flash"
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [text, streaming]
     litellm_params:
       model: openai/mimo-v2.6-flash
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -663,8 +283,6 @@ model_list:
       display_name: "Xiaomi: MiMo-V2.5-Pro"
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [text, vision, audio, video, tools, streaming]
     litellm_params:
       model: openai/mimo-v2.5-pro
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -676,8 +294,6 @@ model_list:
       display_name: "Xiaomi: MiMo-V2.5"
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [text, vision, audio, video, tools, streaming]
     litellm_params:
       model: openai/mimo-v2.5
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -687,14 +303,10 @@ model_list:
     model_info:
       max_input_tokens: 8000
       context_window: 8000
-      auto_compact_token_limit: 6400
-      compaction_scope: total
       max_tokens: 2000
       display_name: MiMo V2.5 ASR
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [speech-recognition, streaming]
     litellm_params:
       model: openai/mimo-v2.5-asr
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -705,14 +317,10 @@ model_list:
     model_info:
       max_input_tokens: 8000
       context_window: 8000
-      auto_compact_token_limit: 6400
-      compaction_scope: total
       max_tokens: 8000
       display_name: MiMo V2.5 TTS
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [speech-synthesis, streaming]
     litellm_params:
       model: openai/mimo-v2.5-tts
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -722,14 +330,10 @@ model_list:
     model_info:
       max_input_tokens: 8000
       context_window: 8000
-      auto_compact_token_limit: 6400
-      compaction_scope: total
       max_tokens: 8000
       display_name: MiMo V2.5 TTS Voice Clone
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [speech-synthesis, voice-cloning, streaming]
     litellm_params:
       model: openai/mimo-v2.5-tts-voiceclone
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -739,14 +343,10 @@ model_list:
     model_info:
       max_input_tokens: 8000
       context_window: 8000
-      auto_compact_token_limit: 6400
-      compaction_scope: total
       max_tokens: 8000
       display_name: MiMo V2.5 TTS Voice Design
       provider: Xiaomi MiMo
       source_id: xiaomi-tokenplan
-      access: Token Plan
-      capabilities: [speech-synthesis, voice-design, streaming]
     litellm_params:
       model: openai/mimo-v2.5-tts-voicedesign
       api_base: https://token-plan-sgp.xiaomimimo.com/v1
@@ -760,9 +360,6 @@ model_list:
       display_name: Endpoint default model
       provider: FreeToken
       source_id: freetoken
-      access: Local endpoint
-      reasoning_note: This local route has thinking disabled in its configuration.
-      capabilities: [text, streaming]
     litellm_params:
       model: openai/local-model
       api_base: os.environ/FREETOKEN_BASE_URL
@@ -777,102 +374,33 @@ model_list:
       display_name: Qwen 2.5 Coder
       provider: Ollama
       source_id: ollama
-      access: Local endpoint
-      reasoning_note: Qwen 2.5 Coder does not expose reasoning effort levels.
-      capabilities: [local, text]
     litellm_params:
       model: ollama/qwen2.5-coder
       api_base: os.environ/OLLAMA_API_BASE
 
   # Compose serves Unsloth Dynamic 3.0 IQ2_XXS through llama.cpp with two slots.
   # Each 40K slot reserves 32K for input, 4K for output and 4K headroom.
-  - model_name: qwen3.8-27b
-    model_info:
-      max_input_tokens: 32768
-      max_output_tokens: 4096
-      context_window: 40960
-      auto_compact_token_limit: 32768
-      compaction_scope: total
-      display_name: "Qwen: Qwen3.8 27B"
-      provider: Local
-      source_id: qwen-local
-      access: Local GPU
-      capabilities: [local, text, tools, streaming]
-      disable_background_health_check: true
-    litellm_params:
-      model: openai/qwen3.8-27b
-      api_base: http://qwen-local:8080/v1
-      api_key: local
-      # Codex speaks Responses; LiteLLM owns its bridge to this Chat-only server.
-      use_chat_completions_api: true
-
 router_settings:
+  model_group_alias:
+    default: codex-luna
+    openrouter: minimax/minimax-m3.1-flash
+    openrouter-flash: minimax/minimax-m3.1-flash
+    minimax-flash: minimax/minimax-m3.1-flash
+    codex-reserve: codex-luna
+    codex-terra: codex-subscription
   enable_pre_call_checks: true
   # Bound every provider attempt so one stalled upstream cannot stall the
   # ordered chain. LiteLLM applies it per attempt, not to the whole chain.
   timeout: 45
-  # Catch provider failures for eligible text/chat requests in one consistent
-  # order. The request model stays client-visible; only the internal provider
-  # changes. The pre-call hook disables this chain for media and special APIs.
-  default_fallbacks: [openrouter, mimo-v2.6-pro, codex-luna]
-  # Try the configured chain once, without recursively reopening it from a
-  # failed fallback target. This preserves order and prevents provider repeats.
   max_fallbacks: 1
   num_retries: 0
+  # Callers opt into cross-provider failover via auto.
+  fallbacks:
+    - auto: [mimo-v2.6-pro, codex-luna]
   model_group_retry_policy:
     gemini-subscription:
       ContentPolicyViolationErrorRetries: 2
-  fallbacks:
-    - minimax/minimax-m3.1-flash: [mimo-v2.6-pro, codex-luna]
-    # These targets are themselves members of the default chain. Skip the
-    # current provider so the fallback walk never repeats an attempt.
-    - auto: [mimo-v2.6-pro, codex-luna]
-    # Local Qwen is optional; let LiteLLM try the existing text providers
-    # if native admission or local inference fails.
-    - qwen3.8-27b: [mimo-v2.6-pro, openrouter, codex-luna]
-    - openrouter: [mimo-v2.6-pro, codex-luna]
-    # `openrouter-flash` and `minimax-flash` are the same OpenRouter M3.1 Flash
-    # route. The duplicate OpenRouter provider is skipped, so both walk
-    # MiMo V2.6 Pro and then GPT-6 Luna exactly once.
-    - openrouter-flash: [mimo-v2.6-pro, codex-luna]
-    - minimax-flash: [mimo-v2.6-pro, codex-luna]
-    - mimo-v2.6-pro: [openrouter, codex-luna]
-    - mimo-v2.6-flash: [openrouter, codex-luna]
-    - mimo-v2.5-pro: [openrouter, codex-luna]
-    - mimo-v2.5: [openrouter, codex-luna]
-    - codex-luna: [openrouter, mimo-v2.6-pro]
-    # Keep Advisor failover separate from the target catch-all chain.
-    - gemini-3.8-flash-advisor: [codex-gpt-6.1-sol-advisor]
-    - codex-gpt-6.1-sol-advisor: [gemini-3.8-flash-advisor]
-    - codex-sol-advisor: []
-    - codex-astra-advisor: []
-    - codex-luna-advisor: []
-    # A failed 4040 consultation is final. Never spend the ordinary executor
-    # chain when the optional expert tool is unavailable.
-    - experts/codex-gpt-6.1-terra-advisor: []
-    - experts/codex-gpt-5.6-luna-advisor: []
-    - experts/codex-gpt-5.6-sol-advisor: []
-    - experts/codex-gpt-5.6-terra-advisor: []
-    - experts/agy-gemini-4-argon-medium-advisor: []
-    - experts/agy-gemini-3.8-flash-medium-advisor: []
-    - experts/agy-opus-5-5-medium-advisor: []
-    - experts/agy-sonnet-5-5-medium-advisor: []
-    - experts/codex-gpt-6.1-sol-advisor: []
-    - experts/codex-sol-advisor: []
-    - experts/codex-astra-advisor: []
-    - experts/codex-luna-advisor: []
-    - experts/gemini-3.8-flash-advisor: []
-    - experts/gemini-4-argon-advisor: []
-    - experts/gemini-4-hydrogen-advisor: []
-    - experts/gemini-3.7-flash-advisor: []
-    - experts/gemini-3.6-flash-advisor: []
-    - experts/gemini-3.1-pro-advisor: []
 
-search_tools:
-  - search_tool_name: subroute-searxng
-    litellm_params:
-      search_provider: searxng
-      api_base: os.environ/SEARXNG_API_BASE
 
 litellm_settings:
   # Xiaomi and local OpenAI-compatible backends implement Chat Completions.
@@ -880,21 +408,13 @@ litellm_settings:
   # Native Messages providers and custom subscription handlers keep their lanes.
   use_chat_completions_url_for_anthropic_messages: true
   callbacks:
-    - subroute.usage_accounting.usage_accounting
     - subroute.plugins.dynamic_router.dynamic_routing_plugin
-    - subroute.plugins.advisor_plugin.advisor_plugin_instance
     - subroute.plugins.codex_credentials.codex_credential_refresher
-    - websearch_interception
   custom_provider_map:
     - provider: codex-subscription
       custom_handler: subroute.handlers.codex_subscription.codex_subscription_handler
     - provider: antigravity
       custom_handler: subroute.handlers.antigravity.antigravity_handler
-    - provider: codex-advisor
-      custom_handler: subroute.handlers.codex_advisor.codex_advisor_handler
-  websearch_interception_params:
-    enabled_providers: ["openrouter"]
-    search_tool_name: "subroute-searxng"
   # This removes known unsupported top-level parameters. It does not guarantee
   # cross-provider tool, vision, context, reasoning, or streaming compatibility.
   drop_params: true

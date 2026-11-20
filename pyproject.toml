@@ -16,16 +16,14 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8", "pyyaml>=6"]
 music = ["mcp==2.3.0", "mutagen==1.48.1"]
-search = ["mcp==2.3.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-subroute = ["control/*.html", "control/*.css", "control/*.js", "data/*.json"]
+subroute = ["control/*.html", "control/*.css", "control/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-norecursedirs = ["acceptance"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 markers = ["live: sends real HTTP requests to a running Subroute gateway and configured providers"]

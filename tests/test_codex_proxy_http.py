@@ -364,7 +364,6 @@ def verify_default_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
         ):
             update_response = client.post("/api/active-model", json={
                 "model": "codex-gpt-6.1-sol",
-                "mode": "alias",
             })
             assert update_response.status_code == 200, update_response.text
             saved_state = update_response.json()
@@ -376,16 +375,11 @@ def verify_default_model_uses_control_plane_policy_through_proxy(temp_dir: Path)
     assert response.status_code == 200, response.text
     assert response.json()["choices"][0]["message"]["content"] == "fixture answer"
     assert saved_state["active_model"] == "codex-gpt-6.1-sol"
-    assert saved_state["mode"] == "alias"
     assert upstream_models == ["openai/responses/gpt-6.1-sol"]
     assert routed_metadata[0]["routing"] == {
         "requested_model": "default",
         "resolved_model": "codex-gpt-6.1-sol",
-        "mode": "alias",
-        "policy_version": saved_state["policy_version"],
     }
-    assert routed_metadata[0]["gateway_policy"]["active_model"] == "codex-gpt-6.1-sol"
-    assert routed_metadata[0]["gateway_policy"]["policy_version"] == saved_state["policy_version"]
 
 
 def test_default_model_dispatch_uses_saved_control_plane_policy(tmp_path):

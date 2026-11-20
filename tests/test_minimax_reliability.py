@@ -61,8 +61,9 @@ def _mini_max_wire_fixture():
 def test_flash_aliases_keep_reasoning_visible_and_advertise_efforts():
     config = yaml.safe_load((ROOT / "config/litellm.yaml").read_text(encoding="utf-8"))
     models = {entry["model_name"]: entry for entry in config["model_list"]}
+    aliases = config["router_settings"]["model_group_alias"]
     for alias in FLASH_ALIASES:
-        entry = models[alias]
+        entry = models[aliases.get(alias, alias)]
         assert entry["litellm_params"]["model"] == FLASH_MODEL
         assert entry["litellm_params"]["allowed_openai_params"] == ["reasoning"]
         assert entry["model_info"]["reasoning_efforts"] == ["low", "medium", "high", "xhigh", "max"]
@@ -80,25 +81,6 @@ def test_flash_aliases_keep_reasoning_visible_and_advertise_efforts():
 @pytest.fixture
 def plugin():
     return DynamicRoutingPlugin.__new__(DynamicRoutingPlugin)
-
-
-@pytest.mark.parametrize(("call_type", "expected"), [
-    ("acompletion", {"reasoning": {"effort": "medium"}}),
-    ("aresponses", {"reasoning": {"effort": "medium"}}),
-    ("aanthropic_messages", {"reasoning": {"effort": "medium"}}),
-])
-def test_flash_gets_medium_default_at_protocol_hook(plugin, call_type, expected):
-    request = {
-        "model": FLASH_MODEL,
-        "messages": [{"role": "assistant", "content": "continuing", "reasoning_content": "plan", "tool_calls": [{"id": "t1"}]}],
-        "metadata": {},
-    }
-    original_messages = deepcopy(request["messages"])
-    result = asyncio.run(plugin.async_pre_call_deployment_hook(request, call_type))
-    assert result is not None
-    assert {key: result[key] for key in expected} == expected
-    assert request["messages"] == original_messages
-    assert result.get("reasoning_effort") is None
 
 
 @pytest.mark.parametrize(("caller_kwargs", "expected_reasoning"), [
@@ -157,17 +139,8 @@ def test_default_does_not_affect_other_models_or_advisor(plugin, model):
     assert asyncio.run(plugin.async_pre_call_deployment_hook(request, "acompletion")) is None
 
 
-def test_fallback_attempt_model_identity_does_not_inherit_flash_default(plugin):
-    request = {
-        "model": "openai/gpt-6-luna",
-        "metadata": {"routing": {"resolved_model": "minimax-flash"}},
-    }
-    assert asyncio.run(plugin.async_pre_call_deployment_hook(request, "acompletion")) is None
-
-
 @pytest.mark.parametrize("protocol", ["chat", "responses", "messages"])
 @pytest.mark.parametrize(("overrides", "effort"), [
-    ({}, "medium"),
     ({"reasoning_effort": "high"}, "high"),
     ({"reasoning_effort": "max"}, "max"),
 ])

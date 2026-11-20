@@ -5,79 +5,25 @@ import yaml
 
 ROOT = Path(__file__).parents[1]
 CONFIG_PATH = ROOT / "config" / "litellm.yaml"
-EXPERTS_CONFIG_PATH = ROOT / "config" / "litellm.experts.yaml"
 
 
 def config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 
 
-def experts_config() -> dict:
-    return yaml.safe_load(EXPERTS_CONFIG_PATH.read_text(encoding="utf-8"))
-
-
-def test_target_and_advisor_routes_declare_separate_context_policies():
-    for settings, experts in ((config(), False), (experts_config(), True)):
-        assert settings["router_settings"]["enable_pre_call_checks"] is True
-        for deployment in settings["model_list"]:
-            info = deployment["model_info"]
-            if deployment["model_name"] in {"catalog-openai/*", "catalog-antigravity/*"}:
-                # A discovered model's capacity cannot be inferred from a shared wildcard.
-                assert "max_input_tokens" not in info
-                assert "context_window" not in info
-                assert "auto_compact_token_limit" not in info
-                continue
-            if deployment["model_name"].startswith("experts/"):
-                assert info["selectable"] is False
-                assert "max_input_tokens" not in info
-                continue
-            is_advisor = experts or deployment["model_name"].endswith("-advisor")
-            speech = deployment["model_name"].startswith(("mimo-v2.5-asr", "mimo-v2.5-tts"))
-            local_qwen = deployment["model_name"] == "qwen3.8-27b"
-            context = 32000 if is_advisor else 8000 if speech else 40960 if local_qwen else 256000
-            max_input = 32_000 if experts else 32768 if local_qwen else context
-            assert info["max_input_tokens"] == max_input, deployment["model_name"]
-            assert info["context_window"] == context
-            trigger = 32768 if local_qwen else context * 0.8
-            assert info["auto_compact_token_limit"] == trigger
-            if info.get("advisor_selectable"):
-                if info["max_input_tokens"] == 256000:
-                    assert info["advisor_max_input_tokens"] == 32000
-            if not local_qwen and context != 256000:
-                assert info["auto_compact_token_limit"] == info["context_window"] * 0.8
-            assert info["compaction_scope"] == ("input" if experts else "total")
-
-    supplemental = next(
-        deployment for deployment in config()["model_list"]
-        if deployment["model_name"] == "claude-opus-5-5-low-advisor"
-    )
-    assert supplemental["litellm_params"]["model"] == "antigravity/claude-opus-5-5-low"
-    assert supplemental["model_info"]["max_input_tokens"] == 32000
-    assert supplemental["model_info"]["auto_compact_token_limit"] == 25600
-
-
-def test_local_qwen_responses_uses_litellm_chat_bridge():
-    import inspect
-    from litellm.responses.main import _will_bridge_to_chat_completions
-
-    deployment = next(item for item in config()["model_list"] if item["model_name"] == "qwen3.8-27b")
-    params = deployment["litellm_params"]
-    # Dev and pinned-image builds both label themselves 1.103.0 but expose
-    # different private-helper signatures. Exercise the native bridge in each.
-    extra = {"api_base": params.get("api_base")} if "api_base" in inspect.signature(_will_bridge_to_chat_completions).parameters else {}
-    assert _will_bridge_to_chat_completions(
-        "qwen3.8-27b", "openai", params.get("use_chat_completions_api", False), deployment["model_info"],
-        **extra,
-    )
-
-
-def test_default_target_client_alias_is_catalogued_and_uses_luna_when_unresolved():
-    models = config()["model_list"]
-    default = next(item for item in models if item["model_name"] == "default")
-    luna = next(item for item in models if item["model_name"] == "codex-luna")
-    assert default["model_info"]["selectable"] is False
-    assert default["litellm_params"]["model"] == luna["litellm_params"]["model"]
-    assert default["litellm_params"]["api_base"] == luna["litellm_params"]["api_base"]
+def test_context_metadata_describes_each_configured_route():
+    settings = config()
+    assert settings["router_settings"]["enable_pre_call_checks"] is True
+    for deployment in settings["model_list"]:
+        name = deployment["model_name"]
+        info = deployment["model_info"]
+        assert not name.endswith("-advisor") and not name.startswith("experts/")
+        if name.startswith("catalog-"):
+            continue
+        speech = name.startswith(("mimo-v2.5-asr", "mimo-v2.5-tts"))
+        context = 8000 if speech else 256000
+        assert info["max_input_tokens"] == context
+        assert info["context_window"] == context
 
 
 def test_compose_isolates_mutable_state_and_pins_gateway_image():
@@ -91,17 +37,18 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
     assert "GEMINI_API_KEY" not in prod_env and "GEMINI_API_KEY" not in stage_env
     assert prod_env["ACTIVE_MODEL_STATE_PATH"] == "/app/legacy-config/active_model.json"
     assert stage_env["ACTIVE_MODEL_STATE_PATH"] == "/app/state/active_model.json"
-    assert "./config:/app/legacy-config" in prod["volumes"]
+    assert any(mount.endswith(":/app/legacy-config") for mount in prod["volumes"])
     assert "./src:/app/src:ro" not in prod["volumes"]
     assert "./config:/app/config:ro" not in staging["volumes"]
     assert "./src:/app/src:ro" not in staging["volumes"]
     assert "gateway-staging-state:/app/state" in staging["volumes"]
-    assert "@postgres-staging:5432/litellm_staging" in stage_env["DATABASE_URL"]
+    assert "@postgres:5432/litellm_staging" in stage_env["DATABASE_URL"]
     assert "@postgres:5432/litellm" in prod_env["DATABASE_URL"]
-    assert set(prod["depends_on"]) == {"postgres", "antigravity"}
-    assert set(staging["depends_on"]) == {"postgres-staging", "antigravity"}
-    assert prod["depends_on"]["antigravity"]["condition"] == "service_healthy"
-    assert staging["depends_on"]["antigravity"]["condition"] == "service_healthy"
+    assert set(prod["depends_on"]) == set(staging["depends_on"]) == {"postgres"}
+    assert set(services["postgres"]["networks"]) == {"production", "staging"}
+    assert staging["profiles"] == ["staging"]
+    assert services["antigravity"]["profiles"] == ["antigravity"]
+    assert not {"postgres-staging", "experts", "experts-staging", "antigravity-staging", "searxng", "searxng-staging"} & services.keys()
     antigravity = services["antigravity"]
     assert "ports" not in antigravity
     assert antigravity["volumes"] == [
@@ -113,24 +60,16 @@ def test_compose_isolates_mutable_state_and_pins_gateway_image():
         item.split("=", 1) for item in antigravity["environment"] if "=" in item
     )
     assert antigravity_env["GEMINI_FORCE_FILE_STORAGE"] == "true"
-    assert set(services["postgres"]["volumes"]).isdisjoint(services["postgres-staging"]["volumes"])
     assert prod["image"] == "subroute-gateway:local"
     assert staging["image"] == "subroute-gateway:staging"
-    assert prod["build"] == staging["build"] == services["experts-staging"]["build"]
-    assert services["experts-staging"]["image"] == staging["image"]
     assert set(prod["networks"]) == {"production"}
     assert set(staging["networks"]) == {"staging"}
-    assert set(services["experts-staging"]["networks"]) == {"staging"}
-    assert "experts" in services["experts-staging"]["networks"]["staging"]["aliases"]
     assert set(antigravity["networks"]) == {"production", "staging"}
     assert prod_env["ANTIGRAVITY_BRIDGE_URL"] == stage_env["ANTIGRAVITY_BRIDGE_URL"] == "http://antigravity:4015"
-    assert prod_env["EXPERTS_BASE_URL"] == stage_env["EXPERTS_BASE_URL"] == "http://experts:4040"
-    assert prod["image"] == services["experts"]["image"]
-    assert prod["build"] == services["experts"]["build"]
-    assert "./config:/app/config:ro" not in services["experts"]["volumes"]
-    assert "./src:/app/src:ro" not in services["experts"]["volumes"]
     recipe = (ROOT / prod["build"]["dockerfile"]).read_text()
-    assert "FROM ghcr.io/berriai/litellm-database@sha256:35f2cec3a14bb297e08bfab56c1fc377432bc4071aaf71978fdff043a5d91e79" in recipe
+    assert "FROM python:3.13-slim@sha256:" in recipe
+    assert "uv sync --locked --no-dev" in recipe
+    assert "--all-extras" not in recipe
     assert "AS uv-tools" in recipe
     assert "onnxruntime" not in recipe
     assert "advisor-ranker" not in recipe
@@ -142,39 +81,6 @@ def test_compose_publishes_gateway_ports_on_loopback():
 
     assert services["gateway"]["ports"] == ["127.0.0.1:4000:4000"]
     assert services["gateway-staging"]["ports"] == ["127.0.0.1:4005:4005"]
-
-
-def test_local_qwen_two_gpu_slots_preserve_input_output_and_context_headroom():
-
-    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
-    service = services["qwen-local"]
-    command = service["command"]
-    info = next(item["model_info"] for item in config()["model_list"]
-                if item["model_name"] == "qwen3.8-27b")
-
-    for flag, expected in {
-        "--ctx-size": "81920",
-        "--parallel": "2",
-        "--kv-unified-per-slot": "40960",
-        "--n-predict": "4096",
-        "--cache-ram": "0",
-        "--n-gpu-layers": "all",
-        "--fit": "off",
-        "--ctx-checkpoints": "0",
-        "--override-tensor": "^token_embd[.]weight$=CUDA0",
-        "--cache-type-k": "q4_0",
-        "--cache-type-v": "q4_0",
-    }.items():
-        assert command[command.index(flag) + 1] == expected
-    assert int(command[command.index("--ctx-size") + 1]) == 2 * info["context_window"]
-    assert info["max_input_tokens"] + info["max_output_tokens"] + 4096 == info["context_window"]
-    assert info["auto_compact_token_limit"] == info["max_input_tokens"]
-    assert service["cpus"] == 6.0
-    assert service["mem_limit"] == service["memswap_limit"] == "12g"
-    # Fixed placement avoids the contradictory CUDA/NVML free-memory views
-    # observed under WSL with a game running. GPU residency needs live checks.
-    assert "--fit-target" not in command
-    assert "--kv-offload" in command
 
 
 def test_antigravity_image_pins_build_dependencies_and_disables_self_update():
@@ -220,7 +126,6 @@ def test_all_public_protocols_are_owned_by_litellm_proxy():
     assert not any((package / "protocols").glob("*.py"))
     assert not any((package / "adapters").glob("*.py"))
     assert (package / "handlers" / "antigravity.py").is_file()
-    assert (package / "plugins" / "advisor_plugin.py").is_file()
 
 
 def test_standard_channels_use_native_litellm_provider_configuration():
@@ -228,8 +133,6 @@ def test_standard_channels_use_native_litellm_provider_configuration():
     by_name = {deployment["model_name"]: deployment for deployment in deployments}
 
     assert "openai" not in by_name
-    assert by_name["default"]["model_info"]["selectable"] is False
-    assert by_name["default"]["litellm_params"]["model"] == by_name["codex-luna"]["litellm_params"]["model"]
     assert by_name["auto"]["model_info"]["selectable"] is False
     assert by_name["auto"]["model_info"]["disable_background_health_check"] is True
     assert "gemini-api" not in by_name
@@ -237,7 +140,7 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         "gpt-5.2-codex" in str(deployment.get("litellm_params", {}).get("model", ""))
         for deployment in deployments
     )
-    assert by_name["openrouter"]["litellm_params"] == {
+    assert by_name["minimax/minimax-m3.1-flash"]["litellm_params"] == {
         "model": "openrouter/minimax/minimax-m3.1-flash",
         "api_key": "os.environ/OPENROUTER_API_KEY",
         "allowed_openai_params": ["reasoning"],
@@ -248,20 +151,15 @@ def test_standard_channels_use_native_litellm_provider_configuration():
         "model": "minimax/speech-2.6-hd",
         "api_key": "os.environ/MINIMAX_API_KEY",
     }
-    assert "speech-synthesis" in by_name["minimax-tts"]["model_info"]["capabilities"]
     assert by_name["mimo-v2.5-asr"]["litellm_params"]["model"] == "openai/mimo-v2.5-asr"
-    assert "speech-recognition" in by_name["mimo-v2.5-asr"]["model_info"]["capabilities"]
     assert by_name["freetoken"]["litellm_params"]["model"].startswith("openai/")
     assert by_name["desktop"]["litellm_params"] == {
         "model": "ollama/qwen2.5-coder",
         "api_base": "os.environ/OLLAMA_API_BASE",
     }
     assert config()["litellm_settings"]["callbacks"] == [
-        "subroute.usage_accounting.usage_accounting",
         "subroute.plugins.dynamic_router.dynamic_routing_plugin",
-        "subroute.plugins.advisor_plugin.advisor_plugin_instance",
         "subroute.plugins.codex_credentials.codex_credential_refresher",
-        "websearch_interception",
     ]
 
 
@@ -275,18 +173,6 @@ def test_subscription_channels_stay_behind_litellm():
     argon = by_name["gemini-subscription-argon"]
     assert argon["litellm_params"]["model"] == "antigravity/gemini-4-argon"
     assert argon["model_info"]["reasoning_efforts"] == ["low", "medium", "high"]
-    assert argon["model_info"]["advisor_selectable"] is True
-    assert argon["model_info"]["advisor_max_input_tokens"] == 32000
-    for name in (
-        "gemini-subscription",
-        "gemini-subscription-argon",
-        "gemini-subscription-3.7-flash",
-        "gemini-subscription-3.6-flash",
-        "gemini-subscription-pro",
-    ):
-        capabilities = set(by_name[name]["model_info"]["capabilities"])
-        assert "buffered-sse" in capabilities
-        assert "streaming" not in capabilities
     assert config()["litellm_settings"]["custom_provider_map"] == [
         {
             "provider": "codex-subscription",
@@ -295,10 +181,6 @@ def test_subscription_channels_stay_behind_litellm():
         {
             "provider": "antigravity",
             "custom_handler": "subroute.handlers.antigravity.antigravity_handler",
-        },
-        {
-            "provider": "codex-advisor",
-            "custom_handler": "subroute.handlers.codex_advisor.codex_advisor_handler",
         },
     ]
     codex = by_name["codex-subscription"]["litellm_params"]
@@ -316,124 +198,7 @@ def test_subscription_channels_stay_behind_litellm():
     assert by_name["codex-gpt-6.1-sol"]["model_info"]["display_name"] == "OpenAI: GPT-6.1 Sol"
     assert "codex-terra" not in by_name
     assert "codex-reserve" not in by_name
-    assert {name for name, deployment in by_name.items() if "gpt-5" in deployment["litellm_params"]["model"]} == {
-        "codex-gpt-5.6-luna-advisor", "codex-gpt-5.6-sol-advisor", "codex-gpt-5.6-terra-advisor",
-        "experts/codex-gpt-5.6-luna-advisor", "experts/codex-gpt-5.6-sol-advisor", "experts/codex-gpt-5.6-terra-advisor",
-    }
-    assert by_name["codex-gpt-6.1-sol-advisor"]["litellm_params"]["model"] == "codex-advisor/gpt-6.1-sol"
-    assert by_name["codex-sol-advisor"]["litellm_params"]["model"] == (
-        "codex-advisor/gpt-6-sol"
-    )
-    assert by_name["codex-astra-advisor"]["litellm_params"]["model"] == (
-        "codex-advisor/gpt-6-astra"
-    )
-    luna_advisor = by_name["codex-luna-advisor"]
-    assert luna_advisor["model_info"]["advisor_selectable"] is True
-    assert luna_advisor["model_info"]["selectable"] is False
-    assert luna_advisor["litellm_params"]["model"] == "codex-advisor/gpt-6-luna"
-    assert by_name["gemini-subscription"]["litellm_params"]["model"] == (
-        "antigravity/gemini-3.8-flash"
-    )
-
-
-def test_minimax_m31_flash_routes_are_selectable_and_fail_over_once_per_provider(tmp_path, monkeypatch):
-    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    from subroute.plugins.dynamic_router import RoutingControlPlane
-
-    settings = config()
-    by_name = {item["model_name"]: item for item in settings["model_list"]}
-    control = RoutingControlPlane(CONFIG_PATH, tmp_path / "routing-state.json")
-    choices = {choice.model_id: choice for choice in control.choices}
-
-    canonical = "minimax/minimax-m3.1-flash"
-    assert canonical in choices
-    assert choices[canonical].source_id == "openrouter"
-    assert not {"minimax-flash", "openrouter-flash", "openrouter"} & choices.keys()
-    assert by_name["minimax-flash"]["litellm_params"]["model"] == (
-        "openrouter/minimax/minimax-m3.1-flash"
-    )
-    assert by_name["openrouter-flash"]["litellm_params"]["model"] == (
-        "openrouter/minimax/minimax-m3.1-flash"
-    )
-    assert by_name["minimax-flash"]["litellm_params"] == by_name["openrouter-flash"][
-        "litellm_params"
-    ]
-    assert by_name[canonical]["litellm_params"] == by_name["minimax-flash"]["litellm_params"]
-    assert by_name["minimax-flash"]["model_info"]["selectable"] is False
-    assert by_name["minimax-flash-direct"]["litellm_params"]["model"] == "minimax/MiniMax-M3.1-Flash"
-
-    fallbacks = {
-        model: targets
-        for group in settings["router_settings"]["fallbacks"]
-        for model, targets in group.items()
-    }
-    default_chain = settings["router_settings"]["default_fallbacks"]
-    assert default_chain == ["openrouter", "mimo-v2.6-pro", "codex-luna"]
-    assert fallbacks["minimax-flash"] == ["mimo-v2.6-pro", "codex-luna"]
-    assert fallbacks["openrouter-flash"] == ["mimo-v2.6-pro", "codex-luna"]
-    for model in ("minimax-flash", "openrouter-flash"):
-        chain = [model, *fallbacks.get(model, default_chain)]
-        assert chain == [model, "mimo-v2.6-pro", "codex-luna"], (model, chain)
-        providers = [by_name[item]["model_info"]["source_id"] for item in chain]
-        assert len(providers) == len(set(providers)), (model, providers)
-    for model in ("mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.5-pro", "mimo-v2.5"):
-        chain = [model, *fallbacks[model]]
-        providers = [by_name[item]["model_info"]["source_id"] for item in chain]
-        assert len(providers) == len(set(providers)), (model, providers)
-
-
-def test_declared_target_and_advisor_fallbacks_are_bounded_without_generic_retries():
-    settings = config()
-    routing = settings["router_settings"]
-
-    assert routing["num_retries"] == 0
-    assert routing["default_fallbacks"] == ["openrouter", "mimo-v2.6-pro", "codex-luna"]
-    assert routing["fallbacks"] == [
-        {"minimax/minimax-m3.1-flash": ["mimo-v2.6-pro", "codex-luna"]},
-        {"auto": ["mimo-v2.6-pro", "codex-luna"]},
-        {"qwen3.8-27b": ["mimo-v2.6-pro", "openrouter", "codex-luna"]},
-        {"openrouter": ["mimo-v2.6-pro", "codex-luna"]},
-        {"openrouter-flash": ["mimo-v2.6-pro", "codex-luna"]},
-        {"minimax-flash": ["mimo-v2.6-pro", "codex-luna"]},
-        {"mimo-v2.6-pro": ["openrouter", "codex-luna"]},
-        {"mimo-v2.6-flash": ["openrouter", "codex-luna"]},
-        {"mimo-v2.5-pro": ["openrouter", "codex-luna"]},
-        {"mimo-v2.5": ["openrouter", "codex-luna"]},
-        {"codex-luna": ["openrouter", "mimo-v2.6-pro"]},
-        {"gemini-3.8-flash-advisor": ["codex-gpt-6.1-sol-advisor"]},
-        {"codex-gpt-6.1-sol-advisor": ["gemini-3.8-flash-advisor"]},
-        {"codex-sol-advisor": []},
-        {"codex-astra-advisor": []},
-        {"codex-luna-advisor": []},
-        {"experts/codex-gpt-6.1-terra-advisor": []},
-        {"experts/codex-gpt-5.6-luna-advisor": []},
-        {"experts/codex-gpt-5.6-sol-advisor": []},
-        {"experts/codex-gpt-5.6-terra-advisor": []},
-        {"experts/agy-gemini-4-argon-medium-advisor": []},
-        {"experts/agy-gemini-3.8-flash-medium-advisor": []},
-        {"experts/agy-opus-5-5-medium-advisor": []},
-        {"experts/agy-sonnet-5-5-medium-advisor": []},
-        {"experts/codex-gpt-6.1-sol-advisor": []},
-        {"experts/codex-sol-advisor": []},
-        {"experts/codex-astra-advisor": []},
-        {"experts/codex-luna-advisor": []},
-        {"experts/gemini-3.8-flash-advisor": []},
-        {"experts/gemini-4-argon-advisor": []},
-        {"experts/gemini-4-hydrogen-advisor": []},
-        {"experts/gemini-3.7-flash-advisor": []},
-        {"experts/gemini-3.6-flash-advisor": []},
-        {"experts/gemini-3.1-pro-advisor": []},
-    ]
-    assert settings["litellm_settings"]["drop_params"] is True
-    assert "master_key" not in settings["general_settings"]
-    assert settings["general_settings"]["database_url"] == (
-        "os.environ/DATABASE_URL"
-    )
-    assert settings["general_settings"]["health_check_concurrency"] == 2
-    assert settings["general_settings"]["health_check_skip_disabled_background_models"] is True
-    assert settings["general_settings"]["disable_spend_logs"] is False
-    assert settings["litellm_settings"]["turn_off_message_logging"] is True
-    assert "disable_error_logs" not in settings["general_settings"]
+    assert not any("gpt-5" in item["litellm_params"]["model"] for item in deployments)
 
 
 def test_windows_launchers_force_utf8_and_loopback_defaults():
@@ -462,92 +227,12 @@ def test_gateway_clients_are_keyless_with_litellm_native_local_mode():
         environment = services[service]["environment"]
         assert "GATEWAY_MASTER_KEY" not in environment
         assert "LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true" in environment
-    for service in ("experts", "experts-staging"):
-        assert not any(
-            item.startswith("LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY")
-            for item in services[service]["environment"]
-        )
     assert "master_key" not in config()["general_settings"]
 
-
-def test_experts_port_exposes_only_bounded_advisor_aliases():
-    from subroute.plugins.advisor_plugin import ADVISOR_MODEL_NAMES
-
-    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
-    experts = services["experts"]
-    expert_models = experts_config()["model_list"]
-
-    assert experts["ports"] == ["127.0.0.1:4040:4040"]
-    assert experts["command"] == [
-        "--config", "/app/config/litellm.experts.yaml", "--port", "4040",
-        "--host", "0.0.0.0", "--telemetry", "False",
-    ]
-    assert "depends_on" not in experts
-    assert {model["model_name"] for model in expert_models} == {
-        "codex-gpt-6.1-terra-advisor",
-        "codex-gpt-5.6-luna-advisor",
-        "codex-gpt-5.6-sol-advisor",
-        "codex-gpt-5.6-terra-advisor",
-        "agy-gemini-4-argon-medium-advisor",
-        "agy-gemini-3.8-flash-medium-advisor",
-        "agy-opus-5-5-medium-advisor",
-        "agy-sonnet-5-5-medium-advisor",
-        "codex-sol-advisor", "codex-astra-advisor", "codex-luna-advisor",
-        "codex-gpt-6.1-sol-advisor", "gemini-4-argon-advisor",
-        "gemini-4-hydrogen-advisor",
-        "gemini-3.8-flash-advisor", "gemini-3.7-flash-advisor",
-        "gemini-3.6-flash-advisor", "gemini-3.1-pro-advisor",
-    }
-    assert all(model["model_info"]["selectable"] is False for model in expert_models)
-    assert {
-        model["litellm_params"]["model"] for model in expert_models
-    } == {
-        "codex-advisor/gpt-6.1-terra", "codex-advisor/gpt-5.6-luna", "codex-advisor/gpt-5.6-sol", "codex-advisor/gpt-5.6-terra",
-        "antigravity/gemini-4-argon-medium", "antigravity/gemini-3.8-flash-medium", "antigravity/agy-opus-5-5-medium", "antigravity/agy-sonnet-5-5-medium",
-        "codex-advisor/gpt-6-sol", "codex-advisor/gpt-6-astra",
-        "codex-advisor/gpt-6-luna", "codex-advisor/gpt-6.1-sol",
-        "antigravity/gemini-4-argon-low", "antigravity/gemini-4-hydrogen-low", "antigravity/gemini-3.8-flash",
-        "antigravity/gemini-3.7-flash", "antigravity/gemini-3.6-flash",
-        "antigravity/gemini-3.1-pro",
-    }
-    assert experts_config()["router_settings"] == {
-        "num_retries": 0, "fallbacks": [], "enable_pre_call_checks": True,
-    }
-    assert experts_config()["litellm_settings"]["callbacks"] == [
-        "subroute.plugins.expert_sift.expert_sift_hook",
-    ]
-    assert experts_config()["general_settings"]["master_key"] == "os.environ/EXPERTS_API_KEY"
-    assert all(model["model_info"]["max_input_tokens"] == 32_000 for model in expert_models)
-    assert all(model["model_info"]["context_window"] == 32_000 for model in expert_models)
-    gateway_advisors = {
-        item["model_name"]: item["litellm_params"]["model"]
-        for item in config()["model_list"]
-        if item["litellm_params"]["model"].startswith("codex-advisor/")
-    }
-    assert gateway_advisors == {
-        item["model_name"]: item["litellm_params"]["model"] for item in expert_models
-        if item["litellm_params"]["model"].startswith("codex-advisor/")
-    }
-    assert gateway_advisors == {
-        alias: f"codex-advisor/{model}" for alias, model in ADVISOR_MODEL_NAMES.items()
-    }
-    assert set(gateway_advisors) == set(ADVISOR_MODEL_NAMES)
-
-    expert_transports = {
-        item["model_name"]: item for item in config()["model_list"]
-        if item["model_name"].startswith("experts/")
-    }
-    assert set(expert_transports) == {
-        f"experts/{alias}" for alias in {model["model_name"] for model in expert_models}
-    }
-    assert all("max_input_tokens" not in item["model_info"] for item in expert_transports.values())
-    assert all(item["litellm_params"]["api_base"] == "http://experts:4040"
-               for item in expert_transports.values())
-    assert all(item["litellm_params"]["api_key"] == "os.environ/EXPERTS_API_KEY"
-               for item in expert_transports.values())
-    assert all(any(item.startswith("EXPERTS_API_KEY=") for item in services[name]["environment"])
-               for name in ("gateway", "gateway-staging"))
-
-    fallbacks = config()["router_settings"]["fallbacks"]
-    fallback_map = {model: targets for group in fallbacks for model, targets in group.items()}
-    assert all(fallback_map[f"experts/{model['model_name']}"] == [] for model in expert_models)
+def test_default_alias_and_opt_in_fallbacks_are_native_litellm_settings():
+    settings = config()["router_settings"]
+    assert settings["model_group_alias"]["default"] == "codex-luna"
+    assert settings["model_group_alias"]["openrouter-flash"] == "minimax/minimax-m3.1-flash"
+    assert settings["fallbacks"] == [{"auto": ["mimo-v2.6-pro", "codex-luna"]}]
+    assert "default_fallbacks" not in settings
+    assert settings["num_retries"] == 0

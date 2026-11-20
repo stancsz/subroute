@@ -103,7 +103,7 @@ async def run(args):
     env = {"PYTHONPATH": str(repo / "src")}
     if os.getenv("SUBROUTE_API_KEY"):
         env["SUBROUTE_API_KEY"] = os.environ["SUBROUTE_API_KEY"]
-    params = StdioServerParameters(command=sys.executable, args=["-m", "subroute.music_mcp",
+    params = StdioServerParameters(command=sys.executable, args=["-m", "clients.music_mcp",
         "--root", str(args.root.resolve()), "--gateway-url", args.gateway_url], cwd=str(repo), env=env)
     slots = asyncio.Semaphore(args.concurrency)
     try:

@@ -10,79 +10,15 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       - litellm-postgres-data:/var/lib/postgresql/data
+      - ./config/postgres/create-staging.sql:/docker-entrypoint-initdb.d/10-create-staging.sql:ro
     networks:
       - production
+      - staging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
       interval: 2s
       timeout: 3s
       retries: 30
-
-  postgres-staging:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: litellm-local-db
-      POSTGRES_DB: litellm_staging
-    volumes:
-      - litellm-postgres-staging-data:/var/lib/postgresql/data
-    networks:
-      - staging
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm_staging"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
-
-  # Private, self-hosted search backend for LiteLLM's native WebSearch hook.
-  # Kept on the Compose network only; no host port is published.
-  searxng:
-    image: ghcr.io/searxng/searxng:2026.10.19-81371861f@sha256:aa7270053bc3bf92155e2af83e2b0a7c3833c209cdeb8d396861a00c55ee7110
-    restart: unless-stopped
-    environment:
-      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set a random SEARXNG_SECRET in .env}
-      SEARXNG_LIMITER: "false"
-      SEARXNG_IMAGE_PROXY: "false"
-    volumes:
-      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
-    networks:
-      - default
-      - production
-    expose:
-      - "8080"
-    cpus: 1.0
-    mem_limit: 1g
-    memswap_limit: 1g
-    healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 12
-      start_period: 20s
-
-  searxng-staging:
-    image: ghcr.io/searxng/searxng:2026.10.19-81371861f@sha256:aa7270053bc3bf92155e2af83e2b0a7c3833c209cdeb8d396861a00c55ee7110
-    restart: unless-stopped
-    environment:
-      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set a random SEARXNG_SECRET in .env}
-      SEARXNG_LIMITER: "false"
-      SEARXNG_IMAGE_PROXY: "false"
-    volumes:
-      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
-    expose:
-      - "8080"
-    cpus: 1.0
-    mem_limit: 1g
-    memswap_limit: 1g
-    healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 12
-      start_period: 20s
-    networks:
-      - staging
 
   gateway:
     image: subroute-gateway:local
@@ -93,15 +29,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      antigravity:
-        condition: service_healthy
     networks:
       - production
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
-      - ./config:/app/legacy-config
-      - gateway-state:/app/state
+      - ${SUBROUTE_PRODUCTION_STATE_DIR:-./config}:/app/legacy-config
       - ~/.codex/auth.json:/root/.codex/auth.json:ro
     environment:
       - PYTHONPATH=/app/src
@@ -109,41 +42,35 @@ services:
       # Preserve the existing production policy file during migration.
       - ACTIVE_MODEL_STATE_PATH=/app/legacy-config/active_model.json
       - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres:5432/litellm
-      - SUBROUTE_ENVIRONMENT=production
-      - SUBROUTE_USAGE_OUTBOX_PATH=/app/state/usage-outbox.sqlite3
-      - SUBROUTE_ACCOUNTING_SECRET
       # Clients are trusted on loopback; upstream credentials stay server-side.
       # LiteLLM's native mode allows an unset public master key and disables its Admin UI.
       - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
-      - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
-      - EXPERTS_API_KEY=${EXPERTS_API_KEY:?Set EXPERTS_API_KEY in .env before starting the gateway}
-      - EXPERTS_BASE_URL=http://experts:4040
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
       - UI_USERNAME=${UI_USERNAME:-admin}
       - UI_PASSWORD=${UI_PASSWORD:-password}
+      - OPENAI_API_KEY
+      - GEMINI_API_KEY
       - MINIMAX_API_KEY
       - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY
-      - SEARXNG_API_BASE=http://searxng:8080
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000", "--host", "0.0.0.0", "--telemetry", "False"]
 
   gateway-staging:
+    profiles: [staging]
     image: subroute-gateway:staging
     build:
       context: .
       dockerfile: Dockerfile.gateway
     restart: unless-stopped
     depends_on:
-      postgres-staging:
-        condition: service_healthy
-      antigravity:
+      postgres:
         condition: service_healthy
     networks:
       - staging
@@ -156,85 +83,29 @@ services:
       - PYTHONPATH=/app/src
       - HEALTH_CHECK_TIMEOUT_SECONDS=10
       - ACTIVE_MODEL_STATE_PATH=/app/state/active_model.json
-      - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres-staging:5432/litellm_staging
-      - SUBROUTE_ENVIRONMENT=staging
-      - SUBROUTE_USAGE_OUTBOX_PATH=/app/state/usage-outbox.sqlite3
+      - DATABASE_URL=postgresql://litellm:litellm-local-db@postgres:5432/litellm_staging
       - LITELLM_LOG=INFO
-      - SUBROUTE_ACCOUNTING_SECRET
       # Clients are trusted on loopback; upstream credentials stay server-side.
       - LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true
       - CODEX_AUTH_FILE=/root/.codex/auth.json
       - ALLOW_PRIVATE_CONTROL=1
-      - ADVISOR_MODEL=${ADVISOR_MODEL:-codex-gpt-6.1-sol-advisor}
-      - EXPERTS_API_KEY=${EXPERTS_API_KEY:?Set EXPERTS_API_KEY in .env before starting the gateway}
-      - EXPERTS_BASE_URL=http://experts:4040
       - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
       - FREETOKEN_BASE_URL=${FREETOKEN_BASE_URL:-http://host.docker.internal:1919/v1}
       - FREETOKEN_API_KEY=${FREETOKEN_API_KEY:-local}
       - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
       - UI_USERNAME=${UI_USERNAME:-admin}
       - UI_PASSWORD=${UI_PASSWORD:-password}
+      - OPENAI_API_KEY
+      - GEMINI_API_KEY
       - MINIMAX_API_KEY
       - XIAOMI_TOKENPLAN_API_KEY
       - OPENROUTER_API_KEY
-      - SEARXNG_API_BASE=http://searxng-staging:8080
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["--config", "/app/config/litellm.yaml", "--port", "4005", "--host", "0.0.0.0", "--telemetry", "False"]
 
-  experts:
-    image: subroute-gateway:local
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    restart: unless-stopped
-    networks:
-      - production
-    ports:
-      - "127.0.0.1:4040:4040"
-    volumes:
-      - ~/.codex/auth.json:/root/.codex/auth.json:ro
-    environment:
-      - PYTHONPATH=/app/src
-      - CODEX_AUTH_FILE=/root/.codex/auth.json
-      - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
-      # The LAN listener must never run without bearer authentication.
-      - "EXPERTS_API_KEY=${EXPERTS_API_KEY:?Set EXPERTS_API_KEY in .env before starting experts}"
-    command: ["--config", "/app/config/litellm.experts.yaml", "--port", "4040", "--host", "0.0.0.0", "--telemetry", "False"]
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4040/health/liveliness', timeout=2).read()"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
-  experts-staging:
-    image: subroute-gateway:staging
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    restart: unless-stopped
-    networks:
-      staging:
-        aliases: [experts]
-    depends_on:
-      antigravity:
-        condition: service_healthy
-    volumes:
-      - ~/.codex/auth.json:/root/.codex/auth.json:ro
-    environment:
-      - PYTHONPATH=/app/src
-      - CODEX_AUTH_FILE=/root/.codex/auth.json
-      - ANTIGRAVITY_BRIDGE_URL=http://antigravity:4015
-      - LITELLM_LOG=INFO
-      - "EXPERTS_API_KEY=${EXPERTS_API_KEY:?Set EXPERTS_API_KEY in .env before starting experts-staging}"
-    command: ["--config", "/app/config/litellm.experts.yaml", "--port", "4040", "--host", "0.0.0.0", "--telemetry", "False"]
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4040/health/liveliness', timeout=2).read()"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
   antigravity:
+    profiles: [antigravity]
     build:
       context: .
       dockerfile: sidecars/antigravity/Dockerfile
@@ -254,118 +125,12 @@ services:
       timeout: 3s
       retries: 12
 
-  # Optional isolated bridge retained for separate-account use; both gateways currently share antigravity.
-  antigravity-staging:
-    build:
-      context: .
-      dockerfile: sidecars/antigravity/Dockerfile
-    restart: unless-stopped
-    networks:
-      - staging
-    environment:
-      - GEMINI_FORCE_FILE_STORAGE=true
-    volumes:
-      - antigravity-staging-config:/root/.config
-      - antigravity-staging-data:/root/.local/share
-      - antigravity-staging-gemini:/root/.gemini
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4015/health', timeout=2).read()"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
-  # Text-only Unsloth GGUF server, included in the default Compose stack.
-  qwen-local:
-    environment:
-      GGML_OP_OFFLOAD_MIN_BATCH: "32"
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:b0baccbe2e00b5d74e63f85f9f023c93d61d0f329475269e1e7002e87eb875ea
-    restart: always
-    cpus: 6.0
-    mem_limit: 12g
-    memswap_limit: 12g
-    ports:
-      - "127.0.0.1:8088:8080"
-    volumes:
-      - qwen-local-models:/root/.cache/huggingface
-      - ./sidecars/qwen-local/start.sh:/app/qwen-start.sh:ro
-    entrypoint: ["/bin/sh", "/app/qwen-start.sh"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
-      interval: 15s
-      timeout: 5s
-      retries: 4
-      start_period: 10m
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    command:
-      - --no-mmproj
-      - --alias
-      - qwen3.8-27b
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8080"
-      - --ctx-size
-      - "81920"
-      - --kv-unified
-      - --kv-unified-per-slot
-      - "40960"
-      - --cache-ram
-      - "0"
-      - --n-predict
-      - "4096"
-      - --reasoning-effort
-      - low
-      - --reasoning-budget
-      - "64"
-      - --parallel
-      - "2"
-      - --threads
-      - "6"
-      - --threads-batch
-      - "6"
-      - --poll
-      - "0"
-      - --batch-size
-      - "128"
-      - --ubatch-size
-      - "32"
-      - --fit
-      - "off"
-      - --n-gpu-layers
-      - "all"
-      - --flash-attn
-      - "on"
-      - --cache-type-k
-      - q4_0
-      - --cache-type-v
-      - q4_0
-      # Keep all model weights and live attention/recurrent state on CUDA0.
-      - --override-tensor
-      - '^token_embd[.]weight$=CUDA0'
-      - --kv-offload
-      - --ctx-checkpoints
-      - "0"
-      - --reasoning
-      - "off"
-
 volumes:
   litellm-postgres-data:
-  litellm-postgres-staging-data:
-  gateway-state:
   gateway-staging-state:
   antigravity-config:
   antigravity-data:
   antigravity-gemini:
-  antigravity-staging-config:
-  antigravity-staging-data:
-  antigravity-staging-gemini:
-  qwen-local-models:
 networks:
   production:
   staging:

@@ -8,7 +8,7 @@
 
 ## 当前可用的 Gemini MVP
 
-`python -m subroute.music_mcp --root <音频目录> --gateway-url http://127.0.0.1:4000` 启动标准 stdio MCP，额外依赖用 `pip install -e ".[music]"` 安装。该 MCP 不发送 gateway bearer token；provider 凭据由 Subroute 在服务端管理。当前已将 `subroute-music` 注册到本机 Codex，文件根目录按用户提供的路径更新为 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI`，仅允许其内部 WAV/MP3。新会话或重启 MCP server 加载该配置；本次通过真实 MCP SDK 完成握手、发现工具和调用，并未宣称当前会话的动态工具菜单已经刷新。
+`python -m clients.music_mcp --root <音频目录> --gateway-url http://127.0.0.1:4000` 启动标准 stdio MCP，额外依赖用 `pip install -e ".[music]"` 安装。该 MCP 不发送 gateway bearer token；provider 凭据由 Subroute 在服务端管理。当前已将 `subroute-music` 注册到本机 Codex，文件根目录按用户提供的路径更新为 `C:\Users\stanc\Music\OSN_Captian_Aioz_LBI`，仅允许其内部 WAV/MP3。新会话或重启 MCP server 加载该配置；本次通过真实 MCP SDK 完成握手、发现工具和调用，并未宣称当前会话的动态工具菜单已经刷新。
 
 当前参数比下文专业设计简单：`analyze_audio(asset_path, question, focus)`；`compare_audio(a_path, b_path, question, focus)`。最多两个文件、合计 20 MiB。返回 `gemini-listening-v1` structuredContent：原文件哈希、WAV/MP3 时长/采样率/声道、实际 provider usage、Gemini 观察与限制。WAV 时长来自 PCM 帧数，MP3 使用固定 Mutagen 1.47.0 从将要发送的同一份字节解析 MPEG/Xing 头，并注明 `duration_source=mpeg_headers` / `duration_is_estimate=true`，编码 padding 等可能造成小偏差。这是元数据检查，不能认证文件完整解码或混音质量。无可读 MP3 音频流在本地拒绝；裸 HTTP 音频入口仍只检查 MP3 头，不宣称同等级解码验证。`complete` 指完成此次订阅请求和指定文件读取，不证明其判断正确。
 
@@ -20,7 +20,7 @@ question 最多 8,000 字符，focus 最多 16 项、每项 128 字符；超限�
 {"asset_path":"audio/suno-original.wav","question":"听一下主歌和副歌的人声清晰度、齿音、旋律与编曲，指出需要复查的时间段。","focus":["人声","sibilance","编曲","旋律","groove"]}
 ```
 
-MCP → 本地 gateway Chat `input_audio` → 原有 Antigravity Subscription → `view_file` 真音频输入 → 观察结果 → GPT。明确音频输入覆盖保存的 Force/alias/off/auto 路由，固定 Gemini 并关闭本请求 Advisor；保存策略不被修改。Messages/Responses 音频明确拒绝，不能静默转成文字。音频会发送到 Google，属于订阅云推理。这里取代最初设计的本地音乐模型选型；其他模型的研究只作历史备选，不是本轮执行路线。
+MCP → 本地 gateway Chat `input_audio` → 原有 Antigravity Subscription → `view_file` 真音频输入 → 观察结果 → GPT。明确音频输入覆盖保存的 Force/alias/off/auto 路由，固定 Gemini。保存策略不被修改。Messages/Responses 音频明确拒绝，不能静默转成文字。音频会发送到 Google，属于订阅云推理。这里取代最初设计的本地音乐模型选型；其他模型的研究只作历史备选，不是本轮执行路线。
 
 当前没有 DSP 测量、响度匹配、stem 处理、区域裁剪、taste profile、revision manifest 校验或 DAW 修改。下文这些字段和验收仍是后续专业设计，不能按已经实现使用。实际错误包括上游过滤拒绝、时长/BPM 估计错误、将双单声道猜成立体声铺展。看 [实测与根因记录](../evals/gemini-audio-2026-09-30.md)。
 
@@ -30,7 +30,7 @@ MCP → 本地 gateway Chat `input_audio` → 原有 Antigravity Subscription �
 
 GPT-6.1 Sol 官方接口不支持原生音频输入。工具返回的是测量、听觉模型观察、图表和限制，不能把它们称为 GPT 直接听见原始波形。MCP 返回 audio 内容也不自动改变主模型的输入能力。
 
-当前 `config/litellm.experts.yaml` 声明 Advisor 的 text/vision 能力。GPT 通过 MCP 收取 Gemini 的听觉观察；实际音频进入现有 Gemini Subscription，初始文字通路限制已用受限文件读取适配解决。原始失败仍保留在实测记录中。
+GPT 通过 MCP 收取 Gemini 的听觉观察；实际音频进入现有 Gemini Subscription，初始文字通路限制已用受限文件读取适配解决。原始失败仍保留在实测记录中。
 
 ## 职责与集成
 
@@ -50,7 +50,7 @@ flowchart TD
 
 | 所有者 | 职责 | 避免的失败机制 |
 | --- | --- | --- |
-| Subroute / LiteLLM | 现有模型协议、部署、路由、usage、超时和既有 Advisor orchestration | 重复实现公开协议或建立竞争的路由策略 |
+| Subroute / LiteLLM | 现有模型协议、部署、路由、usage 和超时 | 重复实现公开协议或建立竞争的路由策略 |
 | 音乐 caller | 请求 GPT、执行其工具调用、关联工程与音频版本、记录偏好和停止条件 | 将工具调用误认成网关已执行的动作 |
 | 听觉 MCP | 当前：文件限制、哈希、原始字节提交 Gemini、观察与 usage；后续：DSP 测量 | 音频被转成文字后仍声称已经听过 |
 | 已有 DAW / DSP 工具 | 读取工程、明确参数修改、读回、渲染、恢复版本 | 参数写入成功却没有验证实际声音 |
@@ -189,4 +189,4 @@ caller 为一次混音决策设置总调用预算，不能通过反复局部调�
 - [Music Flamingo 模型与许可](https://huggingface.co/nvidia/music-flamingo-2601-hf)、[前端配置](https://huggingface.co/nvidia/music-flamingo-2601-hf/blob/main/processor_config.json)。
 - [Qwen2.5-Omni 官方仓库](https://github.com/QwenLM/Qwen2.5-Omni)、[前端配置](https://huggingface.co/Qwen/Qwen2.5-Omni-7B/blob/main/preprocessor_config.json)。
 - [LLM2Fx-Tools 研究及单乐器局限](https://arxiv.org/html/2512.01559v2)、[Diff2Mix 研究与有限专业听评](https://arxiv.org/html/2608.05442v1)。它们是候选技术依据，不是本项目生产能力证据。
-- 当前仓库：[专家配置](../../config/litellm.experts.yaml)、[Antigravity 内容边界](../../src/subroute/handlers/antigravity.py)、[已验证的 Advisor 图片增量及限制](../evals/advisor-image-input-2026-09-30.md)。
+- 当前仓库：[Antigravity 内容边界](../../src/subroute/handlers/antigravity.py)。

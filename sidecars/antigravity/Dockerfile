@@ -45,7 +45,6 @@ COPY --from=build /out/entrypoint.sh /app/entrypoint.sh
 COPY sidecars/antigravity/bridge.py /app/bridge.py
 COPY src/subroute/audio.py /app/audio_validation.py
 COPY sidecars/antigravity/audio-agent.md /app/audio-agent.md
-COPY sidecars/antigravity/advisor-agent.md /app/.agents/agents/subroute-advisor/agent.md
 COPY sidecars/antigravity/target-agent.md /app/.agents/agents/subroute-target/agent.md
 EXPOSE 4015
 CMD ["/app/entrypoint.sh"]

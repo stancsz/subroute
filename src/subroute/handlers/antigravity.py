@@ -189,7 +189,6 @@ async def invoke_agy(
     timeout: float = 120.0,
     *,
     json_schema: dict[str, Any] | None = None,
-    advisor: bool = False,
     attachments: list[dict] | None = None,
 ) -> tuple[str, Usage]:
     target = MODELS.get(model)
@@ -207,13 +206,11 @@ async def invoke_agy(
     if bridge_url:
         payload = {"model": target, "prompt": prompt, "json_schema": json_schema}
         if attachments:
-            if advisor or len(attachments) > MAX_AUDIO_FILES:
-                raise ValueError("audio target supports at most two attachments and no advisor")
+            if len(attachments) > MAX_AUDIO_FILES:
+                raise ValueError("audio target supports at most two attachments")
             if sum(len(decode_audio(item)) for item in attachments) > MAX_AUDIO_BYTES:
                 raise ValueError("audio attachments exceed 20 MiB combined")
             payload["attachments"] = attachments
-        if advisor:
-            payload["advisor"] = True
         payload_size = len(
             json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         )
@@ -251,8 +248,6 @@ async def invoke_agy(
                     keys = ("input_tokens", "output_tokens", "total_tokens")
                     if isinstance(refused_usage, dict) and all(type(refused_usage.get(key)) is int and refused_usage[key] >= 0 for key in keys):
                         detail += " provider_usage=" + ",".join(str(refused_usage[key]) for key in keys)
-                        from subroute.usage_accounting import observe_direct
-                        await observe_direct({"usage": refused_usage})
                     completed_reads = error_payload.get("completed_reads")
                     if type(completed_reads) is int and completed_reads >= 0:
                         detail += f" completed_reads={completed_reads}"
@@ -267,8 +262,6 @@ async def invoke_agy(
                 raise RuntimeError("Antigravity bridge returned invalid JSON") from exc
             if not isinstance(result, dict):
                 raise RuntimeError("Antigravity bridge returned a non-object response")
-            from subroute.usage_accounting import observe_direct
-            await observe_direct(result)
             content = result.get("content")
             if not isinstance(content, str) or not content:
                 raise RuntimeError("Antigravity bridge returned no response text")

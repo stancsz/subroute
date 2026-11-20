@@ -155,7 +155,7 @@ async def image_conversation(messages: list, options: dict, context: dict):
     from litellm.types.utils import Choices, Message, ModelResponse
     from openai.types.responses import ResponseOutputMessage, ResponseOutputText
     from subroute.handlers.codex_messages import normalize_messages
-    from subroute.plugins.image_intent import image_tool
+    from subroute.plugins.image_tools import image_tool
 
     bridge = LiteLLMResponsesTransformationHandler()
     if "responses_request" in context:

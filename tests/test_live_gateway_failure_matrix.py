@@ -47,26 +47,18 @@ class LiveGateway:
         self,
         *,
         target: str,
-        advisor: str | None = None,
-        mode: str = "force",
         reasoning_effort: str | None = None,
+        fast_mode: bool = False,
     ) -> None:
         current = self.policy()
         if any(current.get(key) != value for key, value in (
             ("active_model", target),
-            ("mode", mode),
             ("reasoning_effort", reasoning_effort),
+            ("fast_mode", fast_mode),
         )):
             response = self.client.post(
                 "/api/active-model",
-                json={"model": target, "mode": mode, "reasoning_effort": reasoning_effort},
-            )
-            response.raise_for_status()
-        # None means this target-only scenario leaves the saved expert alone.
-        if advisor is not None and current.get("advisor_model") != advisor:
-            response = self.client.post(
-                "/api/advisor-model",
-                json={"advisor_model": advisor},
+                json={"model": target, "reasoning_effort": reasoning_effort, "fast_mode": fast_mode},
             )
             response.raise_for_status()
 
@@ -99,9 +91,8 @@ def live_gateway():
     finally:
         gateway.set_policy(
             target=original["active_model"],
-            advisor=original.get("advisor_model"),
-            mode=original.get("mode", "alias"),
             reasoning_effort=original.get("reasoning_effort"),
+            fast_mode=original.get("fast_mode", False),
         )
         gateway.client.close()
 
@@ -158,7 +149,7 @@ def test_02_target_live_failure_matrix(live_gateway: LiveGateway) -> None:
 
     # Unknown public model: exercise the running gateway's real route rejection,
     # without dispatching to a provider.
-    live_gateway.set_policy(target=target, mode="alias")
+    live_gateway.set_policy(target=target)
     response = live_gateway.message("subroute-live-no-such-model", "must not dispatch")
     _assert_live_failure(response, "target unknown model")
 
@@ -202,17 +193,6 @@ def test_02_target_live_failure_matrix(live_gateway: LiveGateway) -> None:
 
 
 
-def test_04_gemini_advisor_and_target_live_success_after_failure(live_gateway: LiveGateway) -> None:
-    target = os.getenv("SUBROUTE_LIVE_BASE_TARGET", "codex-luna")
-    advisor = os.getenv("SUBROUTE_LIVE_ADVISOR_MODEL", "gemini-subscription")
-    live_gateway.set_policy(target=target, advisor=advisor, reasoning_effort="low")
-    response = live_gateway.message(
-        "default",
-        "Reply with exactly SUBROUTE-LIVE-ADVISOR-BASE-OK. Do not call tools.",
-    )
-    payload = _assert_live_message(response, f"advisor={advisor} target={target}")
-    text = "".join(block.get("text", "") for block in payload.get("content", []))
-    assert "SUBROUTE-LIVE-ADVISOR-BASE-OK" in text, text
 
 
 
@@ -228,7 +208,7 @@ def test_06_codex_gpt_6_1_sol_target_live_success(live_gateway: LiveGateway) -> 
 
 
 def test_07_openrouter_buffered_and_sse_live_success(live_gateway: LiveGateway) -> None:
-    live_gateway.set_policy(target="openrouter", reasoning_effort=None)
+    live_gateway.set_policy(target="minimax/minimax-m3.1-flash")
     buffered = live_gateway.client.post(
         "/v1/chat/completions",
         json={"model": "default", "max_tokens": 256, "messages": [{
@@ -384,38 +364,3 @@ def test_09_all_remaining_subscription_aliases_live_success(live_gateway: LiveGa
         payload = _assert_live_message(response, f"target={target}")
         text = "".join(block.get("text", "") for block in payload.get("content", []))
         assert f"SUBROUTE-{target.upper()}-OK" in text, text
-
-
-
-def test_10_unconfigured_capabilities_return_client_errors(live_gateway: LiveGateway) -> None:
-    cases = (
-        (
-            "skills",
-            live_gateway.client.get(
-                "/v1/skills",
-                params={"beta": "true", "custom_llm_provider": "codex-subscription"},
-            ),
-        ),
-        (
-            "rerank",
-            live_gateway.client.post(
-                "/v1/rerank",
-                json={"model": "codex-subscription", "query": "x", "documents": ["x"]},
-            ),
-        ),
-        (
-            "embeddings",
-            live_gateway.client.post(
-                "/v1/embeddings", json={"model": "codex-subscription", "input": "x"}
-            ),
-        ),
-    )
-
-    for operation, response in cases:
-        assert response.status_code == 400, (
-            f"{operation}: expected HTTP 400, got {response.status_code}: {response.text[:1200]}"
-        )
-        error = response.json().get("error", {})
-        assert error.get("type") == "invalid_request_error", response.text
-        assert error.get("code") == "unsupported_operation", response.text
-        print(f"LIVE PASS unsupported {operation}: status=400 code=unsupported_operation")

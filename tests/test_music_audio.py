@@ -14,9 +14,8 @@ from fastapi import HTTPException
 
 from subroute.audio import audio_route, decode_audio
 from subroute.handlers import antigravity
-from subroute.music_mcp import create_server, failure, read_asset
+from clients.music_mcp import create_server, failure, read_asset
 from subroute.plugins.dynamic_router import DynamicRoutingPlugin
-from subroute.plugins.advisor_plugin import AdvisorPlugin
 from test_dynamic_routing import make_control_plane
 from test_antigravity_bridge import bridge, _start_bridge_server
 
@@ -37,24 +36,9 @@ def request(audio=None):
     ]}]}
 
 
-@pytest.mark.parametrize("mode", ["force", "alias", "off"])
-def test_audio_is_explicit_gemini_exception_and_never_calls_saved_advisor(tmp_path, mode):
-    control = make_control_plane(tmp_path)
-    control.update("minimax", mode)
-    before = control.snapshot()
-    data = request()
-    result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, "acompletion"))
-    assert result["model"] == "gemini-subscription"
-    assert result["messages"] == request()["messages"]
-    assert result["metadata"]["routing"]["mode"] == "audio_input"
-    assert result["metadata"]["gateway_policy"]["advisor_model"] is None
-    assert asyncio.run(AdvisorPlugin().async_pre_call_hook({}, None, result, "acompletion")) is None
-    assert control.snapshot() == before
-
-
 def test_mimo_asr_alias_keeps_audio_on_its_litellm_chat_route(tmp_path):
     control = make_control_plane(tmp_path, include_speech_models=True)
-    control.update("minimax", "force")
+    control.update("minimax")
     data = request()
     data["model"] = "mimo-v2.5-asr"
 
@@ -62,10 +46,6 @@ def test_mimo_asr_alias_keeps_audio_on_its_litellm_chat_route(tmp_path):
 
     assert result["model"] == "mimo-v2.5-asr"
     assert result["messages"] == request()["messages"]
-    assert result["metadata"]["routing"]["resolved_model"] == "mimo-v2.5-asr"
-    assert result["metadata"]["routing"]["mode"] == "speech_recognition"
-    assert result["metadata"]["gateway_policy"]["advisor_model"] is None
-    assert asyncio.run(AdvisorPlugin().async_pre_call_hook({}, None, result, "acompletion")) is None
 
 
 @pytest.mark.parametrize(
@@ -75,26 +55,14 @@ def test_mimo_asr_alias_keeps_audio_on_its_litellm_chat_route(tmp_path):
         ("mimo-v2.5-tts", "acompletion", {"messages": [{"role": "assistant", "content": [{"type": "text", "text": "Hello"}]}], "audio": {"voice": "default"}}),
     ],
 )
-def test_explicit_tts_alias_survives_forced_chat_route(tmp_path, model, call_type, payload):
+def test_explicit_tts_alias_reaches_native_route(tmp_path, model, call_type, payload):
     control = make_control_plane(tmp_path, include_speech_models=True)
-    control.update("minimax", "force")
+    control.update("minimax")
     data = {"model": model, **payload}
 
     result = asyncio.run(DynamicRoutingPlugin(control).async_pre_call_hook({}, None, data, call_type))
 
     assert result["model"] == model
-    assert result["metadata"]["routing"]["resolved_model"] == model
-    assert result["metadata"]["routing"]["mode"] == "speech_synthesis"
-    assert result["metadata"]["gateway_policy"]["advisor_model"] is None
-
-
-def test_messages_audio_cannot_be_dropped_before_provider_dispatch(tmp_path):
-    data = request()
-    data["messages"][0]["content"][1] = {"type": "audio", "source": {"type": "base64", "media_type": "audio/wav", "data": sample()["data"]}}
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(DynamicRoutingPlugin(make_control_plane(tmp_path)).async_pre_call_hook({}, None, data, "anthropic_messages"))
-    assert error.value.status_code == 400
-    assert "chat/completions" in str(error.value.detail)
 
 
 @pytest.mark.parametrize("audio", [

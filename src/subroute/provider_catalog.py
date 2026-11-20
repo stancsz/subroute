@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from subroute.plugins.codex_credentials import read_codex_credentials
-from subroute.provider_usage import _get_json
+import httpx
 
 _lock = asyncio.Lock()
 _snapshot: dict[str, Any] | None = None
@@ -87,6 +87,13 @@ def write_catalog(state_path: Path, data: dict[str, Any]) -> None:
     finally:
         if os.path.exists(name):
             os.unlink(name)
+
+
+async def _get_json(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> Any:
+    async with asyncio.timeout(timeout), httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
 
 
 async def _openai_models() -> list[str]:

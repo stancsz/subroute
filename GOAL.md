@@ -1,97 +1,17 @@
-# Subroute: simpler code, fewer failure paths, cooperative Sift
+# Subroute local model routing
 
-Status: complete for scoped source and staging/private-expert delivery; production promotion excluded
-Owner: repository owner; execution and evidence maintained by the working agent
-Set: 2026-10-23
+Serve coding clients through a local LiteLLM endpoint. Subroute maintains
+Codex and Antigravity subscription adapters and the local model selector.
+LiteLLM owns configured API routes, fallbacks and usage reporting.
 
-## Outcome
+Production and staging use separate databases and state on one PostgreSQL
+server. Antigravity and staging are opt-in Compose profiles.
 
-Design priority: a simple, reliable and stable architecture. Remove unnecessary decisions and moving parts before adding mechanisms. Keep the ordinary request path short and predictable; every retained safeguard must prevent a demonstrated failure.
+- A client using `default` follows the saved selection across restarts.
+- A client specifying a model uses its configured route.
+- Codex Chat Completions, Responses and Messages preserve streaming and tool calls.
+- Antigravity retains explicit text and audio routes. Codex retains explicit image generation.
+- The gateway image contains runtime dependencies. Optional tools run as HTTP clients.
 
-1. Make Subroute substantially easier to understand and maintain by reducing code complexity and independent policy owners.
-2. Deliver a net reduction in maintained production source and remove complex or duplicated logic that creates failures.
-3. Keep Sift only at the experts service on port 4040 for explicitly chosen Advisor calls. Every expert, including Gemini and Codex, has a **32,000-token input ceiling**. Output is separate from this ceiling. Retain Gemini. Normal model requests use routing and LiteLLM/provider admission without gateway compaction or injected guidance.
-4. After completing the agreed changes, commit and push the scoped implementation. Preserve unrelated local work and verify the pushed revision; source publication does not by itself establish production rollout.
-
-## Intended request flow
-
-```mermaid
-flowchart LR
-    C[Client with native context limits] --> G[Subroute routing]
-    G --> L[LiteLLM normal admission and provider]
-    L --> R[Normal response]
-    L -->|Model chooses optional Advisor tool| E[Experts service 4040]
-    E --> S[Sift on private expert input only]
-    S --> A[Every expert: at most 32K input]
-    A -->|Tool result| L
-```
-
-LiteLLM owns the supported tool orchestration. Normal gateway ports 4000 and 4005 do no Sift work. Advertising the optional native Advisor tool on supported Messages requests preserves caller content and ordinary tools; consultation occurs only when the model chooses it. Chat Completions and Responses retain their normal dispatch semantics until explicit tool support is verified.
-
-## Ownership and resolved decisions
-
-- **32K means input only for every expert; retain Gemini.** Output is separate. Codex keeps its separate 1,024 output request; Gemini has no invented CLI output cap. Historical combined-context questions are resolved, not blockers.
-- This file owns intent and acceptance; AGENTS.md owns engineering constraints, README.md supported behavior, and TECH_DEBT.md deferred debt.
-- The coordinated Advisor and MiniMax changes are included in published `53681a7` and `70ee280` on `codex/simplify-gateway`. Preserve unrelated local outbox, Relay orchestration, sidecar and Electron work. Shared service operations remain with this chat after coordination.
-- The [original goal](docs/goal/archive/GOAL-2026-10-23-before-simplicity.md) and [complete execution history through 70ee280](docs/goal/archive/GOAL-2026-10-23-through-70ee280.md) remain historical evidence. They do not reinstate normal-path 4M intake, normal Sift, automatic consultation or combined 32K acceptance.
-
-## Acceptance criteria
-
-- [x] Capture a reproducible starting baseline: repository revisions, dirty-file scope and source hashes, affected behavior, known failures, and exact check commands. Include relevant standalone Sift source when changed.
-- [x] Measure before/after nonblank, noncomment production-source lines consistently, with explicit file scope and per-module totals. Report tests/docs separately. Deliver a net production-source reduction across the affected maintained code; moving, vendoring or generating the same code elsewhere does not count as removal. No arbitrary percentage quota or code golf.
-- [x] Remove duplicated decisions or failure-prone paths, with clear ownership and a simpler normal request flow. Each delivered slice identifies its requirement, existing mechanism, failure mechanism removed, behavior preserved and verification. Smaller files alone are insufficient.
-- [x] Remove normal-target Sift callbacks, compaction-specific pre-counting, target-budget recovery and long-history instruction injection. Keep required provider-boundary translation and validation. Normal routing must not execute Sift, consult an Advisor automatically, or inject behavioral guidance.
-- [x] Keep Sift confined to a private copy of explicitly chosen Advisor input at experts port 4040, with one owner for its budget, bounded CPU admission, audit and failure handling. Advisor selection or compaction must never modify the original target request. No new gateway-managed tool loop, framework, registry or hidden provider work.
-- [x] Cover Chat Completions, Anthropic Messages and Responses where supported: normal content/tool/output-limit preservation, native admission at and beyond provider capacity, normal dispatch independent of Sift availability, and no hidden additional calls. Test Advisor-only compaction success, unsupported/irreducible/busy/error outcomes, truthful audit, cancellation and terminal accounting at that boundary. Document exclusions.
-- [x] Align client context metadata, launch settings and documentation with actual selected-provider capacity or explicit client-side compaction. Retire normal-path virtual 4M intake/32K optimization promises. Oversized normal requests must receive normal provider/LiteLLM admission behavior; do not silently shorten them or fabricate completion.
-- [x] Maintain one authoritative deployed Sift version with explicit, reviewed gateway patch provenance and a repeatable comparison against its upstream pin. Verify relevant standalone and gateway checks before any replacement; never blindly substitute upstream main.
-- [x] Pass affected regression checks before/after structural changes and obtain independent source and behavioral review. Distinguish existing baseline failures from regressions. Verify affected success/failure paths end to end in staging before any production promotion; unit tests and readiness alone do not establish live compatibility.
-- [x] Reconcile README/runtime behavior and record reduction, independent review, actual validation, deployment state and remaining limitations here. Mark done only when every criterion has evidence.
-
-## Constraints and invariants
-
-- LiteLLM owns public protocols, streaming, standard provider adapters, retries and standard provider orchestration. Keep necessary workarounds narrow, with concrete capability-gap evidence and retirement conditions.
-- Sift owns deterministic history selection and a truthful audit for Advisor input only. Subroute owns routing/request policy and explicit optional-work budgets; LiteLLM and the provider retain native capacity admission. Keep these responsibilities separate.
-- Preserve caller output limits, original target instruction/tool semantics, bounded ingress, provider capacity checks and bounded resource/cancellation cleanup. Experts port 4040 is the sole Sift boundary, with a 32,000-token input ceiling for every expert. Keep expert calls concise; generation does not subtract from that input ceiling. Separate this owner-authorized removal of normal-path behavior from unrelated structural refactors.
-- No silent content loss, fabricated completion, hidden retry/fallback/provider spending, or estimated usage presented as provider usage.
-- Keep Docker Compose, required protocol/media/Relay behavior, production/staging database and saved-state isolation, credential boundaries, and unrelated local work. Advisor becomes an explicit optional tool as authorized by the owner. Remove obsolete or duplicate code with evidence; dropping other supported capabilities requires an explicit owner decision.
-- Favor small functions, ordinary configuration and existing mechanisms. No new service, dependency, store or abstraction without a current requirement. Count code moved across repositories in the reduction ledger.
-
-## Non-goals and escalation
-
-- Do not resume unrelated GPU/gaming, product-pilot, Relay expansion or benchmark campaigns to satisfy this goal. Historical unmet gates remain unmet.
-- No broad rewrite, cosmetic LOC target, or automatic production restart or paid evaluation campaign. The owner has authorized execution of this goal; scope ordinary implementation and verification to the affected paths.
-- Escalate an actual conflict with required capabilities, irreversible data/credential changes, missing authority, or a concrete external dependency. Do not weaken acceptance to match an incomplete implementation.
-
-## Current evidence and next actions
-
-| Scope | Verified state | Remaining limit |
-| --- | --- | --- |
-| Published source | `53681a7` and `70ee280` pushed and independently checked. Callback/plain-answer follow-up `20995ff3b08914bb365a6b4a139186d59be0ebe7` is pushed and independently verified. [Current report and portable receipts](docs/evals/simplicity-completion-2026-10-23.md). | Remote branch and local HEAD independently matched; scoped checkout was clean. Closing documentation is recorded separately. |
-| Reduction and regressions | Current selected source: 1,641 fewer maintained lines over 21 explicit paths; 989 non-live passes, two environmental skips, 35 live deselections; five desktop checks previously passed. | Counts apply to declared source scope and checked snapshots, not a repository-wide reduction or all-provider guarantee. |
-| Normal protocols | Native HTTP fixtures preserve content/tools/limits, reject native capacity overflow and work without Sift. Short real Chat/Responses and reviewed Messages completion passed. | No all-provider or broad benchmark claim. |
-| Private experts | Nine aliases have 32,000 input policy and offline real-counter/private-copy proof. Real Codex passed; final same-payload Gemini acceptance passed exact answer, trusted headers and reported input 17,075. | Earlier failed harness and intermediate missing-header result remain failed. Selected-route evidence is not universal near-limit compatibility. |
-| Native optional consultation | One real Messages request with auto tool choice completed target to expert to target; independent SQL/log review found one expert HTTP consultation and all five correlated rows terminal, no retries/fallbacks or policy changes. | Two bridge rows are not additional provider work. No internal CLI-call count, billing or ordinary-prompt consultation-frequency claim. |
-| Failure ownership | Native success/error/cancellation/concurrency fixtures inspect every receipt; completed executor/expert records survive later cancellation. Forged audit metadata is rejected. | Fixture usage is synthetic; live cancellation/billing is not established. |
-| Runtime | Staging and experts: immutable image `a99773d74df3`, authenticated catalogs, zero restarts, preserved policy. Production lifecycle unchanged on older image `2d3076d83d41` with host source/config mounts. | Production's loaded behavior is separately unverified; no automatic production restart. Integration image preserves unrelated local outbox work and is not an exact selected-Git image. |
-| Sift provenance | Current pinned comparison: three patched files and one identical file against `e8dc791ba76d99012a3cd43e6114c01faedeeb6a`. No upstream replacement or fresh standalone test claim. | Standalone parity is required before any future replacement. |
-| Existing ingress bounds | Independent before/after review confirms retained native context/media/bridge/accounting bounds. The old Sift raw limit measured parsed tokens, not HTTP bytes. | No generic pre-parse public body-byte cap was configured in either inspected baseline; this pre-existing debt is recorded in TECH_DEBT.md. |
-
-Closure: independent [requirement-by-requirement audit and publication verification](docs/evals/simplicity-final-audit-2026-10-23.md) support all ten criteria within this source/staging scope. The implementation is published as `20995ff`; this final documentation records acceptance without claiming production activation. No required implementation or staging work remains. Production promotion, exact selected-Git-image deployment and the separately recorded ingress hardening remain outside this completed delivery.
-
-
-## Model catalog feedback delivery, 2026-11-05
-
-- Ask: refresh OpenAI and Antigravity models in both staging and production; show plain provider names without duplicate formatted aliases across providers and Advisor; include Terra and the requested Claude/Gemini medium experts; restore supported reasoning choices; commit and push remote main.
-- Implementation: source commit `cd04616c103f1690fd0c92079760ff99a57b9175`, tree `b2d9f17a55a45814b04b5609eb6c79cc6e268a3e`, based on remote-main `f7b82d8`. Both gateways and both expert services now run image `sha256:484c269bd8ed174b4f76245816d7063958a3d3a5de1328f8100a3cabb7971146` built from that source. Staging gateway/experts remain on staging only; the authenticated Antigravity bridge is shared as explicitly requested.
-- Behavior: both environments refresh 8 OpenAI and 13 Antigravity target models; OpenAI uses one Subscription group with unique raw names. Terra exposes low/medium/high/xhigh/max/ultra from provider inventory. Eight explicit expert routes add Terra, GPT-5.6 Luna/Sol/Terra, Claude Opus/Sonnet 5.5 medium and Gemini Argon/Flash medium, preserving the expert service's 32K input admission, Sift target and no retry/fallback policy. Existing saved IDs are retained.
-- State/failure checks: stale inventory and saved routes survive restart; refreshed effort metadata is persisted. If refresh would invalidate a saved reasoning effort, that provider retains its previous inventory and shows an actionable warning without silently altering policy. UTF-8 copy and model grouping were corrected after rendered inspection.
-- Validation: locked Python 3.13/LiteLLM 1.106.2 non-live suite passed 1,049 tests, 2 skipped, 35 live deselected (`tmp-full-delivery5.log`); focused final grouping suite passed 98; prior desktop suite passed 5. Independent CLI source reviews cover the catalog, advisor mapping, accounting repair and final exact commit; bounded JSONL receipts are in the original checkout's `tmp/catalog-visual-review/`.
-- Live acceptance: all eight new expert routes returned requested markers, terminal stop, usage, correct public identity and Sift headers in staging. Bridge logs identify the four intended medium variants. Final-image staging Terra/high and production Terra plus Sonnet-medium streams completed with marker, stop, SSE terminal, usage and identity. Production native Responses custom-tool invocation and matching call-result continuation completed. Catalog, reasoning and advisor entries persisted after container recreation in both environments. Advisor settings temporarily changed for acceptance were restored with concurrent-change protection; only policy versions advanced.
-- Advisor evidence: staging trace `22e1f52c-9a4c-4bd1-bbd0-7839a43d652e` and production trace `7c60825a-2470-4670-944f-ae79287d8e69` returned target end_turn and marker and have matching completed Advisor usage receipts. Expert and bridge logs show Claude Opus 5.5 Medium.
-- Accounting boundary: origin/main's earlier initial-receipt HTTP 503 behavior was not promoted as final delivery. The approved observational outbox implementation was integrated with bounded telemetry, pre-replay durable capture, terminal-first replay, completed-record protection and missing-usage warnings. Fault fixtures and an isolated run of the built image preserved provider success with a down database. Current Compose runs one LiteLLM process per gateway; shared-file multiprocess outbox recovery is not supported. Rollback image tags `delivery-rollback-production` and `delivery-rollback-staging` remain available.
-- Remaining at this record: final independent rendered check is waiting on Chrome's local remote-debugging permission; publication to remote main follows this documentation receipt. Earlier live model/provider evidence is bounded to the stated requests, not universal model/protocol compatibility.
-
-Publication follow-up: remote `main` and the original checkout's tracking `main` were verified at `7c37165adedbf271841b02a58c2e53942917c9d0`. Previous local history is preserved on `codex/catalog-previous-local-main`; unrelated user files remain untouched. A fresh Docker inspection confirms production/staging gateway and expert containers all running the exact `484c269bd8ed174b4f76245816d7063958a3d3a5de1328f8100a3cabb7971146` image. The installed browser harness remains waiting for Chrome's explicit remote-debugging consent. Final independent rendered acceptance remains unverified until that consent is provided; source, API, deployment and live-provider acceptance above are complete within their stated bounds.
-
-Final closure: the owner approved Chrome debugging, and the installed harness captured actual deployed staging and production controls (`tmp/catalog-visual-review/final-staging-controls.png` and `final-production-controls.png`). A nonauthor Codex CLI reviewer on the required `subroute-subagents` route returned READY for both rendered screens; its completed JSONL receipt is `tmp/catalog-visual-review/deployed-final-visual.jsonl`, exit 0. It verified raw selected names, both refresh controls, enabled-looking Terra reasoning, readable UTF-8 and usable layout. Closed dropdown contents are covered by the independent source and API/live checks above, not claimed from screenshots. This closes the previously pending visual gate for product commit `cd04616`, tree `b2d9f17a55a45814b04b5609eb6c79cc6e268a3e`. Publication receipt `fdcd549` is on remote main; this documentation-only closure follows it. All requested implementation, scoped acceptance, main publication and both deployments are complete. The documented compatibility and single-process accounting limits remain unchanged.
+Earlier implementation and acceptance evidence is in Git history and
+[the evaluation receipts](docs/evals/receipts).

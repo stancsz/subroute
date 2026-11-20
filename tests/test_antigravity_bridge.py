@@ -76,8 +76,7 @@ def test_terminal_turn_count_must_be_one_integer(turns):
         bridge._response_text(json.dumps({"event": "result", "result": result}))
 
 
-@pytest.mark.parametrize("advisor", [False, True])
-def test_target_and_advisor_reject_actual_local_tool_steps(monkeypatch, advisor):
+def test_target_rejects_actual_local_tool_steps(monkeypatch):
     events = [
         {"event": "step_update", "step_update": {"step_type": "tool", "tool_name": "manage_task", "state": "DONE"}},
         {"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": "answer",
@@ -86,7 +85,7 @@ def test_target_and_advisor_reject_actual_local_tool_steps(monkeypatch, advisor)
     server, thread, url = _start_bridge_server(monkeypatch, lambda *args, **kwargs: [])
     monkeypatch.setattr(bridge, "_run_agy", lambda *args, **kwargs: subprocess.CompletedProcess([], 0, "\n".join(map(json.dumps, events)), ""))
     try:
-        response = httpx.post(url + "/v1/completions", json={"model": "fixture", "prompt": "hello", "advisor": advisor})
+        response = httpx.post(url + "/v1/completions", json={"model": "fixture", "prompt": "hello"})
         assert response.status_code == 502
         assert "unexpected local tool" in response.json()["detail"]
     finally:
@@ -126,7 +125,7 @@ def test_audio_refusal_keeps_exact_completed_attachment_count():
     assert caught.value.phase == "after_attachment_reads"
 
 
-@pytest.mark.parametrize("options", [{}, {"advisor": True}, {"json_schema": {"type": "object"}}])
+@pytest.mark.parametrize("options", [{}, {"json_schema": {"type": "object"}}])
 def test_captured_provider_refusal_is_502_for_every_target_mode(monkeypatch, capsys, options):
     usage = {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}
     stdout = json.dumps({"event": "result", "result": {
@@ -195,11 +194,9 @@ def test_duplicate_terminal_results_cannot_mix_text_and_usage():
         bridge._response_text(payload)
 
 
-def test_plain_target_uses_target_agent_and_advisor_uses_advisor_agent():
+def test_plain_target_uses_target_agent():
     target = bridge._agy_command("Gemini Test")
-    advisor = bridge._agy_command("Gemini Test", advisor=True)
     assert target[target.index("--agent") + 1] == "subroute-target"
-    assert advisor[advisor.index("--agent") + 1] == "subroute-advisor"
 
 
 def test_agy_command_selects_sandboxed_target_agent_and_uses_stdin():

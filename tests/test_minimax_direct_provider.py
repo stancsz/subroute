@@ -55,8 +55,7 @@ def test_configured_direct_alias_reaches_native_endpoint(protocol, effort, monke
 
     async def check():
         kwargs = {**params, "api_key": "fixture", "metadata": {}}
-        if effort != "medium":
-            kwargs["reasoning_effort"] = effort
+        kwargs["reasoning_effort"] = effort
         call_type = {"chat": "acompletion", "responses": "aresponses", "messages": "aanthropic_messages"}[protocol]
         if protocol == "responses":
             kwargs.update(input="Reply WIRE_OK", max_output_tokens=4096)

@@ -29,7 +29,7 @@ def test_openai_reasoning_efforts_are_taken_from_inventory_and_persisted(monkeyp
     plane = RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json")
     plane.add_catalog_models("openai", list(inventory), inventory.efforts)
     assert next(c for c in plane.choices if c.model_id == "catalog-openai/gpt-new").reasoning_efforts == ("low", "high")
-    plane.update("catalog-openai/gpt-new", "alias", reasoning_effort="high")
+    plane.update("catalog-openai/gpt-new", reasoning_effort="high")
     restored = RoutingControlPlane(Path("config/litellm.yaml"), tmp_path / "active.json")
     assert restored.snapshot().reasoning_effort == "high"
     assert next(c for c in restored.choices if c.model_id == "catalog-openai/gpt-new").reasoning_efforts == ("low", "high")
