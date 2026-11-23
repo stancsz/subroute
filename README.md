@@ -1,5 +1,7 @@
 # Subroute
 
+[Unpublished research draft (PDF)](paper/main.pdf) · [LaTeX source](paper/main.tex) · [Product and research values](#product-and-research-values)
+
 Subroute gives coding clients one local LiteLLM endpoint. Use `default` to
 follow the model selected at [the route desk](http://127.0.0.1:4000/control).
 An explicit model name uses its configured LiteLLM route.
@@ -64,3 +66,14 @@ Subroute 提供一个本地模型入口。在 `/control` 切换模型，客户�
 跟随选中的路由。Subroute 支持 Codex 和 Antigravity 订阅。API 模型在 LiteLLM
 的 `model_list` 配置。Production 与 staging 共用 PostgreSQL，各用独立数据库
 和路由状态。
+
+## Product and research values
+
+Subroute gives coding clients one local LiteLLM endpoint. It maintains Codex and Antigravity subscription adapters; LiteLLM owns configured API routes, fallbacks, retries, and usage reporting.
+
+- **One owner per behavior:** LiteLLM handles provider protocols; the local route desk owns saved default selection.
+- **Explicit route choice:** a named model uses its configured route; the default alias follows the saved selection.
+- **State separation:** production and staging mutable state are separate; separate ports alone do not prove isolation.
+- **Evidence before guarantees:** no controlled performance, cost, reliability, or security evaluation is claimed.
+
+[Unpublished research draft (PDF)](paper/main.pdf) · [LaTeX source](paper/main.tex). Not submitted to arXiv; no identifier is claimed.
