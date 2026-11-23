@@ -1,6 +1,8 @@
+<p align="center"><img src="site/assets/subroute-mark.svg" alt="Subroute: one local gateway with explicit model paths" width="420"></p>
+
 # Subroute
 
-[Unpublished research draft (PDF)](paper/main.pdf) · [LaTeX source](paper/main.tex) · [Product and research values](#product-and-research-values)
+[Official site](https://stancsz.github.io/subroute/) · [Market position and maturity](docs/market-position.md) · [Unpublished research draft (PDF)](paper/main.pdf) · [LaTeX source](paper/main.tex) · [Product and research values](#product-and-research-values)
 
 Subroute gives coding clients one local LiteLLM endpoint. Use `default` to
 follow the model selected at [the route desk](http://127.0.0.1:4000/control).

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f2f0e8">
+  <meta name="description" content="Subroute puts a saved route desk and selected subscription adapters behind one local LiteLLM endpoint for coding clients.">
+  <link rel="canonical" href="https://stancsz.github.io/subroute/">
+  <link rel="icon" href="assets/subroute-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+  <title>Subroute — One local endpoint. Clear route ownership.</title>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="brand" href="#top"><img src="assets/subroute-mark.svg" alt="" width="42" height="42"><span>SUBROUTE<small>LOCAL MODEL WAYFINDING</small></span></a>
+    <nav aria-label="Main navigation"><a href="#route">Route desk</a><a href="#owners">Boundaries</a><a href="#maturity">Maturity</a><a href="https://github.com/stancsz/subroute">GitHub <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span>GATEWAY / 01</span> SELF-HOSTED / OPEN SOURCE</p>
+        <h1 id="hero-title">One local endpoint.<br><em>A route you can see.</em></h1>
+        <p class="lede">Give coding clients a single LiteLLM address. Let <code>default</code> follow the saved selection, or name a configured route explicitly. Subroute keeps its subscription adapters local while LiteLLM owns provider protocols and retries.</p>
+        <div class="hero-actions"><a class="button primary" href="https://github.com/stancsz/subroute#start-the-gateway">Start the gateway <span aria-hidden="true">↗</span></a><a class="button secondary" href="https://github.com/stancsz/subroute/blob/main/docs/market-position.md">Market position</a></div>
+        <p class="local-note"><i></i> Documented listeners bind to loopback · production and staging state have separate databases and route files.</p>
+      </div>
+      <div class="map-panel" id="route" role="group" aria-label="Subroute gateway and routing diagram">
+        <div class="map-top"><span>LOCAL ROUTING MAP</span><span>CONTROL DESK / :4000</span></div>
+        <svg viewBox="0 0 700 430" role="img" aria-labelledby="map-title map-desc">
+          <title id="map-title">Subroute connects coding clients to an explicit model route</title>
+          <desc id="map-desc">Codex and other clients connect to one local LiteLLM endpoint. A default alias follows the saved selection in the route desk. Named model aliases use their configured LiteLLM route. Subscription adapters and API providers sit downstream. Production and staging have separate state.</desc>
+          <defs><pattern id="mapdots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#596084" opacity=".2"/></pattern><linearGradient id="routeLine" x1="0" x2="1"><stop stop-color="#5d62b9"/><stop offset="1" stop-color="#39a88f"/></linearGradient></defs>
+          <rect width="700" height="430" rx="16" fill="#f9f8f2"/><rect width="700" height="430" rx="16" fill="url(#mapdots)" stroke="#dedbd1"/>
+          <text x="28" y="39" fill="#777887" font-size="10" font-family="monospace" letter-spacing="1.5">CLIENTS USE ONE LOCAL ADDRESS</text>
+          <rect x="30" y="80" width="130" height="62" rx="9" fill="#ebeaf7" stroke="#acadd3"/><text x="53" y="107" fill="#3d417d" font-size="13" font-weight="700">Codex</text><text x="53" y="126" fill="#696b82" font-size="10">OpenAI-compatible</text>
+          <rect x="30" y="166" width="130" height="62" rx="9" fill="#ebeaf7" stroke="#acadd3"/><text x="53" y="193" fill="#3d417d" font-size="13" font-weight="700">Other clients</text><text x="53" y="212" fill="#696b82" font-size="10">Messages / Chat</text>
+          <path d="M160 110h39v65h25m-64 22h39v-22" fill="none" stroke="#5d62b9" stroke-width="2.5"/><circle cx="224" cy="175" r="5" fill="#5d62b9"/>
+          <rect x="228" y="122" width="195" height="108" rx="12" fill="#292b52"/><text x="249" y="155" fill="#f8f7f1" font-size="14" font-weight="700">LiteLLM gateway</text><text x="249" y="179" fill="#aaaee6" font-size="11">127.0.0.1:4000</text><text x="249" y="202" fill="#bdc0d0" font-size="10">protocols · retries · usage</text>
+          <path d="M423 175h48" stroke="url(#routeLine)" stroke-width="3"/><path d="m465 168 9 7-9 7" fill="none" stroke="#39a88f" stroke-width="3"/>
+          <rect x="477" y="97" width="193" height="78" rx="10" fill="#dff2eb" stroke="#82cbb4"/><text x="498" y="125" fill="#285d52" font-size="12" font-weight="700">default</text><text x="498" y="146" fill="#426e65" font-size="10">follows saved selection</text><text x="498" y="162" fill="#688078" font-size="9">route desk</text>
+          <rect x="477" y="190" width="193" height="72" rx="10" fill="#eeedf8" stroke="#aaa9cf"/><text x="498" y="218" fill="#3d417d" font-size="12" font-weight="700">Named model</text><text x="498" y="239" fill="#646580" font-size="10">uses its configured route</text>
+          <path d="M575 175v12m0 75v19" stroke="#8587a6" stroke-width="2" stroke-dasharray="4 5"/><path d="M575 281H371v-38" fill="none" stroke="#39a88f" stroke-width="2" stroke-dasharray="5 6"/><path d="m365 250 6-8 6 8" fill="none" stroke="#39a88f" stroke-width="2"/>
+          <rect x="30" y="291" width="284" height="83" rx="10" fill="#f1efe7" stroke="#d6d2c8"/><text x="51" y="319" fill="#595967" font-size="11" font-weight="700">ADAPTERS + PROVIDERS</text><text x="51" y="342" fill="#6c6c78" font-size="10">Codex / Antigravity subscription · configured API models</text><text x="51" y="360" fill="#8a8992" font-size="9">LiteLLM model_list owns API routes</text>
+          <rect x="355" y="312" width="140" height="62" rx="9" fill="#fff4e3" stroke="#e2bd89"/><text x="378" y="338" fill="#875e31" font-size="11" font-weight="700">Production DB</text><text x="378" y="357" fill="#8e7759" font-size="9">route state A</text>
+          <rect x="520" y="312" width="150" height="62" rx="9" fill="#fff4e3" stroke="#e2bd89"/><text x="543" y="338" fill="#875e31" font-size="11" font-weight="700">Staging DB</text><text x="543" y="357" fill="#8e7759" font-size="9">route state B</text>
+          <text x="31" y="402" fill="#8a8992" font-size="9" font-family="monospace">ROUTING STATE IS EXPLICIT · SEPARATE DATABASES, NOT JUST PORTS</text>
+        </svg>
+        <p class="map-caption">A named route and the saved default have different, documented meanings.</p>
+      </div>
+    </section>
+
+    <section class="owners wrap" id="owners" aria-labelledby="owners-title">
+      <div class="section-top"><p class="eyebrow"><span>OWNERSHIP BOUNDARIES</span></p><h2 id="owners-title">Keep each decision<br><em>with its owner.</em></h2><p>Subroute is a local integration layer. Provider features remain with the gateway that already implements them.</p></div>
+      <div class="owner-grid"><article class="desk"><span class="owner-no">01 / ROUTE DESK</span><h3>Subroute owns selection.</h3><p>The saved choice behind <code>default</code> is visible at the local control desk. A named alias continues to point to its configured route.</p></article><article><span class="owner-no">02 / PROVIDER API</span><h3>LiteLLM owns transport.</h3><p>API protocols, timeouts, retries, fallback behavior, and usage reporting stay in LiteLLM configuration.</p></article><article><span class="owner-no">03 / ENVIRONMENT</span><h3>Production and staging own state.</h3><p>Separate databases and route files keep mutable environments apart. Contract tests guard the supported stream and schema behavior.</p></article></div>
+    </section>
+
+    <section class="maturity-section" id="maturity" aria-labelledby="maturity-title"><div class="wrap maturity-grid">
+      <div class="status-tag"><span></span>SINGLE-OPERATOR<br>SELF-HOSTED BETA</div>
+      <div><p class="eyebrow">MARKET AND RESEARCH STATUS</p><h2 id="maturity-title">A useful local setup.<br><em>Not yet a broad guarantee.</em></h2><p>The repository has one operator environment and client contract checks, but no independent compatibility, security, performance, or cost evaluation. The next step is an external operator matrix with repeated streaming, tool, failure, and environment-isolation cases.</p><a class="text-link" href="https://github.com/stancsz/subroute/blob/main/docs/market-position.md">Read the full position and evidence gate <span aria-hidden="true">↗</span></a></div>
+      <div class="maturity-links"><a href="https://github.com/stancsz/subroute/blob/main/paper/main.pdf">Research draft ↗</a><a href="https://github.com/stancsz/subroute/blob/main/docs/operations/shared-postgres.md">Operations ↗</a><a href="https://github.com/stancsz/subroute/blob/main/TECH_DEBT.md">Open trade-offs ↗</a></div>
+    </div></section>
+  </main>
+  <footer><div class="wrap footer-inner"><a class="brand" href="#top"><img src="assets/subroute-mark.svg" alt="" width="34" height="34"><span>SUBROUTE<small>STAN CHEN / 2026</small></span></a><p>Explicit paths. Clear owners. Local control.</p><nav aria-label="Footer navigation"><a href="https://github.com/stancsz/subroute">Source</a><a href="https://github.com/stancsz/subroute/blob/main/clients/README.md">Client tools</a><a href="https://github.com/stancsz/subroute/blob/main/LICENSE">License</a></nav></div></footer>
+</body>
+</html>

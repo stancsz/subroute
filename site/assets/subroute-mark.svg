@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 72" role="img" aria-labelledby="title desc">
+  <title id="title">Subroute</title>
+  <desc id="desc">A saved default route branches from a local gateway to explicitly named providers.</desc>
+  <rect width="72" height="72" rx="18" fill="#292b52"/>
+  <path d="M14 36h16m0 0c12 0 8-16 20-16h8m-28 16c12 0 8 0 20 0h8m-28 0c12 0 8 16 20 16h8" fill="none" stroke="#a5e3cd" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="14" cy="36" r="4" fill="#aaaee6"/><circle cx="58" cy="20" r="4" fill="#39a88f"/><circle cx="58" cy="36" r="4" fill="#f9f8f2"/><circle cx="58" cy="52" r="4" fill="#d09a54"/>
+  <text x="94" y="38" fill="#22233a" font-family="Segoe UI,Arial,sans-serif" font-size="28" font-weight="700" letter-spacing="3">SUBROUTE</text>
+  <text x="96" y="56" fill="#686a7a" font-family="Cascadia Code,Consolas,monospace" font-size="9" letter-spacing="2">LOCAL MODEL WAYFINDING</text>
+</svg>
